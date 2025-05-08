@@ -1,0 +1,131 @@
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  gap: 0 !important;
+  position: relative;
+}
+
+.app-container {
+  width: 94vw !important;
+  height: 94vh !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin-top: -47vh;
+  margin-left: -47vw;
+  min-width: 700px;
+  box-shadow: 0px 5px 10px 0px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.app-container > .row {
+  --bs-gutter-x: 0 !important;
+  --bs-gutter-y: 0 !important;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+div.modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 90vh;
+  min-height: 400px;
+}
+
+div.modal-content > .modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+div.settings {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+div.settings > .shiny-input-textarea {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+div.settings > .shiny-input-textarea label {
+  flex: 0 1 auto;
+}
+
+div.settings > .shiny-input-textarea textarea {
+  font-size: 0.9em;
+  flex: 1 1 auto;
+}
+
+div.settings > * {
+  font-size: 0.9em !important;
+}
+
+div.settings .form-select,
+div.settings .btn {
+  font-size: 0.9em !important;
+}
+
+div.title-bar {
+  justify-content: space-between;
+  align-items: center;
+  background-color: #bfc0fd;
+  flex: 0 1 50px;
+}
+
+div.input {
+  height: fit-content;
+  padding-top: 10px;
+  background-color: #e0e0f6;
+  flex: 0 1 auto;
+}
+
+.fa {
+  margin: 0 !important;
+  color: #6c6c6c;
+}
+
+div.content {
+  font-size: 12px;
+  overflow-y: auto;
+  background-color: #f0f0fa;
+  color: #646464;
+  flex: 1 1 auto;
+}
+
+div.content h1 {
+  font-size: 1.75em !important;
+  padding-top: 20px;
+}
+
+div.content h2 {
+  font-size: 1.5em !important;
+  padding-top: 10px;
+}
+
+div.content h3 {
+  font-size: 1.25em !important;
+  padding-top: 10px;
+}
+
+div.content h4 {
+  font-size: 1.15em !important;
+  padding-top: 5px;
+}
+
+div.content h5 {
+  font-size: 1.1em !important;
+  padding-top: 5px;
+}
+
+div.content h6 {
+  font-size: 1.05em !important;
+  padding-top: 5px;
+}
