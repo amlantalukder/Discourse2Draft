@@ -6,6 +6,8 @@ from src.llms import extractAvailableLLMs
 from src.architecture import Architecture
 import asyncio
 import json
+import textwrap
+
 
 class TreeNode:
     def __init__(self, text = ''):
@@ -26,9 +28,11 @@ write_faster = False
 
 llm = 'azure-o1-mini'
 temperature = 0
-instructions = '''\
+instructions = textwrap.dedent('''\
     The user will input an outline for a manuscript on a specific topic. You are a scholarly ghost‑writer with a PhD in that topic area. Your task is to convert a detailed, hierarchically coded outline into polished manuscript prose. Follow the following global constraints for every section you draft.
  
+    **Your writing must be consistent with previous section**
+
     **Voice & register**
     
     - Doctoral‑level, formal scientific style (as in a peer‑reviewed journal).
@@ -43,7 +47,6 @@ instructions = '''\
     **Use of outline**
     
     - Each outline line is structured as “<alphanumeric code> -> <level‑1 topic> -> <level‑2 topic> -> …”.
-    - Begin every new answer by quoting, verbatim, the last ontological branch term (i.e, only the text after the last sequential “ -> ”) that you are expanding. For example,  if the outline section heading you are working on is “<alphanumeric code> -> <level‑1 topic> -> <level‑2 topic> you would only quote <level‑2 topic> with its alphanumeric designation
     - Treat higher‑level nodes as contextual background, lower‑level nodes as focal content.
     - Avoid repeating detailed explanations already supplied for earlier sections unless essential for clarity; instead, use concise forward/backward references if necessary.
     - Confidence scoring: For each factual statement generated, include a confidence score between 1-10 (1 being the lowest and 10 being the highest) in the form of “(CS= [score])”. This score should reflect the level of scientific consensus or evidence supporting the statement, with 1 indicating speculative or weakly supported claims and 10 indicating well-established facts.),
@@ -52,8 +55,7 @@ instructions = '''\
     
     - Where deemed necessary to illustrate a point/provide clarity, employ specific/detailed examples that help the reader better understand critical concepts.
     - When responding your sole values should be scientific accuracy, application of rigorous scientific reasoning, and material reasoning/rationality.
-    - Identify hidden biases in your answer and correct them.
-    '''
+    - Identify hidden biases in your answer and correct them.''')
 
 agent = Architecture(model_name=llm, temperature=temperature, instructions=instructions).agent
 
@@ -144,7 +146,8 @@ def closeSettings():
 @reactive.effect
 @reactive.event(input.chk_example)
 def useExample():
-    example = '''\
+    
+    example = textwrap.dedent('''\
     # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
     ## I. Introduction
     <content>
@@ -161,77 +164,204 @@ def useExample():
     #### 2. Gestational Hypertension
     <content>
     #### 3. Preeclampsia
-    <content>
-    '''
+    <content>''')
+    
     if not input.chk_example(): example = ''
     ui.update_text_area('txt_outline', value=example)
-    
-
-async def getResponse(sts):
-    contents = []
-    flag_first = True
-    for st in sts:
-        st_elements = st.split(' -> ')
-        if flag_first: 
-            section_headers = '\n'.join([f'{'#' * (i+1)} {v}' for i, v in enumerate(st_elements)]) + '\n'
-        else:
-            section_headers = f'{'#' * len(st_elements)} {st_elements[-1]}\n'
-        flag_first = False
-        contents.append(section_headers)
-        yield section_headers
-        
-        response = await agent.ainvoke({'current_section': st}, {"configurable": {"thread_id": "abc123"}})
-        response = response['response']
-        
-        print(response)
-        response = list(response.values())[0]
-        contents.append(response)
-        
-        tokens = response.split(' ')
-
-        for i, s in enumerate(tokens):
-            await asyncio.sleep(0.1 if not write_faster else 0.01)
-            yield s + ' ' if i < len(tokens)-1 else s + '\n'
-
-        with open(f'data/manuscript_{session.id}.md', 'a') as f:
-            f.write('\n'.join(contents)+'\n')
-            ui.notification_show("Progress saved", type="message")
-            contents = []
 
 def saveOutline():
 
     outline = input.txt_outline().strip()
     if outline == '': return False
+
+    # outline ='''
+    # # Title: Neuroinflammation and Cognitive Function: Interplay of Causes, Mechanisms, and Pathological Outcomes
+    # ##  Abstract
+    # Neuroinflammation—once considered a secondary epiphenomenon of central nervous system (CNS) injury—is now recognized as an active, multifaceted driver of cognitive dysfunction across a broad spectrum of neurological and psychiatric disorders.
+    # ## I. Introduction
+    # continue writing
+    # ### A. Defining Neuroinflammation: Beyond a simple response – complex cellular and molecular interactions <content>
+    # ### B. Defining Cognitive Function: Key domains affected (memory, attention, executive function, processing speed) 
+    # continue writing
+    # <content>
+    # continue writing
+    # ### C. Historical Perspective vs. Current Understanding: Evolution of the concept of brain immunity and inflammation 
+    # continue writing.
+    # <content>
+    # continue writing..
+    # <content>
+    # continue writing...
+    # '''
+
+    def insertOutline(d, outline_items):
+
+        if len(outline_items) == 1:
+            d['content'] = d.get('content', []) + outline_items
+            return d
+        
+        if outline_items[0] not in d:
+            d[outline_items[0]] = {}
+        
+        d[outline_items[0]] = insertOutline(d[outline_items[0]].copy(), outline_items[1:])
+
+        return d
     
-    output, lines = [], []
-    for x in outline.split('<content>'):
+    d_outline, outline_items = {}, []
+    chunks_leading_to_content = outline.split('<content>')
+    for i, x in enumerate(chunks_leading_to_content):
         x = x.strip()
         if not x: continue
+        text = ''
         for line_x in x.split('\n'):
+    
             line_x = line_x.strip()
             if not line_x: continue
+            if not line_x.startswith('#'):
+                text += line_x
+                continue
+
+            if text: 
+                d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
+                text = ''
+            
             hashes = line_x.split()[0]
-            text = ' '.join(line_x.split()[1:])
-
+            header = ' '.join(line_x.split()[1:])
+            
             if hashes != '#' * len(hashes):
-                ui.notification_show("Each line in the outline must start with '#'s followed by a space or have the '<content>' tag", type="error")
+                ui.notification_show("'#'s must be followed by a space", type="error")
                 return False
             
-            if len(hashes) > len(lines) + 1:
-                ui.notification_show(f"Expected no more than {len(lines) + 1} '#'s before {text}", type="error")
+            if len(hashes) > len(outline_items) + 1:
+                ui.notification_show(f"Expected no more than {len(outline_items) + 1} '#'s before {text}", type="error")
                 return False
             
-            if len(hashes) <= len(lines):
-                lines = lines[:len(hashes)-1]
+            if len(hashes) <= len(outline_items):
+                outline_items = outline_items[:len(hashes)-1]
 
-            lines.append(text)
-
-        output.append(' -> '.join(lines))
+            outline_items.append(header)
+            
+        if text: 
+            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
+            
+        if i < len(chunks_leading_to_content)-1:
+            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_ai', '']])
     
-    with open(f'data/outline_{session.id}.txt', 'w') as fp:
-        fp.write('\n'.join(output))
+    with open(f'data/outline_{session.id}.json', 'w') as fp:
+        json.dump(d_outline, fp)
     
     return True
+
+async def generateResponse(d_outline):
+
+    def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
+        '''
+        Get all previous content and current section hierarchy up to the point that needs ai generation
+        '''
+
+        is_gen_needed = False
+        for k in d_outline:
+
+            if k != 'content':
+                content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline[k], 
+                                                            content_pre + [f'{'#' * counter} {k}'],
+                                                            current_section_list + [k],
+                                                            counter + 1)
+                if not is_gen_needed: current_section_list.pop()
+            else:
+                content_list = []
+                for v in d_outline[k]:
+                    # Record only the first content_ai tag and 
+                    # all content_user tags after that
+                    if v[0] == 'content_ai':
+                        if is_gen_needed: break
+                        if v[1] == '': 
+                            is_gen_needed = True
+                        else:
+                            content_pre.append(v[1])
+                        content_list.append(v)
+                    elif v[0] == 'content_user':
+                        content_list.append(v)
+                        if is_gen_needed: break
+                        content_pre.append(v[1])
+                
+                if is_gen_needed: current_section_list.append(content_list)      
+            
+            if is_gen_needed: break
+                    
+        return content_pre, current_section_list, is_gen_needed
+    
+    def getSectionText(section_list):
+        '''
+        Get current section hierarchy up to the point that needs ai generation in markdown format 
+        '''
+
+        section_text_lines = []
+        for i, v in enumerate(section_list):
+            if not isinstance(v, list):
+                section_text_lines.append(f'{'#' * (i+1)} {v}')
+            else:
+                for content_type, content in v:
+                    if content_type == 'content_user' or content != '':
+                        section_text_lines.append(content)
+                    else:
+                        section_text_lines.append('<content>')
+        
+        return '\n\n'.join(section_text_lines)
+    
+    def insertContent(d_outline, section_list, response):
+        '''
+        Inserts the ai response to the appropriate position of the outline
+        '''
+
+        if not len(section_list): return
+        
+        if len(section_list) == 1:
+            for i, (content_type, content) in enumerate(section_list[0]):
+                if content_type == 'content_ai' and content == '':
+                    d_outline['content'][i][1] = response
+                    return
+        else:
+            insertContent(d_outline[section_list[0]], section_list[1:], response)
+        
+    len_last_content_pre, section_header = 0, None
+
+    while True:
+
+        content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline)
+
+        if not is_gen_needed: break
+        
+        current_section = getSectionText(current_section_list)
+
+        if section_header is None:
+            section_header = content_pre
+        else:
+            section_header = content_pre[len_last_content_pre + 1:]
+        
+        section_header = '\n\n'.join(section_header) + '\n\n'
+
+        len_last_content_pre = len(content_pre)
+
+        yield section_header
+    
+        response = await agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
+        
+        response = response['response']['content']
+        #response = 'dummy ai'
+
+        insertContent(d_outline, current_section_list, response)
+        
+        print(response)
+        
+        tokens = response.split(' ')
+
+        for i, s in enumerate(tokens):
+            await asyncio.sleep(0.1 if not write_faster else 0.01)
+            yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
+
+        with open(f'data/manuscript_{session.id}.md', 'a') as f:
+            f.write(section_header + response + '\n\n')
+            ui.notification_show("Progress saved", type="message")
 
 @reactive.effect
 @reactive.event(input.btn_generate)
@@ -239,10 +369,11 @@ async def start():
 
     if not saveOutline(): return
 
-    with open(f'data/outline_{session.id}.txt') as f:
-        sts = [st.strip() for st in f.readlines() if st.strip() != '']
-
-    await stream.stream(getResponse(sts), clear=True)
+    with open(f'data/outline_{session.id}.json') as fp:
+        #sts = [st.strip() for st in f.readlines() if st.strip() != '']
+        d_outline = json.load(fp)
+    
+    await stream.stream(generateResponse(d_outline), clear=True)
 
 @reactive.effect
 @reactive.event(input.btn_stop)

@@ -92,12 +92,13 @@ div.input {
   color: #6c6c6c;
 }
 
-div.content {
+.app-container > div.content {
   font-size: 12px;
   overflow-y: auto;
   background-color: #f0f0fa;
   color: #646464;
   flex: 1 1 auto;
+  padding: 15px;
 }
 
 div.content h1 {
