@@ -7,24 +7,6 @@ from src.architecture import Architecture
 import asyncio
 import json
 import textwrap
-import os
-from posit import connect
-
-client = connect.Client()
-print(client.users.find(prefix='Amlan'))
-
-# @reactive.calc
-# def visitor_client():
-#     ## read the user session token and generate a new client
-#     user_session_token = session.http_conn.headers.get("Posit-Connect-User-Session-Token")
-#     print('env', os.getenv("CONNECT_CONTENT_SESSION_TOKEN"))
-#     print('env', os.getenv("CONTENT_SESSION_TOKEN"))
-#     return client.with_user_session_token(user_session_token)
-
-# @render.text
-# def user_profile():
-#     # fetch the viewer's profile information
-#     return visitor_client().me
 
 class TreeNode:
     def __init__(self, text = ''):
