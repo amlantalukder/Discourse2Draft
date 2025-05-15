@@ -1,6 +1,22 @@
 from langchain_core.output_parsers import JsonOutputParser
-from .utils import State
+from pydantic import BaseModel, Field
+from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
+
+class GenerateReportSchema(BaseModel):
+    '''
+    Returns the content to fill the provided outline section
+    '''
+    content: str = Field(description='Content to fill the provided outline section')
+
+class GenerateReportOutputParser(JsonOutputParser):
+
+    def __init__(self, output_parser=GenerateReportSchema):
+        super().__init__(pydantic_object=output_parser)
+
+    def parseOutput(self, data):
+        response = self.parse(data.content)
+        return response
 
 # ---------------------------------------------------------------------------
 class GenerateReport:
@@ -27,7 +43,7 @@ class GenerateReport:
     - Provide the output in the following format.
     ```json
     {{
-        "content": "Content text"    
+        "content": "Content to fill the provided outline section"    
     }}
     ```
     </Instructions>
@@ -36,10 +52,15 @@ class GenerateReport:
     def __init__(self, llm, instructions):
 
         self.generate_report_prompt = setPrompt(self.generate_report_system_prompt(instructions), self.generate_report_human_prompt)
-        self.generate_report_chain = self.generate_report_prompt | llm | JsonOutputParser()
+        if llm.model_name in Config.llms_with_structured_output_support:
+            self.generate_report_chain = self.generate_report_prompt | llm.with_structured_output(GenerateReportSchema)
+        else:
+            self.generate_report_chain = self.generate_report_prompt | llm | GenerateReportOutputParser().parseOutput
+
 
     def __call__(self, state: State):
         '''LLM generates reports from a given outline'''
-        response = self.generate_report_chain.invoke(input={'content_pre': state['content_pre'],
-                                                            'current_section': state['current_section']})
+        
+        response = retryInvoke(self.generate_report_chain, input={'content_pre': state['content_pre'],
+                                                            'current_section': state['current_section']})['content']
         return {'response': response, 'steps': ['Generate Report']}

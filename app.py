@@ -328,8 +328,6 @@ async def generateResponse(d_outline):
     while True:
 
         content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline)
-
-        if not is_gen_needed: break
         
         current_section = getSectionText(current_section_list)
 
@@ -343,10 +341,12 @@ async def generateResponse(d_outline):
         len_last_content_pre = len(content_pre)
 
         yield section_header
+
+        if not is_gen_needed: break
     
         response = await agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
         
-        response = response['response']['content']
+        response = response['response']
         #response = 'dummy ai'
 
         insertContent(d_outline, current_section_list, response)

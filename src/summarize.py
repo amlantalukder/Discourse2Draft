@@ -1,6 +1,22 @@
 from langchain_core.output_parsers import JsonOutputParser
-from .utils import State, Config
+from pydantic import BaseModel, Field
+from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
+
+class SummarizeSchema(BaseModel):
+    '''
+    Returns the summary of the provided content
+    '''
+    summary: str = Field(description='Summary of the provided content')
+
+class SummarizeOutputParser(JsonOutputParser):
+
+    def __init__(self, output_parser=SummarizeSchema):
+        super().__init__(pydantic_object=output_parser)
+
+    def parseOutput(self, data):
+        response = self.parse(data.content)
+        return response
 
 # ---------------------------------------------------------------------------
 class Summarize:
@@ -21,7 +37,7 @@ class Summarize:
     Generate a comprehensive summary of the content.
     ```json
     {{
-        "summary": "Summary of the content"    
+        "summary": "Summary of the provided content"    
     }}
     ```
     '''
@@ -29,9 +45,13 @@ class Summarize:
     def __init__(self, llm):
 
         self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt)
-        self.summarize_chain = self.summarize_prompt | llm | JsonOutputParser()
+        if llm.model_name in Config.llms_with_structured_output_support:
+            self.summarize_chain = self.summarize_prompt | llm.with_structured_output(SummarizeSchema)
+        else:
+            self.summarize_chain = self.summarize_prompt | llm | SummarizeOutputParser().parseOutput
 
     def __call__(self, state: State):
-        '''LLM generates reports from a given outline'''
-        response = self.summarize_chain.invoke(input={'content': state['content_pre']})['summary']
+        '''LLM generates summary for a given content'''
+
+        response = retryInvoke(self.summarize_chain, input={'content': state['content_pre']})['summary']
         return {'content_pre': response, 'steps': ['Summarize']}

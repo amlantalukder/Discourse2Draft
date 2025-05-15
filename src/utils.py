@@ -4,6 +4,7 @@ from pathlib import Path
 from typing_extensions import TypedDict
 from operator import add
 from typing import Annotated, List
+from langchain_core.exceptions import OutputParserException
 
 # ---------------------------------------------------------------------------
 class Config:
@@ -12,6 +13,7 @@ class Config:
     dotenv.load_dotenv(Path(".env"))
 
     NUM_TOKENS_SUMMARY = 500
+    RETRY_COUNTER = 2
 
 # ---------------------------------------------------------------------------
 class State(TypedDict):
@@ -19,3 +21,14 @@ class State(TypedDict):
     current_section: str
     steps: Annotated[List[str], add]
     response: str
+
+# ---------------------------------------------------------------------------
+def retryInvoke(chain, input):
+
+    for counter_retry in range(Config.RETRY_COUNTER):
+        try:
+            response = chain.invoke(input=input)
+            return response
+        except OutputParserException as exp:
+            print(str(exp))
+            print('retrying')
