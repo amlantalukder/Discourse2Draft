@@ -35,9 +35,17 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     except Exception as error:
         print('litellm proxy access error:', error)
 
+    llms_filtered = {}
+    if Config.llms_selected:
+        for category, d in Config.llms_selected.items():
+            category_filtered = {k:v for k, v in d.items() if k in available_llms}
+            if category_filtered:
+                llms_filtered[category] = category_filtered
+    available_llms = llms_filtered if llms_filtered else available_llms
+
     if not return_embedding_models:
         return available_llms
-
+    
     return available_llms, available_embeddings
 
 # ---------------------------------------------------------------------------

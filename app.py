@@ -7,7 +7,24 @@ from src.architecture import Architecture
 import asyncio
 import json
 import textwrap
+import os
+from posit import connect
 
+client = connect.Client()
+print(client.users.find(prefix='Amlan'))
+
+# @reactive.calc
+# def visitor_client():
+#     ## read the user session token and generate a new client
+#     user_session_token = session.http_conn.headers.get("Posit-Connect-User-Session-Token")
+#     print('env', os.getenv("CONNECT_CONTENT_SESSION_TOKEN"))
+#     print('env', os.getenv("CONTENT_SESSION_TOKEN"))
+#     return client.with_user_session_token(user_session_token)
+
+# @render.text
+# def user_profile():
+#     # fetch the viewer's profile information
+#     return visitor_client().me
 
 class TreeNode:
     def __init__(self, text = ''):
@@ -59,6 +76,8 @@ instructions = textwrap.dedent('''\
 
 agent = Architecture(model_name=llm, temperature=temperature, instructions=instructions).agent
 
+settings_flag = reactive.value(True)
+
 def mod_settings():
 
     return core_ui.div(
@@ -76,7 +95,7 @@ def mod_settings():
         ),
         core_ui.tags.hr(),
         core_ui.div(
-            core_ui.input_select('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=llm),
+            core_ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=llm),
             core_ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=temperature),
             class_='row justify-content-between'
         ),
@@ -92,9 +111,14 @@ with ui.div(class_="app-container"):
             ui.input_action_button('btn_settings', '', icon=faicons.icon_svg("gear"))
     with ui.div(class_='row input'):
         with ui.div(class_='col'):
-            with ui.div(class_='row', style='font-size: 0.8em !important'):
+            with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
                 with ui.div(class_='col'):
                     ui.input_checkbox('chk_example', 'Use example', value=False)
+                with ui.div(class_='col'):
+                    @render.express
+                    def showLLMandTemp():
+                        llm, temp = getLLMandTemp()
+                        ui.span(f'LLM: {llm}, Temperature: {temp}')
                 with ui.div(class_='col text-end'):
                     ui.p("(Drag the text area from the bottom right corner to show more text)")
             ui.input_text_area('txt_outline', '', placeholder='''Write an outline...''', rows=7, width='100%')
@@ -127,13 +151,19 @@ def openSettings():
     )
     ui.modal_show(m)
 
+@reactive.calc()
+@reactive.event(settings_flag)
+def getLLMandTemp():
+    return llm, temperature
+
 @reactive.effect
 @reactive.event(input.btn_save_settings)
-def openSettings():
+def saveSettings():
     global llm, temperature, instructions, agent
     llm = input.select_llm()
     temperature = input.slide_temp()
     instructions = input.text_instructions()
+    settings_flag.set(not settings_flag.get())
     agent = Architecture(model_name=llm, temperature=temperature, instructions=instructions).agent
 
     ui.notification_show("Settings saved", type="message")

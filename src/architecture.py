@@ -19,6 +19,9 @@ class Architecture:
 
     def __init__(self, model_name, temperature, instructions):
         llm = getOpenAIModel(model_name=model_name, temperature=temperature)
+
+        print(f'Using {llm.model_name} with temperature {temperature}\n')
+
         self.createAgent(llm, instructions)
 
     def createAgent(self, llm, instructions):

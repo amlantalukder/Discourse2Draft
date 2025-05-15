@@ -190,6 +190,7 @@ packaging==24.2
     #   langchain-core
     #   langsmith
     #   marshmallow
+    #   posit-sdk
     #   shiny
 parso==0.8.4
     # via jedi
@@ -197,6 +198,8 @@ pexpect==4.9.0
     # via ipython
 platformdirs==4.3.7
     # via jupyter-core
+posit-sdk==0.9.0
+    # via word-processor-ai (pyproject.toml)
 prompt-toolkit==3.0.51
     # via
     #   ipython
@@ -256,6 +259,7 @@ requests==2.32.3
     #   langchain
     #   langchain-community
     #   langsmith
+    #   posit-sdk
     #   requests-toolbelt
     #   tiktoken
 requests-toolbelt==1.0.0
@@ -310,6 +314,7 @@ typing-extensions==4.13.2
     #   htmltools
     #   langchain-core
     #   openai
+    #   posit-sdk
     #   pydantic
     #   pydantic-core
     #   shiny

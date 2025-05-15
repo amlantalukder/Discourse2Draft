@@ -9,6 +9,13 @@ from langchain_core.exceptions import OutputParserException
 # ---------------------------------------------------------------------------
 class Config:
     llms_with_structured_output_support = {'azure-gpt-4o', 'claude-3-5-sonnet', 'gemini-1.5-pro'}
+    llms_selected = {
+        'OpenAI': {'azure-o1-mini': 'o1-mini', 'azure-o1': 'o1', 'azure-o3-mini': 'o3-mini', 'azure-o3': 'o3', 'azure-gpt-4o': 'GPT-4o'}, 
+        'Anthropic': {'claude-3-7-sonnet': 'Claude 3.7 sonnet', 'claude-3-5-sonnet': 'Claude 3.5 sonnet'}, 
+        'Google': {'gemini-1.5-flash': 'Gemini 1.5 Flash', 'gemini-1.5-pro': 'Gemini 1.5 Pro'}, 
+        'Meta': {'llama3-3-70b': 'Llama 3.3 70B', 'llama3-3-90b': 'Llama 3.3 90B', 'llama3-1-405b': 'Llama 3.1 405B', 'llama3-1-70b': 'Llama 3.1 70B'},
+        'Mistral': {'mistral-large-2': 'Mistral Large 2'}
+    }
     env_config = dotenv.dotenv_values(Path(".env"))
     dotenv.load_dotenv(Path(".env"))
 

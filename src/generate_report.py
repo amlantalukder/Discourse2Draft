@@ -52,6 +52,7 @@ class GenerateReport:
     def __init__(self, llm, instructions):
 
         self.generate_report_prompt = setPrompt(self.generate_report_system_prompt(instructions), self.generate_report_human_prompt)
+        
         if llm.model_name in Config.llms_with_structured_output_support:
             self.generate_report_chain = self.generate_report_prompt | llm.with_structured_output(GenerateReportSchema)
         else:
@@ -62,5 +63,10 @@ class GenerateReport:
         '''LLM generates reports from a given outline'''
         
         response = retryInvoke(self.generate_report_chain, input={'content_pre': state['content_pre'],
-                                                            'current_section': state['current_section']})['content']
+                                                            'current_section': state['current_section']})
+        try:
+            response = dict(response)['content']
+        except:
+            raise Exception(f'GenerateReport response does not have content, response: {response}')
+
         return {'response': response, 'steps': ['Generate Report']}

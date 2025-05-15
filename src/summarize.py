@@ -45,6 +45,7 @@ class Summarize:
     def __init__(self, llm):
 
         self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt)
+        
         if llm.model_name in Config.llms_with_structured_output_support:
             self.summarize_chain = self.summarize_prompt | llm.with_structured_output(SummarizeSchema)
         else:
@@ -54,4 +55,10 @@ class Summarize:
         '''LLM generates summary for a given content'''
 
         response = retryInvoke(self.summarize_chain, input={'content': state['content_pre']})['summary']
+
+        try:
+            response = dict(response)['summary']
+        except:
+            raise Exception(f'Summarize response does not have content, response: {response}')
+        
         return {'content_pre': response, 'steps': ['Summarize']}
