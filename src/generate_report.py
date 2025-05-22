@@ -1,4 +1,4 @@
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
@@ -8,15 +8,6 @@ class GenerateReportSchema(BaseModel):
     Returns the content to fill the provided outline section
     '''
     content: str = Field(description='Content to fill the provided outline section')
-
-class GenerateReportOutputParser(JsonOutputParser):
-
-    def __init__(self, output_parser=GenerateReportSchema):
-        super().__init__(pydantic_object=output_parser)
-
-    def parseOutput(self, data):
-        response = self.parse(data.content)
-        return response
 
 # ---------------------------------------------------------------------------
 class GenerateReport:
@@ -39,24 +30,22 @@ class GenerateReport:
     <Instructions>
     - Read the Previous Content Summary. 
     - Find the <content> tag in Current Section. 
-    - Write output texts that will fit in the <content> tag position and that will maintain continuity and relevance with the text above and below it. 
+    - Write output texts that will fit in the <content> tag position and that will maintain continuity and relevance with the text above and below it.
+
     - Provide the output in the following format.
-    ```json
-    {{
-        "content": "Content to fill the provided outline section"    
-    }}
-    ```
+    {format_instructions}
+    
+    - Output must be in JSON format with `json` tags.
     </Instructions>
     '''
 
     def __init__(self, llm, instructions):
 
-        self.generate_report_prompt = setPrompt(self.generate_report_system_prompt(instructions), self.generate_report_human_prompt)
-        
-        if llm.model_name in Config.llms_with_structured_output_support:
-            self.generate_report_chain = self.generate_report_prompt | llm.with_structured_output(GenerateReportSchema)
-        else:
-            self.generate_report_chain = self.generate_report_prompt | llm | GenerateReportOutputParser().parseOutput
+        parser = PydanticOutputParser(pydantic_object=GenerateReportSchema)
+        self.generate_report_prompt = setPrompt(self.generate_report_system_prompt(instructions), 
+                                                self.generate_report_human_prompt, 
+                                                parser)
+        self.generate_report_chain = self.generate_report_prompt | llm | parser
 
 
     def __call__(self, state: State):

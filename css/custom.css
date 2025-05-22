@@ -8,7 +8,6 @@ body {
 
 .app-container {
   width: 94vw !important;
-  height: 94vh !important;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -21,7 +20,7 @@ body {
   justify-content: center;
 }
 
-.app-container > .row {
+.app-container .row {
   --bs-gutter-x: 0 !important;
   --bs-gutter-y: 0 !important;
   padding-left: 10px;
@@ -31,11 +30,9 @@ body {
 div.modal-content {
   display: flex;
   flex-direction: column;
-  height: 90vh;
-  min-height: 400px;
 }
 
-div.modal-content > .modal-body {
+div.modal-content .modal-body {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -45,9 +42,11 @@ div.settings {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  height: 90vh;
+  min-height: 400px;
 }
 
-div.settings > .shiny-input-textarea {
+div.settings .shiny-input-textarea {
   width: 100%;
   height: 100%;
   display: flex;
@@ -55,16 +54,16 @@ div.settings > .shiny-input-textarea {
   flex: 1 1 auto;
 }
 
-div.settings > .shiny-input-textarea label {
+div.settings .shiny-input-textarea label {
   flex: 0 1 auto;
 }
 
-div.settings > .shiny-input-textarea textarea {
+div.settings .shiny-input-textarea textarea {
   font-size: 0.9em;
   flex: 1 1 auto;
 }
 
-div.settings > * {
+div.settings {
   font-size: 0.9em !important;
 }
 
@@ -73,11 +72,58 @@ div.settings .btn {
   font-size: 0.9em !important;
 }
 
+div.file-name {
+  font-size: 0.8em !important;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  gap: 10px;
+}
+
+div.file-name label {
+  display: contents;
+}
+
+div.file-name div.form-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 0;
+  height: 80%;
+}
+
+div.account-container {
+  min-width: 100px;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
 div.title-bar {
   justify-content: space-between;
   align-items: center;
   background-color: #bfc0fd;
   flex: 0 1 50px;
+}
+
+div.app-body-container {
+  overflow-y: auto;
+  display: flex !important;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+div.app-body {
+  display: flex !important;
+  flex-direction: column;
+  height: 80vh;
+  min-height: 500px;
+}
+
+div.app-body-container .bslib-sidebar-layout {
+  margin-bottom: 0;
 }
 
 div.input {
@@ -92,7 +138,7 @@ div.input {
   color: #6c6c6c;
 }
 
-.app-container > div.content {
+.app-body div.content {
   font-size: 12px;
   overflow-y: auto;
   background-color: #f0f0fa;
@@ -129,4 +175,16 @@ div.content h5 {
 div.content h6 {
   font-size: 1.05em !important;
   padding-top: 5px;
+}
+
+div.side-bar-docs-container {
+  font-size: 0.8em;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+div.side-bar-docs-container .icon {
+  width: 20px;
+  height: 20px;
 }

@@ -15,6 +15,7 @@ def check_if_summary_needed(
             return 'Summarize'
         return 'Generate Report'
 
+# -----------------------------------------------------------------------
 class Architecture:
 
     def __init__(self, model_name, temperature, instructions):

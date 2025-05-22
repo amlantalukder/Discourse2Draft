@@ -53,6 +53,8 @@ executing==2.2.0
     # via stack-data
 faicons==0.2.2
     # via word-processor-ai (pyproject.toml)
+fastapi==0.115.12
+    # via word-processor-ai (pyproject.toml)
 frozenlist==1.6.0
     # via
     #   aiohttp
@@ -173,7 +175,9 @@ narwhals==1.38.0
 nest-asyncio==1.6.0
     # via ipykernel
 numpy==2.2.5
-    # via langchain-community
+    # via
+    #   langchain-community
+    #   pandas
 openai==1.77.0
     # via langchain-openai
 orjson==3.10.18
@@ -190,16 +194,15 @@ packaging==24.2
     #   langchain-core
     #   langsmith
     #   marshmallow
-    #   posit-sdk
     #   shiny
+pandas==2.2.3
+    # via word-processor-ai (pyproject.toml)
 parso==0.8.4
     # via jedi
 pexpect==4.9.0
     # via ipython
 platformdirs==4.3.7
     # via jupyter-core
-posit-sdk==0.9.0
-    # via word-processor-ai (pyproject.toml)
 prompt-toolkit==3.0.51
     # via
     #   ipython
@@ -219,6 +222,7 @@ pure-eval==0.2.3
     # via stack-data
 pydantic==2.11.4
     # via
+    #   fastapi
     #   langchain
     #   langchain-core
     #   langgraph
@@ -236,11 +240,14 @@ pygments==2.19.1
 python-dateutil==2.9.0.post0
     # via
     #   jupyter-client
+    #   pandas
     #   shinywidgets
 python-dotenv==1.1.0
     # via pydantic-settings
 python-multipart==0.0.20
     # via shiny
+pytz==2025.2
+    # via pandas
 pyyaml==6.0.2
     # via
     #   langchain
@@ -259,7 +266,6 @@ requests==2.32.3
     #   langchain
     #   langchain-community
     #   langsmith
-    #   posit-sdk
     #   requests-toolbelt
     #   tiktoken
 requests-toolbelt==1.0.0
@@ -285,7 +291,9 @@ sqlalchemy==2.0.40
 stack-data==0.6.3
     # via ipython
 starlette==0.46.2
-    # via shiny
+    # via
+    #   fastapi
+    #   shiny
 tenacity==9.1.2
     # via
     #   langchain-community
@@ -311,10 +319,10 @@ typing-extensions==4.13.2
     # via
     #   anyio
     #   anywidget
+    #   fastapi
     #   htmltools
     #   langchain-core
     #   openai
-    #   posit-sdk
     #   pydantic
     #   pydantic-core
     #   shiny
@@ -327,6 +335,8 @@ typing-inspection==0.4.0
     # via
     #   pydantic
     #   pydantic-settings
+tzdata==2025.2
+    # via pandas
 uc-micro-py==1.0.3
     # via linkify-it-py
 urllib3==2.4.0

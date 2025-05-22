@@ -1,4 +1,4 @@
-from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
@@ -8,15 +8,6 @@ class SummarizeSchema(BaseModel):
     Returns the summary of the provided content
     '''
     summary: str = Field(description='Summary of the provided content')
-
-class SummarizeOutputParser(JsonOutputParser):
-
-    def __init__(self, output_parser=SummarizeSchema):
-        super().__init__(pydantic_object=output_parser)
-
-    def parseOutput(self, data):
-        response = self.parse(data.content)
-        return response
 
 # ---------------------------------------------------------------------------
 class Summarize:
@@ -34,27 +25,26 @@ class Summarize:
     {content}
     </Content>
     
-    Generate a comprehensive summary of the content.
-    ```json
-    {{
-        "summary": "Summary of the provided content"    
-    }}
-    ```
+    <Instructions>
+    - Generate a comprehensive summary of the content.
+    
+    - Provide the output in the following format.
+    {format_instructions}
+
+    - Output must be in JSON format with `json` tags.
+    </Instructions>
     '''
 
     def __init__(self, llm):
 
-        self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt)
-        
-        if llm.model_name in Config.llms_with_structured_output_support:
-            self.summarize_chain = self.summarize_prompt | llm.with_structured_output(SummarizeSchema)
-        else:
-            self.summarize_chain = self.summarize_prompt | llm | SummarizeOutputParser().parseOutput
+        parser = PydanticOutputParser(pydantic_object=SummarizeSchema)
+        self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt, parser)
+        self.summarize_chain = self.summarize_prompt | llm | parser
 
     def __call__(self, state: State):
         '''LLM generates summary for a given content'''
 
-        response = retryInvoke(self.summarize_chain, input={'content': state['content_pre']})['summary']
+        response = retryInvoke(self.summarize_chain, input={'content': state['content_pre']})
 
         try:
             response = dict(response)['summary']
