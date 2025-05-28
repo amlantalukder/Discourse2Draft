@@ -1,5 +1,22 @@
 # AI-Word-Processor
 
+Given an outline, AI Word Processor can generate the content. It can be useful to write reports, manuscripts or any textual document that has a fixed outline. The outline must be provided as markdown style section headers and subheaders with <content> tags which the AI would be replacing.
+
+**Example of an outline**
+
+```
+# Title:
+## Introduction
+<content>
+### 1. Sub header
+<content>
+### 2. Sub header
+<content>
+## Next sub section header
+### 1. Sub header
+<content>
+```
+
 ## Frontend
 
 Frontend is developed using Shiny for Python (py-shiny). The account credentials are saved in a PostgreSQL database
@@ -20,3 +37,7 @@ Backend contains agents developed by Langgraph architecture. The graph starts wi
   - Add the credentials in ".env" file.
 - Run the app\
    `uv run shiny run app.py`
+
+  or
+
+  `uv run shiny run app.py -p <port>`
