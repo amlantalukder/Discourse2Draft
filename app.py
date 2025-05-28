@@ -19,7 +19,7 @@ config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
 settings_flag = reactive.value(True)
-state_change_flag = reactive.value(True)
+reset_flag = reactive.value(True)
 current_file_name = reactive.value('')
 
 def updateFileNameFlag(file_name):
@@ -29,7 +29,7 @@ def updateFileNameFlag(file_name):
 def loadViews():
     global main_view, auth_view
     print('loadding views', config_app.email)
-    main_view = mod_main(id="main", config_app=config_app, updateFileNameFlag=updateFileNameFlag, state_change_flag=state_change_flag)
+    main_view = mod_main(id="main", config_app=config_app, updateFileNameFlag=updateFileNameFlag, reset_flag=reset_flag)
     auth_view = mod_authentication(id="auth", config_app=config_app, changeLoginStatus=changeLoginStatus)
 
 @reactive.effect
@@ -53,6 +53,7 @@ def saveFileName():
 @reactive.event(input.btn_new_file)
 def showNewFile():
     config_app.file_name = ''
+    reset_flag.set(not reset_flag.get())
 
 @reactive.effect
 @reactive.event(current_file_name)
@@ -69,7 +70,7 @@ def logIn():
     config_app.instructions = records['instructions'].iloc[0]
 
     settings_flag.set(not settings_flag.get())
-    state_change_flag.set(not state_change_flag.get())
+    reset_flag.set(not reset_flag.get())
 
     ui.notification_show('Login successful.', type='message')
 
@@ -81,7 +82,7 @@ def logOut():
     config_app.setDefaults()
     config_app.session_id = session.id
     settings_flag.set(not settings_flag.get())
-    state_change_flag.set(not state_change_flag.get())
+    reset_flag.set(not reset_flag.get())
 
     login_status.set('logged_out')
 
@@ -118,6 +119,7 @@ def changeSettings():
                 select_values=[[config_app.email]])
     
     settings_flag.set(not settings_flag.get())
+    reset_flag.set(not reset_flag.get())
 
 
 with ui.div(class_="app-container"):

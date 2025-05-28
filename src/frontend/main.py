@@ -9,11 +9,12 @@ import textwrap
 from datetime import datetime
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, state_change_flag):
+def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag):
 
     print('Email:', config_app.email)
     
     file_change_flag = reactive.value(True)
+    sidebar_reset_flag = reactive.value(True)
 
     stream = ui.MarkdownStream("stream")
 
@@ -24,30 +25,24 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, state_chang
         @reactive.event(input.btn_show, ignore_init=True)
         def showFile():
             setCurrentFile(row['session'], row['file_name'])
+        
+        with ui.hold() as content:
+            with ui.div(class_='d-flex gap-2'):
+                with ui.div(class_='d-flex flex-column'):
+                    ui.input_action_link('btn_show', row["file_name"])
+                    ui.span(row['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
+                with ui.div(class_='icon'):
+                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                    async def downloadDoc():
+                        file_name_part = row['file_name'].lower().replace(' ', '_')
+                        doc_path = Path(f'data/manuscript_{row['session']}_{file_name_part}.md')
 
-        @core_render.download(filename='manuscript.md')
-        async def downloadDoc():
+                        if not doc_path.exists(): return
+                        with open(doc_path) as f:
+                            for l in f.readlines():
+                                yield l
 
-            file_name_part = row['file_name'].lower().replace(' ', '_')
-            doc_path = Path(f'data/manuscript_{row['session']}_{file_name_part}.md')
-
-            if not doc_path.exists(): return
-            with open(doc_path) as f:
-                for l in f.readlines():
-                    yield l
-
-        return core_ui.div(
-                    core_ui.div(
-                        ui.input_action_link('btn_show', row["file_name"]),
-                        core_ui.span(str(row['update_date'])),
-                        class_='d-flex flex-column'
-                    ),
-                    core_ui.div(
-                        core_ui.download_button('downloadDoc', '', icon=faicons.icon_svg("download")),
-                        class_='icon'
-                    ),
-                    class_='d-flex gap-2'
-                )
+        return content
 
     with ui.hold() as content:
         with ui.div(class_='app-body-container'):
@@ -106,24 +101,31 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, state_chang
                     with ui.div(class_='row content'):
                         stream.ui(content=core_ui.p('Content starts here ...', class_='mt-3'), width='100%') 
 
+    @reactive.effect
+    @reactive.event(reset_flag)
+    def initView():
+        
+        # Reset file name, outline and content
+        ui.update_checkbox(id='chk_example', value=False)
+        updateFileNameFlag(config_app.file_name)
+        ui.update_text(id='text_outline', value='')
+        setContent('')
+
     def setContent(content):
         loop = asyncio.get_event_loop()
         loop.create_task(stream._send_content_message(content, "replace", []))
-
-    def clearContent():
-        setContent('')
 
     @reactive.calc()
     def getLLMandTemp():
         return config_app.llm, config_app.temperature
 
     @reactive.calc()
-    @reactive.event(state_change_flag)
+    @reactive.event(reset_flag)
     def isLoggedIn():
         return config_app.email != ''
 
     @reactive.calc()
-    @reactive.event(state_change_flag)
+    @reactive.event(reset_flag, sidebar_reset_flag)
     def loadDocuments():
         print(f'In loadDocuments: {config_app.email=}')
         if config_app.email != '':
@@ -425,7 +427,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, state_chang
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
             response = response['response']
-            #response = 'dummy ai'
+            #response = 'dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai'
 
             insertContent(d_outline, current_section_list, response)
             
@@ -469,9 +471,11 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, state_chang
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
 
-        await stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path), clear=regenerate)
+        await stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path), clear=True)
 
-        state_change_flag.set(not state_change_flag.get())
+        config_app.is_writing = True
+
+        sidebar_reset_flag.set(not sidebar_reset_flag.get())
 
     @reactive.effect
     @reactive.event(input.btn_resume_pause)
@@ -482,8 +486,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, state_chang
             config_app.is_writing = False
             ui.notification_show("Writing stopped", type="warning")
             return
-        
-        config_app.is_writing = True
         
         await generate(regenerate=False)
 
