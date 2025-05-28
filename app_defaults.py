@@ -9,7 +9,7 @@ class ConfigApp:
 
     def setDefaults(self):
         self.llm = 'azure-o1-mini'
-        self.temperature = 0
+        self.temperature = 0.
         self.instructions = textwrap.dedent('''\
         The user will input an outline for a manuscript on a specific topic. You are a scholarly ghost‑writer with a PhD in that topic area. Your task is to convert a detailed, hierarchically coded outline into polished manuscript prose. Follow the following global constraints for every section you draft.
     
