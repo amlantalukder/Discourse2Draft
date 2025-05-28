@@ -2,11 +2,11 @@ from shiny import reactive
 from shiny.express import ui, render, input, session
 import faicons
 from pathlib import Path
-from app_main import mod_main
-from authentication_modules.authentication import mod_authentication
-from app_settings import mod_settings, showDialog as showSettingsDialog
-from app_defaults import ConfigApp
-from db import selectFromDB, updateDB
+from src.frontend.main import mod_main
+from src.frontend.authentication_modules.authentication import mod_authentication
+from src.frontend.settings import mod_settings, showDialog as showSettingsDialog
+from src.frontend.defaults import ConfigApp
+from src.frontend.db import selectFromDB, updateDB
 from datetime import datetime
 
 ui.include_css(Path(__file__).parent / "css" / "bootstrap.css", method='link_files')

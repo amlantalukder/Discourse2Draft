@@ -1,6 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui
-from db import selectFromDB, encryptPassword
+from ..db import selectFromDB, encryptPassword
 
 # -----------------------------------------------------------------------
 @module

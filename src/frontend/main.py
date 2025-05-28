@@ -2,7 +2,7 @@ from shiny import reactive, ui as core_ui, render as core_render
 from shiny.express import ui, render, session, module
 import faicons
 from pathlib import Path
-from db import updateDB, selectFromDB, insertIntoDB
+from .db import updateDB, selectFromDB, insertIntoDB
 import asyncio
 import json
 import textwrap

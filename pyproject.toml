@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = "==3.12.10"
 dependencies = [
     "faicons>=0.2.2",
-    "fastapi>=0.115.12",
     "ipykernel>=6.29.5",
     "langchain>=0.3.24",
     "langchain-community>=0.3.22",

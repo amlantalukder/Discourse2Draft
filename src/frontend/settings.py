@@ -1,7 +1,7 @@
 from shiny import reactive
 from shiny.express import ui, module
-from src.llms import extractAvailableLLMs
-from src.architecture import Architecture
+from ..backend.llms import extractAvailableLLMs
+from ..backend.architecture import Architecture
 
 def showDialog(ui_content):
 

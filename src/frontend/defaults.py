@@ -1,6 +1,5 @@
-from src.architecture import Architecture
+from ..backend.architecture import Architecture
 import textwrap
-
 
 class ConfigApp:
 

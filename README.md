@@ -1,1 +1,22 @@
 # AI-Word-Processor
+
+## Frontend
+
+Frontend is developed using Shiny for Python (py-shiny). The account credentials are saved in a PostgreSQL database
+
+## Backend
+
+Backend contains agents developed by Langgraph architecture. The graph starts with _previous content_ and _current section header_. If the size of previous contents is too large (> 500 tokens), the content gets summarized at the "Summarize" node and the result is passed on to the "Generate Report" node along with the _current section header_. "Generate Report" node generates the text based on the _previous content summary_ and _current section header_.
+
+![alt text](assets/architecture.png)
+
+## Running the app
+
+- Create python environment.\
+  - `pip install uv`
+  - `uv sync`
+- Create ".env" file with the required credentials, following "example.env" file.
+  - `cp example.env .env`
+  - Add the credentials in ".env" file.
+- Run the app\
+   `uv run shiny run app.py`
