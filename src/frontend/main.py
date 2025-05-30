@@ -98,8 +98,11 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                                 yield l
                                     "Download"
                                 
-                    with ui.div(class_='row content'):
-                        stream.ui(content=core_ui.p('Content starts here ...', class_='mt-3'), width='100%') 
+                    with ui.div(class_='row content', id='test'):
+                        stream.ui(content=core_ui.p('Content starts here ...', class_='mt-3'), width='100%')
+                    
+        #ui.include_js(Path(__file__).parent / "js" / "addon.js")
+
 
     @reactive.effect
     @reactive.event(reset_flag)

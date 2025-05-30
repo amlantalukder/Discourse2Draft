@@ -21,6 +21,10 @@ body {
   justify-content: center;
 }
 
+.btn:hover svg {
+  fill: #fff !important;
+}
+
 div.app-dialog-container {
   flex: 1 1 auto;
   display: flex;
