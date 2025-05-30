@@ -28,7 +28,6 @@ def updateFileNameFlag(file_name):
 @reactive.effect
 def loadViews():
     global main_view, auth_view
-    print('loadding views', config_app.email)
     main_view = mod_main(id="main", config_app=config_app, updateFileNameFlag=updateFileNameFlag, reset_flag=reset_flag)
     auth_view = mod_authentication(id="auth", config_app=config_app, changeLoginStatus=changeLoginStatus)
 
