@@ -125,7 +125,7 @@ div.title-bar {
   justify-content: space-between;
   align-items: center;
   background-color: #bfc0fd;
-  flex: 0 1 50px;
+  flex: 0 1 60px;
 }
 
 div.app-body-container {

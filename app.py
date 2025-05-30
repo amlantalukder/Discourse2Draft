@@ -127,15 +127,12 @@ with ui.div(class_="app-container"):
             ui.h4('AI Word processor')
         @render.express
         def showFileNameSaveOption():
-            with ui.div(class_='col file-name'):
-                if login_status.get() in ['logged_in', 'guest']:
+            if login_status.get() in ['logged_in', 'guest']:
+                with ui.div(class_='col file-name'):
                     ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
                     ui.input_action_button('btn_save_file_name', 'Save')
-        with ui.div(class_='col d-flex justify-content-end'):
-            with ui.div(class_='d-flex gap-2'):
-                @render.express
-                def showNewFileOption():
-                    if login_status.get() in ['logged_in', 'guest']:
+                with ui.div(class_='col d-flex justify-content-end'):
+                    with ui.div(class_='d-flex gap-2'):
                         with ui.tooltip(placement="top"):
                             ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
                             "New File"
@@ -153,9 +150,14 @@ with ui.div(class_="app-container"):
                                                     ui.span(config_app.email, class_='d-flex align-items-center')
                                                     ui.input_action_button('btn_logout', 'Logout')
                             "Account"
-                with ui.tooltip(placement="top"):
-                    ui.input_action_button('btn_settings', '', icon=faicons.icon_svg("gear"))
-                    "Settings"
+                        with ui.tooltip(placement="top"):
+                            ui.input_action_button('btn_settings', '', icon=faicons.icon_svg("gear"))
+                            "Settings"
+            else:
+                # Without this empty div, there is an empty shin-html-output element,
+                # for which the header does not align center.
+                with ui.div(class_="col"):
+                    ""
     @render.ui
     def showView():
         if login_status.get() in ['logged_in', 'guest']:
