@@ -1,7 +1,7 @@
 from shiny import reactive, ui as core_ui, render as core_render
 from shiny.express import ui, render, session, module
 import faicons
-from pathlib import Path
+from utils import Config
 from .db import updateDB, selectFromDB, insertIntoDB
 import asyncio
 import json
@@ -10,8 +10,6 @@ from datetime import datetime
 
 @module
 def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag):
-
-    print('Email:', config_app.email)
     
     file_change_flag = reactive.value(True)
     sidebar_reset_flag = reactive.value(True)
@@ -27,7 +25,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             setCurrentFile(row['session'], row['file_name'])
         
         with ui.hold() as content:
-            with ui.div(class_='d-flex gap-2'):
+            with ui.div(class_='d-flex justify-content-around'):
                 with ui.div(class_='d-flex flex-column'):
                     ui.input_action_link('btn_show', row["file_name"])
                     ui.span(row['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
@@ -35,7 +33,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                     @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                     async def downloadDoc():
                         file_name_part = row['file_name'].lower().replace(' ', '_')
-                        doc_path = Path(f'data/manuscript_{row['session']}_{file_name_part}.md')
+                        doc_path = Config.DIR_DATA / f'manuscript_{row['session']}_{file_name_part}.md'
 
                         if not doc_path.exists(): return
                         with open(doc_path) as f:
@@ -46,19 +44,27 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
     with ui.hold() as content:
         with ui.div(class_='app-body-container'):
+            with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
+                ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
             with ui.layout_sidebar():
                 with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8"):
-                    with ui.div(class_='side-bar-docs-container'):  
-                        @render.ui
-                        def showDocuments():
-                            records = loadDocuments()
-                            if records.empty: return ui.span('No saved documents')
-                            ui_elements = []
-                            for i, row in records.iterrows():
-                                ui_elements.append(
-                                    getDocListItem(f'doc_list_item_{i}', row, setCurrentFile)
-                                )
-                            return ui_elements
+                    with ui.div(class_='side-bar-docs-container'):
+                        with ui.accordion():
+                            with ui.accordion_panel('Generated Documents'):
+                                with ui.div(class_='side-bar-docs-container'):  
+                                    @render.ui
+                                    def showDocuments():
+                                        records = loadDocuments()
+                                        if records.empty: return ui.span('No documents')
+                                        ui_elements = []
+                                        for i, row in records.iterrows():
+                                            ui_elements.append(
+                                                getDocListItem(f'doc_list_item_{i}', row, setCurrentFile)
+                                            )
+                                        return ui_elements
+                        # with ui.accordion():
+                        #     with ui.accordion_panel('Uploaded Documents'):
+                        #         ui.input_file("btn_upload_files", "Choose Files", accept=[".csv", ".docx", ".pdf"], multiple=True)
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
                         with ui.div(class_='col'):
@@ -73,7 +79,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                                 ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                 with ui.div(class_='col-4 text-end'):
                                     ui.p("(Drag the text area from the bottom right corner to show more text)")
-                            ui.input_text_area('text_outline', '', placeholder='''Write an outline...''', rows=7, width='100%')
+                            ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=7, width='100%')
                         with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                             with ui.div(class_='row flex-column gap-2'):
                                 with ui.tooltip(placement="right"):
@@ -90,7 +96,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                     async def downloadDoc():
 
                                         file_name_part = config_app.file_name.lower().replace(' ', '_')
-                                        doc_path = Path(f'data/manuscript_{config_app.session_id}_{file_name_part}.md')
+                                        doc_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
 
                                         if not doc_path.exists(): return
                                         with open(doc_path) as f:
@@ -98,11 +104,68 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                                 yield l
                                     "Download"
                                 
-                    with ui.div(class_='row content', id='test'):
+                    with ui.div(class_='row content', id='content-container'):
                         stream.ui(content=core_ui.p('Content starts here ...', class_='mt-3'), width='100%')
-                    
-        #ui.include_js(Path(__file__).parent / "js" / "addon.js")
 
+        ui.include_js(Config.DIR_HOME / "js" / "addon.js")
+
+    def resetContentPara(d_outline, section_list, paragraph_index):
+        '''
+        Resets specified paragraph for regeneration within a section hierarchy
+        '''
+        
+        if len(section_list) == 1:
+
+            assert 'content' in d_outline[section_list[0]], 'Hierarchy does not contain content'
+
+            count_par = 0
+
+            for i, (_, content) in enumerate(d_outline[section_list[0]]['content']):
+                
+                # Detect the specified paragraph 
+                count_par += content.count('\n\n') + 1
+                if paragraph_index < count_par:
+                    break
+            
+            assert i < len(d_outline[section_list[0]]['content']), 'Intended paragraph was not found for regeneration'
+        
+            # Reset the specified paragraph in the outline
+            pars = content.split('\n\n')
+            index_current_par = len(pars)-(count_par - paragraph_index)
+            previous_para_current_content, next_para_current_content = [], []
+            if index_current_par > 0:
+                previous_para_current_content = [[d_outline[section_list[0]]['content'][i][0], '\n\n'.join(pars[:index_current_par])]]
+            if index_current_par < len(pars)-1:
+                next_para_current_content = [[d_outline[section_list[0]]['content'][i][0], '\n\n'.join(pars[index_current_par+1:])]]
+
+            d_outline[section_list[0]]['content'] = (d_outline[section_list[0]]['content'][:i]
+                                                    + previous_para_current_content
+                                                    + [['content_ai', '']]
+                                                    + next_para_current_content
+                                                    + d_outline[section_list[0]]['content'][i+1:])
+        else:
+            resetContentPara(d_outline[section_list[0]], section_list[1:], paragraph_index)
+
+    @reactive.effect
+    @reactive.event(input.btn_regenerate_text)
+    def output_text():
+
+        hierarchy = input.selected_para_hierarchy()
+        if not hierarchy: return
+        
+        file_name_part = config_app.file_name.lower().replace(' ', '_')
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
+        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
+        
+        # Read outline
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+        
+        *section_list, paragraph_index = hierarchy
+        resetContentPara(d_outline, section_list, paragraph_index)
+
+        loop = asyncio.get_event_loop()
+        loop.create_task(stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=1), clear=True))
 
     @reactive.effect
     @reactive.event(reset_flag)
@@ -196,8 +259,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             return
         
         file_name_part = config_app.file_name.lower().replace(' ', '_')
-        outline_file_path = Path(f'data/outline_{config_app.session_id}_{file_name_part}.json')
-        manuscript_file_path = Path(f'data/manuscript_{config_app.session_id}_{file_name_part}.md')
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
+        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
 
         # Read outline
         with open(outline_file_path) as fp:
@@ -218,7 +281,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         # Show file name, outline and content
         updateFileNameFlag(config_app.file_name)
         ui.update_text(id='text_outline', value=raw_outline)
-        setContent(content)
+
+        loop = asyncio.get_event_loop()
+        loop.create_task(stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=0), clear=True))
 
     def saveOutline(regenerate=False):
 
@@ -334,7 +399,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
         return True
 
-    async def generateResponse(d_outline, outline_file_path, manuscript_file_path):
+    async def generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=-1):
 
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
             '''
@@ -425,12 +490,12 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             
             yield section_header
 
-            if not is_gen_needed: break
+            if not (write_n_contents > 0 and is_gen_needed): break
         
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
             response = response['response']
-            #response = 'dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai dummy ai'
+            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
 
             insertContent(d_outline, current_section_list, response)
             
@@ -440,7 +505,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
             for i, s in enumerate(tokens):
                 await asyncio.sleep(0.1 if not config_app.write_faster else 0.01)
-                yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
+                yield s + ' ' if i < len(tokens)-1 else s + '<a id="#custom-id"></a>\n\n'
             
             with open(outline_file_path, 'w') as fp:
                 json.dump(d_outline, fp)
@@ -456,6 +521,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                         update_values=['running', current_time], 
                         select_fields=['email', 'session', 'file_name'], 
                         select_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
+            
+            if write_n_contents > 0: write_n_contents -= 1
 
     async def generate(regenerate):
 
@@ -515,8 +582,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                         select_fields=['email', 'session', 'file_name'], 
                         select_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
             
-            if stream_status == "success":
+            if config_app.is_writing and stream_status == "success":
                 ui.notification_show("Writing finished", type="message")
+                config_app.is_writing = False
 
             ui.update_action_button(
                 "btn_resume_pause", icon=faicons.icon_svg("play")
