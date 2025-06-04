@@ -8,10 +8,12 @@ from src.frontend.settings import mod_settings, showDialog as showSettingsDialog
 from src.frontend.defaults import ConfigApp
 from src.frontend.db import selectFromDB, updateDB
 from datetime import datetime
+from utils import Config
+import asyncio
 
-ui.include_css(Path(__file__).parent / "css" / "bootstrap.css", method='link_files')
-ui.include_css(Path(__file__).parent / "css" / "bootstrap.min.css", method='link_files')
-ui.include_css(Path(__file__).parent / "css" / "custom.css", method='link_files')
+ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='link_files')
+ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.min.css", method='link_files')
+ui.include_css(Path(__file__).parent / "www" / "css" / "custom.css", method='link_files')
 
 ui.page_opts(title="", fillable=True)
 
@@ -71,13 +73,15 @@ def logIn():
     settings_flag.set(not settings_flag.get())
     reset_flag.set(not reset_flag.get())
 
-    ui.notification_show('Login successful.', type='message')
-
 def changeLoginStatus(status):
     login_status.set(status)
     if login_status.get() == 'logged_in': logIn()
 
 def logOut():
+
+    loop = asyncio.get_event_loop()
+    loop.create_task(session.send_custom_message('auth_key', {'email': ''}))
+
     config_app.setDefaults()
     config_app.session_id = session.id
     settings_flag.set(not settings_flag.get())
@@ -164,3 +168,5 @@ with ui.div(class_="app-container"):
             return main_view
         else:
             return auth_view
+    
+    ui.head_content(ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js"))

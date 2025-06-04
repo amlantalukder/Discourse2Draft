@@ -105,9 +105,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                     "Download"
                                 
                     with ui.div(class_='row content', id='content-container'):
-                        stream.ui(content=core_ui.p('Content starts here ...', class_='mt-3'), width='100%')
+                        stream.ui(content=core_ui.p('Content starts here ...'), width='100%')
 
-        ui.include_js(Config.DIR_HOME / "js" / "addon.js")
+        ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
     def resetContentPara(d_outline, section_list, paragraph_index):
         '''
@@ -175,7 +175,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         ui.update_checkbox(id='chk_example', value=False)
         updateFileNameFlag(config_app.file_name)
         ui.update_text(id='text_outline', value='')
-        setContent('')
+        setContent('<p>Content starts here ...</p>')
 
     def setContent(content):
         loop = asyncio.get_event_loop()

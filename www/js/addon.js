@@ -28,7 +28,7 @@ function getDOMHierarchy(element) {
     return hierarchy;
 }
 
-targetDiv = document.getElementById('content-container')
+targetDiv = document.getElementById('content-container');
 
 // let data = '';
 // logSelection = () => {
@@ -50,17 +50,34 @@ targetDiv = document.getElementById('content-container')
 //     document.removeEventListener("selectionchange", logSelection);
 // })
 
+targetDiv.addEventListener('mouseover', (event) => {
+    var element = event.target;
+    if (element.tagName == 'P') {
+        if (!element.classList.contains('highlight-with-color')) {
+            element.classList.add('highlight-with-color');
+        }
+
+        element.addEventListener('mouseout', (event) => {
+            element.classList.remove('highlight-with-color');
+        });
+    }
+});
+
 var current_element;
 
-targetDiv.addEventListener('contextmenu', function (event) {
+targetDiv.addEventListener('contextmenu', (event) => {
 
     if (current_element) {
-        current_element.style.backgroundColor = '';
+        current_element.classList.remove('highlight-with-border');
     }
 
     current_element = event.target;
     var hierarchy = getDOMHierarchy(current_element);
-    console.log(hierarchy);
+
+    console.log(hierarchy, !hierarchy);
+    if (!hierarchy.length) {
+        return;
+    }
 
     event.preventDefault(); // Prevent default browser menu
     let menu = document.getElementById('main-ctx_menu');
@@ -71,7 +88,9 @@ targetDiv.addEventListener('contextmenu', function (event) {
     let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
     let top = Math.min(event.clientY, container_props.bottom - 75) - ancestor_props.top;
 
-    current_element.style.backgroundColor = '#d3d3e9';
+    if (!current_element.classList.contains('highlight-with-border')) {
+        current_element.classList.add('highlight-with-border');
+    }
 
     menu.style.display = 'block';
     menu.style.left = `${left}px`;
@@ -81,9 +100,9 @@ targetDiv.addEventListener('contextmenu', function (event) {
 });
 
 $(document).bind("click", function (event) {
-    console.log(event.clientX, event.clientY);
     document.getElementById("main-ctx_menu").style.display = "none";
+
     if (current_element) {
-        current_element.style.backgroundColor = '';
+        current_element.classList.remove('highlight-with-border');
     }
 });

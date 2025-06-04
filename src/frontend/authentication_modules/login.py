@@ -1,6 +1,7 @@
 from shiny import reactive
 from shiny.express import module, ui
 from ..db import selectFromDB, encryptPassword
+import asyncio
 
 # -----------------------------------------------------------------------
 @module
@@ -29,6 +30,15 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
 
     # -----------------------------------------------------------------------
     @reactive.effect
+    @reactive.event(input.email)
+    def setEmail():
+    
+        if not input.email(): return
+        config_app.email = input.email()
+        changeLoginStatus('logged_in')
+
+    # -----------------------------------------------------------------------
+    @reactive.effect
     @reactive.event(input.btn_login)
     def login():
 
@@ -46,8 +56,12 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
             return
 
         config_app.email = email
+        loop = asyncio.get_event_loop()
+        loop.create_task(session.send_custom_message('auth_key', {'email': config_app.email}))
 
         changeLoginStatus('logged_in')
+
+        ui.notification_show('Login successful.', type='message')
 
     # -----------------------------------------------------------------------
     @reactive.effect

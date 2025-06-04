@@ -197,3 +197,13 @@ div.side-bar-docs-container .icon {
   width: 20px;
   height: 20px;
 }
+
+div.content p {
+  padding: 5px;
+}
+div.content p.highlight-with-color {
+  background-color: #d3d3e9;
+}
+div.content p.highlight-with-border {
+  border: 1px dotted #646464;
+}
