@@ -168,5 +168,5 @@ with ui.div(class_="app-container"):
             return main_view
         else:
             return auth_view
-    
-    ui.head_content(ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js"))
+        
+    ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js", method='inline')

@@ -13,6 +13,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
     
     file_change_flag = reactive.value(True)
     sidebar_reset_flag = reactive.value(True)
+    show_outline = reactive.value(True)
 
     stream = ui.MarkdownStream("stream")
 
@@ -67,47 +68,61 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                         #         ui.input_file("btn_upload_files", "Choose Files", accept=[".csv", ".docx", ".pdf"], multiple=True)
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
-                        with ui.div(class_='col'):
-                            with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
-                                with ui.div(class_='col-4'):
-                                    ui.input_checkbox('chk_example', 'Use example', value=False)
-                                with ui.div(class_='d-flex flex-column col-4 text-center'):
-                                    @render.ui
-                                    def showLLMandTemp():
-                                        llm, temp = getLLMandTemp()
-                                        return [ui.span(f'LLM: {llm}, Temperature: {temp}'),
-                                                ui.span('(Can be changed in the settings panel in the top-right corner)')]
-                                with ui.div(class_='col-4 text-end'):
-                                    ui.p("(Drag the text area from the bottom right corner to show more text)")
-                            ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=7, width='100%')
-                        with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
-                            with ui.div(class_='row flex-column gap-2'):
-                                with ui.tooltip(placement="right"):
-                                    ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
-                                    "Write from the start"
-                                with ui.tooltip(placement="right"):
-                                    ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
-                                    "Resume / Pause"
-                                with ui.tooltip(placement="right"):
-                                    ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
-                                    "Writing Speed"
-                                with ui.tooltip(placement="right"):
-                                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                    async def downloadDoc():
+                        @render.express
+                        def showOutline():
+                            class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
+                            with ui.div(class_=class_name_outline):
+                                with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
+                                    with ui.div(class_='col-4'):
+                                        ui.input_checkbox('chk_example', 'Use example', value=False)
+                                    with ui.div(class_='d-flex flex-column col-4 text-center'):
+                                        @render.ui
+                                        def showLLMandTemp():
+                                            llm, temp = getLLMandTemp()
+                                            return [ui.span(f'LLM: {llm}, Temperature: {temp}'),
+                                                    ui.span('(Can be changed in the settings panel in the top-right corner)')]
+                                    with ui.div(class_='col-4 text-end'):
+                                        ui.p("(Drag the text area from the bottom right corner to show more text)")
+                                ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+                            with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
+                                with ui.div(class_=class_name_controls):
+                                    @render.express
+                                    def showOutlineControl():
+                                        text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
+                                        with ui.tooltip(placement="right"):
+                                            ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
+                                            text 
+                                    with ui.tooltip(placement="right"):
+                                        ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
+                                        "Write from the start"
+                                    with ui.tooltip(placement="right"):
+                                        ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
+                                        "Resume / Pause"
+                                    with ui.tooltip(placement="right"):
+                                        ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
+                                        "Writing Speed"
+                                    with ui.tooltip(placement="right"):
+                                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                        async def downloadDoc():
 
-                                        file_name_part = config_app.file_name.lower().replace(' ', '_')
-                                        doc_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
+                                            file_name_part = config_app.file_name.lower().replace(' ', '_')
+                                            doc_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
 
-                                        if not doc_path.exists(): return
-                                        with open(doc_path) as f:
-                                            for l in f.readlines():
-                                                yield l
-                                    "Download"
+                                            if not doc_path.exists(): return
+                                            with open(doc_path) as f:
+                                                for l in f.readlines():
+                                                    yield l
+                                        "Download"
                                 
                     with ui.div(class_='row content', id='content-container'):
                         stream.ui(content=core_ui.p('Content starts here ...'), width='100%')
 
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
+
+    @reactive.effect
+    @reactive.event(input.btn_show_hide_outline)
+    def showOrHideOutline():
+        show_outline.set(not show_outline.get())
 
     def resetContentPara(d_outline, section_list, paragraph_index):
         '''
