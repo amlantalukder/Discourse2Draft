@@ -4,7 +4,7 @@ import faicons
 from pathlib import Path
 from src.frontend.main import mod_main
 from src.frontend.authentication_modules.authentication import mod_authentication
-from src.frontend.settings import mod_settings, showDialog as showSettingsDialog
+from src.frontend.settings import mod_settings
 from src.frontend.defaults import ConfigApp
 from src.frontend.db import selectFromDB, updateDB
 from datetime import datetime
@@ -40,7 +40,7 @@ def saveFileName():
 
     if config_app.file_name == file_name: return
 
-    records = selectFromDB('sessions', 
+    records = selectFromDB('generated_files', 
                         field_names=['email', 'session', 'file_name'], 
                         field_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
     if not records.empty:
@@ -109,7 +109,16 @@ def getDialogs():
 @reactive.effect
 @reactive.event(input.btn_settings)
 def showSettings():
-    showSettingsDialog(settings_content)
+
+    m = ui.modal(
+        settings_content,
+        title="",
+        easy_close=False,
+        footer=None,
+        size='l'
+    )
+
+    ui.modal_show(m)
 
 def changeSettings():
 

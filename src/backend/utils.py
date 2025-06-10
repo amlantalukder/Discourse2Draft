@@ -17,7 +17,10 @@ class Config:
         'Mistral': {'mistral-large-2': 'Mistral Large 2'}
     }
     env_config = dotenv.dotenv_values(Path(".env"))
-    dotenv.load_dotenv(Path(".env"))
+
+    import os
+    if 'OPENAI_API_KEY' in os.environ: os.environ.pop('OPENAI_API_KEY')
+    if 'OPENAI_BASE_URL' in os.environ: os.environ.pop('OPENAI_BASE_URL')
 
     NUM_TOKENS_SUMMARY = 500
     RETRY_COUNTER = 2

@@ -3,18 +3,6 @@ from shiny.express import ui, module
 from ..backend.llms import extractAvailableLLMs
 from ..backend.architecture import Architecture
 
-def showDialog(ui_content):
-
-    m = ui.modal(
-        ui_content,
-        title="",
-        easy_close=False,
-        footer=None,
-        size='l'
-    )
-
-    ui.modal_show(m)
-
 @module
 def mod_settings(input, output, session, callback_fn, config_app):
 

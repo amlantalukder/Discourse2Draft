@@ -212,7 +212,7 @@ propcache==0.3.1
     #   yarl
 psutil==7.0.0
     # via ipykernel
-psycopg2==2.9.10
+#psycopg2==2.9.10
     # via word-processor-ai (pyproject.toml)
 psycopg2-binary==2.9.10
     # via word-processor-ai (pyproject.toml)

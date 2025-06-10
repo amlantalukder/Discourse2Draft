@@ -1,7 +1,8 @@
-from shiny import reactive, ui as core_ui, render as core_render
-from shiny.express import ui, render, session, module
+from shiny import reactive, ui as core_ui
+from shiny.express import ui, render, module, expressify
+from shiny.types import FileInfo
 import faicons
-from utils import Config
+from utils import Config, read_in_chunks
 from .db import updateDB, selectFromDB, insertIntoDB
 import asyncio
 import json
@@ -18,28 +19,85 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
     stream = ui.MarkdownStream("stream")
 
     @module
-    def getDocListItem(input, output, session, row, setCurrentFile):
+    def getSavedDocItem(input, output, session, info, show_expanded_view):
+
+        d_status = {'created': 'Document created',
+                    'running': 'Writing on process',
+                    'success': 'Writing finished', 
+                    'error': 'Writing stopped due to error', 
+                    'cancelled': 'Writing was stopped by user',
+                    'deleted': 'Document was deleted'}
 
         @reactive.effect
         @reactive.event(input.btn_show, ignore_init=True)
         def showFile():
-            setCurrentFile(row['session'], row['file_name'])
+            setCurrentFile(info['session'], info['file_name'])
+
+        @reactive.effect
+        @reactive.event(input.btn_delete, ignore_init=True)
+        def deleteFile():
+            updateDB('generated_files', 
+                    update_fields=['file_status', 'update_date'], 
+                    update_values=['deleted', datetime.now()], 
+                    select_fields=['email', 'session', 'file_name'], 
+                    select_values=[[info['email']], [info['session']], [info['file_name']]])
+            sidebar_reset_flag.set(not sidebar_reset_flag.get())
         
         with ui.hold() as content:
-            with ui.div(class_='d-flex justify-content-around'):
-                with ui.div(class_='d-flex flex-column'):
-                    ui.input_action_link('btn_show', row["file_name"])
-                    ui.span(row['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                with ui.div(class_='icon'):
-                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                    async def downloadDoc():
-                        file_name_part = row['file_name'].lower().replace(' ', '_')
-                        doc_path = Config.DIR_DATA / f'manuscript_{row['session']}_{file_name_part}.md'
+            if not show_expanded_view:
+                with ui.div(class_='row gap-3'):
+                    with ui.div(class_='col d-flex flex-column justify-content-center'):
+                        ui.input_action_link('btn_show', info["file_name"])
+                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
+                    with ui.div(class_='col-auto d-flex align-items-center'):
+                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                        async def downloadDoc():
+                            file_name_part = info['file_name'].lower().replace(' ', '_')
+                            doc_path = Config.DIR_DATA / f'manuscript_{info['session']}_{file_name_part}.md'
 
-                        if not doc_path.exists(): return
-                        with open(doc_path) as f:
-                            for l in f.readlines():
-                                yield l
+                            if not doc_path.exists(): return
+                            with open(doc_path) as f:
+                                for l in f.readlines():
+                                    yield l
+                    with ui.div(class_='col-auto d-flex align-items-center'):
+                        ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
+            else:
+                with ui.div(class_='app-tr row'):
+                    with ui.div(class_='app-td col'):
+                        ui.input_action_link('btn_show', info["file_name"])
+                    with ui.div(class_='app-td col-2'):
+                        ui.span(info['file_status'])
+                    with ui.div(class_='app-td col-2'):
+                        ui.span(info['create_date'].strftime('%Y-%m-%d %H:%M:%S'))
+                    with ui.div(class_='app-td col-2'):
+                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
+                    with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                        async def downloadDoc():
+                            file_name_part = info['file_name'].lower().replace(' ', '_')
+                            doc_path = Config.DIR_DATA / f'manuscript_{info['session']}_{file_name_part}.md'
+
+                            if not doc_path.exists(): return
+                            with open(doc_path) as f:
+                                for l in f.readlines():
+                                    yield l
+                    with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                        ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
+
+        return content
+    
+    @module
+    def getUploadedDocItem(input, output, session, doc):
+        
+        with ui.hold() as content:
+            with ui.div(class_='row gap-3'):
+                with ui.div(class_='col-auto d-flex align-items-center'):
+                    ui.input_checkbox(id=f'chk_file', label='', value=False)
+                with ui.div(class_='col d-flex flex-column justify-content-center'):
+                    ui.span(doc.name)
+                    ui.span(datetime.fromtimestamp(doc.stat().st_ctime).strftime('%Y-%m-%d %H:%M:%S'))
+                with ui.div(class_='col-auto d-flex align-items-center'):
+                    ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
 
         return content
 
@@ -48,24 +106,47 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
                 ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
             with ui.layout_sidebar():
-                with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8"):
-                    with ui.div(class_='side-bar-docs-container'):
-                        with ui.accordion():
+                with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
+                    with ui.div():
+                        with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=False):
                             with ui.accordion_panel('Generated Documents'):
-                                with ui.div(class_='side-bar-docs-container'):  
-                                    @render.ui
-                                    def showDocuments():
+                                
+                                with ui.div(class_='side-bar-docs-container'):
+                                    with ui.div(class_='d-flex justify-content-end'):
+                                        with ui.div(class_='d-flex', style='width:20px'):
+                                            ui.input_action_link(id='btn_show_saved_docs_details', 
+                                                                label='',
+                                                                icon=faicons.icon_svg('maximize'))
+                                    @render.express
+                                    def showSavedDocuments():
                                         records = loadDocuments()
                                         if records.empty: return ui.span('No documents')
-                                        ui_elements = []
                                         for i, row in records.iterrows():
-                                            ui_elements.append(
-                                                getDocListItem(f'doc_list_item_{i}', row, setCurrentFile)
-                                            )
-                                        return ui_elements
-                        # with ui.accordion():
-                        #     with ui.accordion_panel('Uploaded Documents'):
-                        #         ui.input_file("btn_upload_files", "Choose Files", accept=[".csv", ".docx", ".pdf"], multiple=True)
+                                            getSavedDocItem(f'doc_list_item_{i}', 
+                                                            info=row,
+                                                            show_expanded_view=False)
+                                        
+                            with ui.accordion_panel('Uploaded Documents'):
+                                ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
+                                with ui.div(class_='side-bar-docs-container'):  
+                                    @render.express
+                                    def showUploadedDocuments():
+                                        uploadDocs()
+                                        docs = []
+                                        for type in ['.csv', '.txt', 'docx', '.pdf']:
+                                            docs.extend((Config.DIR_DATA / 'uploaded_docs').glob(f'*{type}'))
+
+                                        if not docs: return
+
+                                        with ui.div(class_='row gap-3'):
+                                            with ui.div(class_='col-auto d-flex align-items-center'):
+                                                ui.input_checkbox(id='chk_all_uploaded_files', label='', value=False)
+                                            with ui.div(class_='col d-flex align-items-center'):
+                                                ui.strong('Select all documents')
+
+                                        for i, doc in enumerate(docs):
+                                            getUploadedDocItem(id=str(i), 
+                                                            doc=doc)
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
                         @render.express
@@ -120,9 +201,74 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
     @reactive.effect
+    @reactive.event(input.btn_show_saved_docs_details)
+    def showDetailedSavedDocsView():
+
+        @expressify
+        def showSavedDocuments():
+            records = loadDocuments()
+            if records.empty: return ui.span('No documents')
+            with ui.div(class_='app-table-container'):
+                with ui.div(class_='app-table'):
+                    with ui.div(class_='app-thead'):
+                        with ui.div(class_='app-th row'):
+                            with ui.div(class_='app-td col'):
+                                ui.strong('Document')
+                            with ui.div(class_='app-td col-2'):
+                                ui.strong('Status')
+                            with ui.div(class_='app-td col-2'):
+                                ui.strong('Create date')
+                            with ui.div(class_='app-td col-2'):
+                                ui.strong('Update date')
+                            with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                                ""
+                            with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                                ""
+                    with ui.div(class_='app-tbody'):
+                        for i, row in records.iterrows():
+                            getSavedDocItem(f'doc_list_item_exp_view_{i}', info=row, show_expanded_view=True)
+
+        with ui.hold() as content:
+            showSavedDocuments()
+
+        m = ui.modal(
+            content,
+            title="Saved documents",
+            easy_close=True,
+            footer=None,
+            size='xl'
+        )
+
+        ui.modal_show(m)
+
+    @reactive.calc
+    def uploadDocs():
+        files: list[FileInfo] | None = input.btn_upload_docs()
+        if files is None: return
+        for file in files:
+            with open(Config.DIR_DATA / 'uploaded_docs' / file['name'], 'w') as fp:
+                fp.write('')
+            with open(Config.DIR_DATA / 'uploaded_docs' / file['name'], 'a') as fp:
+                with open(file['datapath'], encoding = "ISO-8859-1") as fp_r:
+                    for piece in read_in_chunks(fp_r):
+                        fp.write(piece)
+
+    @reactive.effect
     @reactive.event(input.btn_show_hide_outline)
     def showOrHideOutline():
         show_outline.set(not show_outline.get())
+
+        if not config_app.file_name: return
+        
+        file_name_part = config_app.file_name.lower().replace(' ', '_')
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
+
+        # Read outline
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+
+        raw_outline = '\n'.join(createRawOutline(d_outline))
+        ui.update_text(id='text_outline', value=raw_outline)
 
     def resetContentPara(d_outline, section_list, paragraph_index):
         '''
@@ -208,11 +354,12 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
     @reactive.calc()
     @reactive.event(reset_flag, sidebar_reset_flag)
     def loadDocuments():
-        print(f'In loadDocuments: {config_app.email=}')
+
+        valid_file_statuses = ["created", "running", "success", "error", "cancelled"]
         if config_app.email != '':
-            records = selectFromDB(table_name='sessions', field_names=['email'], field_values=[[config_app.email]])
+            records = selectFromDB(table_name='generated_files', field_names=['email', 'file_status'], field_values=[[config_app.email], valid_file_statuses])
         else:
-            records = selectFromDB(table_name='sessions', field_names=['session'], field_values=[[config_app.session_id]])
+            records = selectFromDB(table_name='generated_files', field_names=['session', 'file_status'], field_values=[[config_app.session_id], valid_file_statuses])
         return records
 
     @reactive.effect
@@ -255,6 +402,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                 raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
 
         return raw_outline
+        
 
     def setCurrentFile(session_id, file_name):
 
@@ -266,7 +414,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
     @reactive.event(file_change_flag, ignore_init=True)
     def showFile():
 
-        records = selectFromDB('sessions', 
+        records = selectFromDB('generated_files', 
                             field_names=['session', 'file_name'], 
                             field_values=[[config_app.session_id], [config_app.file_name]])
 
@@ -282,13 +430,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             d_outline = json.load(fp)
 
         raw_outline = '\n'.join(createRawOutline(d_outline))
-
-        # Read manuscript
-        if manuscript_file_path.exists():
-            with open(manuscript_file_path) as fp:
-                content = fp.read()
-        else:
-            content = ''
         
         # Change config
         config_app.is_writing = False
@@ -359,7 +500,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
             return d_outline
 
-        records = selectFromDB('sessions', 
+        records = selectFromDB('generated_files', 
                             field_names=['session', 'file_name'], 
                             field_values=[[config_app.session_id], [config_app.file_name]])
         
@@ -401,12 +542,12 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         
         # File does not exist, first time generation
         if records.empty:
-            insertIntoDB('sessions', 
+            insertIntoDB('generated_files', 
                         field_names=['email', 'session', 'file_name', 'file_status', 'create_date', 'update_date', 'llm', 'temperature'], 
                         field_values=[[config_app.email], [config_app.session_id], [config_app.file_name], 'created', [current_time], [current_time], [config_app.llm], [config_app.temperature]])
         # File exists but regenerating
         else:
-            updateDB('sessions', 
+            updateDB('generated_files', 
                         update_fields=['file_status', 'create_date', 'update_date'], 
                         update_values=['created', current_time, current_time], 
                         select_fields=['email', 'session', 'file_name'], 
@@ -505,7 +646,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             
             yield section_header
 
-            if not (write_n_contents > 0 and is_gen_needed): break
+            if not (write_n_contents != 0 and is_gen_needed): break
         
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
@@ -531,7 +672,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
             current_time = datetime.now()
 
-            updateDB('sessions', 
+            updateDB('generated_files', 
                         update_fields=['file_status', 'update_date'], 
                         update_values=['running', current_time], 
                         select_fields=['email', 'session', 'file_name'], 
@@ -591,7 +732,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         if stream_status in ["success", "error", "cancelled"]:
             current_time = datetime.now()
 
-            updateDB('sessions', 
+            updateDB('generated_files', 
                         update_fields=['file_status', 'update_date'], 
                         update_values=[stream_status, current_time], 
                         select_fields=['email', 'session', 'file_name'], 

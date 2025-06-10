@@ -44,9 +44,28 @@ class Credentials(Base):
         return '\n'.join([f'{k}: {v}' for k, v in self.__dict__.items()])
 
 # -----------------------------------------------------------------------
-class Sessions(Base):
+class Settings(Base):
 
-    __tablename__ = 'sessions'
+    __tablename__ = 'settings'
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True, unique=True)
+    email: Mapped[str]
+    llm: Mapped[str]
+    temperature: Mapped[float]
+    instructions: Mapped[str]
+    update_date: Mapped[datetime]
+
+    def __init__(self, data):
+        for k in data:
+            setattr(self, k, data[k])
+
+    def __repr__(self):
+        return '\n'.join([f'{k}: {v}' for k, v in self.__dict__.items()])
+    
+# -----------------------------------------------------------------------
+class GeneratedFiles(Base):
+
+    __tablename__ = 'generated_files'
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True, unique=True)
     email: Mapped[str]
@@ -66,16 +85,16 @@ class Sessions(Base):
         return '\n'.join([f'{k}: {v}' for k, v in self.__dict__.items()])
 
 # -----------------------------------------------------------------------
-class Settings(Base):
+class UploadedFiles(Base):
 
-    __tablename__ = 'settings'
+    __tablename__ = 'uploaded_files'
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True, unique=True)
     email: Mapped[str]
-    llm: Mapped[str]
-    temperature: Mapped[float]
-    instructions: Mapped[str]
-    update_date: Mapped[datetime]
+    session: Mapped[str]
+    file_name: Mapped[str]
+    file_status: Mapped[str]
+    upload_date: Mapped[datetime]
 
     def __init__(self, data):
         for k in data:
@@ -88,7 +107,7 @@ class Settings(Base):
 Base.metadata.create_all(engine)
 
 # -----------------------------------------------------------------------
-tables = {'credentials': Credentials, 'sessions': Sessions, 'settings': Settings}
+tables = {'credentials': Credentials, 'settings': Settings, 'generated_files': GeneratedFiles, 'uploaded_files': UploadedFiles}
 
 # -----------------------------------------------------------------------
 def selectFromDB(table_name: str, field_names: list, field_values: list[list]):
