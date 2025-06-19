@@ -4,6 +4,7 @@ class Config:
 
     DIR_HOME = Path(__file__).parent
     DIR_DATA = DIR_HOME / 'data'
+    APP_NAME = 'AI Word Processor'
 
 def read_in_chunks(file_object, chunk_size=1024):
     """Lazy function (generator) to read a file piece by piece.

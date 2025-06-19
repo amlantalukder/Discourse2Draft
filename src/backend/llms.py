@@ -11,9 +11,9 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     """
 
     available_llms, available_embeddings = [], []
-    litellm_api_key = Config.env_config['OPENAI_API_KEY']
+    litellm_api_key = Config.env_config['AI_API_KEY']
     try:
-        response = requests.get(url=f'{Config.env_config["OPENAI_BASE_URL"]}/model/info',
+        response = requests.get(url=f'{Config.env_config.get("AI_BASE_URL")}/model/info',
                                 headers={'API-Key': litellm_api_key})
         if response.ok:
             response_d = response.json()
@@ -38,7 +38,7 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     llms_filtered = {}
     if Config.llms_selected:
         for category, d in Config.llms_selected.items():
-            category_filtered = {k:v for k, v in d.items() if k in available_llms}
+            category_filtered = {k:v for k, v in d.items() if k in available_llms or True}
             if category_filtered:
                 llms_filtered[category] = category_filtered
     available_llms = llms_filtered if llms_filtered else available_llms
@@ -53,8 +53,8 @@ def getOpenAIModel(model_name, temperature):
 
     return ChatOpenAI(
         model=model_name,
-        base_url=Config.env_config['OPENAI_BASE_URL'],
-        api_key=Config.env_config['OPENAI_API_KEY'],
+        base_url=Config.env_config.get('AI_BASE_URL'),
+        api_key=Config.env_config.get('AI_API_KEY'),
         temperature=temperature,
         max_tokens=None,
         timeout=None,

@@ -6,22 +6,23 @@ from src.frontend.main import mod_main
 from src.frontend.authentication_modules.authentication import mod_authentication
 from src.frontend.settings import mod_settings
 from src.frontend.defaults import ConfigApp
-from src.frontend.db import selectFromDB, updateDB
+from src.frontend.db import selectFromDB, insertIntoDB, updateDB, generated_files_status
 from datetime import datetime
 from utils import Config
+import json
 import asyncio
 
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='link_files')
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.min.css", method='link_files')
 ui.include_css(Path(__file__).parent / "www" / "css" / "custom.css", method='link_files')
 
-ui.page_opts(title="", fillable=True)
+ui.page_opts(title='', fillable=True, window_title=Config.APP_NAME)
 
 config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
-settings_flag = reactive.value(True)
-reset_flag = reactive.value(True)
+reload_flag_main_view = reactive.value(True)
+reload_flag_settings_view = reactive.value(True)
 current_file_name = reactive.value('')
 
 def updateFileNameFlag(file_name):
@@ -29,9 +30,19 @@ def updateFileNameFlag(file_name):
 
 @reactive.effect
 def loadViews():
-    global main_view, auth_view
-    main_view = mod_main(id="main", config_app=config_app, updateFileNameFlag=updateFileNameFlag, reset_flag=reset_flag)
+    global auth_view, main_view, settings_view
     auth_view = mod_authentication(id="auth", config_app=config_app, changeLoginStatus=changeLoginStatus)
+    main_view = mod_main(id=f"main", 
+                         config_app=config_app, 
+                         updateFileNameFlag=updateFileNameFlag, 
+                         reload_flag=reload_flag_main_view,
+    )
+    
+    settings_view = mod_settings(id=f'settings', 
+                                 callback_fn=changeSettings, 
+                                 config_app=config_app, 
+                                 reload_flag=reload_flag_settings_view
+    )
 
 @reactive.effect
 @reactive.event(input.btn_save_file_name)
@@ -40,21 +51,46 @@ def saveFileName():
 
     if config_app.file_name == file_name: return
 
-    records = selectFromDB('generated_files', 
-                        field_names=['email', 'session', 'file_name'], 
-                        field_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
+    valid_file_statuses = list({e.value for e in generated_files_status} - {generated_files_status.DELETED.value})
+    if config_app.email != '':
+        records = selectFromDB('generated_files', 
+                            field_names=['email', 'file_name', 'status'], 
+                            field_values=[[config_app.email], [file_name], valid_file_statuses])
+    else:
+        records = selectFromDB('generated_files', 
+                            field_names=['session', 'file_name', 'status'], 
+                            field_values=[[config_app.session], [file_name], valid_file_statuses])
+    
     if not records.empty:
         ui.notification_show('File name already exists.', type='error')
-        return    
+        return 
+    
+    current_time = datetime.now()
 
+    ids = insertIntoDB('generated_files', 
+                 field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
+                 field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [config_app.ai_architecture], [file_name], 
+                               'created', [current_time], [current_time]])
+    
+    config_app.generated_files_id = ids[0]
     config_app.file_name = file_name
+
+    outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
+    manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
+
+    with open(outline_file_path, 'w') as fp:
+        json.dump({}, fp)
+
+    open(manuscript_file_path, 'w').close()
+
+    reload_flag_main_view.set(not reload_flag_main_view.get())
     ui.notification_show('File name saved.', type='message')
 
 @reactive.effect
 @reactive.event(input.btn_new_file)
 def showNewFile():
     config_app.file_name = ''
-    reset_flag.set(not reset_flag.get())
+    reload_flag_main_view.set(not reload_flag_main_view.get())
 
 @reactive.effect
 @reactive.event(current_file_name)
@@ -62,21 +98,32 @@ def updateFileName():
     ui.update_text(id='text_file_name', value=current_file_name.get())
 
 def logIn():
-    records = selectFromDB('settings', 
-                field_names=['email'],
-                field_values=[[config_app.email]])
+    if config_app.email != '':
+        records = selectFromDB('settings', 
+                    field_names=['email'],
+                    field_values=[[config_app.email]],
+                    order_by_field_names=['update_date'],
+                    order_by_types=['DESC'],
+                    limit=1)
+    else:
+        records = selectFromDB('settings', 
+                    field_names=['session'],
+                    field_values=[[config_app.session_id]],
+                    order_by_field_names=['update_date'],
+                    order_by_types=['DESC'],
+                    limit=1)
 
+    config_app.settings_id = int(records['id'].iloc[0])
     config_app.llm = records['llm'].iloc[0]
     config_app.temperature = float(records['temperature'].iloc[0])
     config_app.instructions = records['instructions'].iloc[0]
 
-    settings_flag.set(not settings_flag.get())
-    reset_flag.set(not reset_flag.get())
-
 def changeLoginStatus(status):
     login_status.set(status)
-    if login_status.get() == 'logged_in': logIn()
-
+    logIn()
+    reload_flag_settings_view.set(not reload_flag_settings_view.get())
+    reload_flag_main_view.set(not reload_flag_main_view.get())
+    
 def logOut():
 
     loop = asyncio.get_event_loop()
@@ -84,8 +131,8 @@ def logOut():
 
     config_app.setDefaults()
     config_app.session_id = session.id
-    settings_flag.set(not settings_flag.get())
-    reset_flag.set(not reset_flag.get())
+    reload_flag_settings_view.set(not reload_flag_settings_view.get())
+    reload_flag_main_view.set(not reload_flag_main_view.get())
 
     login_status.set('logged_out')
 
@@ -101,17 +148,11 @@ def _():
     logOut()
 
 @reactive.effect
-@reactive.event(settings_flag)
-def getDialogs():
-    global settings_content
-    settings_content = mod_settings(id='settings', callback_fn=changeSettings, config_app=config_app)
-
-@reactive.effect
 @reactive.event(input.btn_settings)
 def showSettings():
 
     m = ui.modal(
-        settings_content,
+        settings_view,
         title="",
         easy_close=False,
         footer=None,
@@ -120,24 +161,46 @@ def showSettings():
 
     ui.modal_show(m)
 
-def changeSettings():
+def saveSettingsToDB():
 
     current_time = datetime.now()
 
-    updateDB('settings', 
-                update_fields=['llm', 'temperature', 'instructions', 'update_date'], 
-                update_values=[config_app.llm, config_app.temperature, config_app.instructions, current_time],
-                select_fields=['email'],
-                select_values=[[config_app.email]])
+    # ----------------------------------------------------------------------------------------
+    # New settings record is created on two occassions,
+    # 1. If there is no saved settings for the current session or email i.e. config_app.settings_id is None
+    # 2. If there is a saved settings and it is not attached to any generated file. i.e. records_generated_files is empty
+    # Otherwise update the current settings.
+    # ----------------------------------------------------------------------------------------
+    records_generated_files = None
+    if config_app.settings_id is not None:
+        records_generated_files = selectFromDB(table_name='generated_files', field_names=['settings_id'], field_values=[[config_app.settings_id]])
+    if config_app.settings_id is None or (records_generated_files is not None and not records_generated_files.empty):
+        insertIntoDB(table_name='settings', 
+                    field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
+                    field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
+        
+        logIn()
+
+    else:
+        updateDB(table_name='settings',
+                update_fields=['session', 'llm', 'temperature', 'instructions', 'update_date'],
+                update_values=[config_app.session_id, config_app.llm, config_app.temperature, config_app.instructions, current_time],
+                select_fields=['id'],
+                select_values=[[config_app.settings_id]]
+        )
+
+def changeSettings():
+
+    saveSettingsToDB()
     
-    settings_flag.set(not settings_flag.get())
-    reset_flag.set(not reset_flag.get())
+    reload_flag_settings_view.set(not reload_flag_settings_view.get())
+    reload_flag_main_view.set(not reload_flag_main_view.get())
 
 
 with ui.div(class_="app-container"):
     with ui.div(class_='row title-bar'):
         with ui.div(class_='col'):
-            ui.h4('AI Word processor')
+            ui.h4(Config.APP_NAME)
         @render.express
         def showFileNameSaveOption():
             if login_status.get() in ['logged_in', 'guest']:

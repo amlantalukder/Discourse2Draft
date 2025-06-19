@@ -165,13 +165,35 @@ div.input {
   color: #6c6c6c;
 }
 
-.app-body div.content {
-  font-size: 12px;
-  overflow-y: auto;
-  background-color: #f0f0fa;
-  color: #646464;
+.app-body div.content-container {
   flex: 1 1 auto;
-  padding: 15px;
+  display: flex;
+  flex-direction: column;
+
+  div.content,
+  div.content-header {
+    font-size: 12px;
+    overflow-y: auto;
+    color: #646464;
+    padding: 15px;
+  }
+
+  div.content-header {
+    background-color: #e7e7f8;
+    display: flex;
+    justify-content: space-between;
+
+    .text-link {
+      font-family: inherit !important;
+      color: #3a3df4;
+      cursor: pointer;
+    }
+  }
+
+  div.content {
+    background-color: #f0f0fa;
+    flex: 1 1 auto;
+  }
 }
 
 div.content {
@@ -204,6 +226,18 @@ div.content {
     font-size: 1.05em !important;
     padding-top: 5px;
   }
+
+  p {
+    padding: 5px;
+  }
+
+  p.highlight-with-color {
+    background-color: #d3d3e9;
+  }
+
+  p.highlight-with-border {
+    border: 1px dotted #646464;
+  }
 }
 
 div.side-bar-docs-container {
@@ -211,7 +245,7 @@ div.side-bar-docs-container {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 5px;
+  padding: 10px;
   background-color: #f4f4f4;
 
   .icon {
@@ -227,19 +261,29 @@ div.side-bar-docs-container {
     padding: 0;
     min-height: 0;
   }
-}
 
-div.content {
-  p {
-    padding: 5px;
+  .cut-text {
+    width: fit-content;
+    @media only screen and (max-width: 600px) {
+      max-width: 400px;
+    }
+    @media only screen and (min-width: 600px) {
+      max-width: 120px;
+    }
   }
 
-  p.highlight-with-color {
-    background-color: #d3d3e9;
+  div.doc-container {
+    max-height: 50vh;
+    overflow-y: auto;
   }
 
-  p.highlight-with-border {
-    border: 1px dotted #646464;
+  span.date {
+    font-size: 0.8em;
+  }
+
+  div.uploaded-file-info-container {
+    display: flex;
+    gap: 10px;
   }
 }
 
@@ -254,14 +298,31 @@ div.app-table {
   flex-direction: column;
   padding: 10px;
 
-  div.app-th,
   div.app-tr {
     background-color: #eee;
   }
 
-  div.app-td {
+  div.app-td,
+  div.app-th {
     border-left: 1px solid #fff;
     border-bottom: 1px solid #fff;
     padding: 10px;
+    display: flex;
+    align-items: center;
   }
+}
+
+.cut-text {
+  font-family: inherit !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  line-clamp: 1;
+  box-orient: vertical;
+  overflow: hidden;
+}
+
+div.shiny-image-output {
+  width: 100% !important;
+  height: inherit !important;
 }

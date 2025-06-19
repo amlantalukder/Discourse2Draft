@@ -18,12 +18,16 @@ class Config:
     }
     env_config = dotenv.dotenv_values(Path(".env"))
 
-    import os
-    if 'OPENAI_API_KEY' in os.environ: os.environ.pop('OPENAI_API_KEY')
-    if 'OPENAI_BASE_URL' in os.environ: os.environ.pop('OPENAI_BASE_URL')
-
+    # Generation
     NUM_TOKENS_SUMMARY = 500
     RETRY_COUNTER = 2
+
+    # RAG
+    TOKENS_PER_LLM_CALL = 5000
+    MAX_KEYWORDS = 10
+    SIMILARITY_METRIC = 'similarity_score_threshold'
+    NUM_DOCS_MAX = 5
+    SIMILARITY_THRESHOLD = 0.3
 
 # ---------------------------------------------------------------------------
 class State(TypedDict):

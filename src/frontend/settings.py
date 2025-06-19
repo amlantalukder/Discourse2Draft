@@ -1,10 +1,10 @@
 from shiny import reactive
-from shiny.express import ui, module
+from shiny.express import ui, module, render
 from ..backend.llms import extractAvailableLLMs
 from ..backend.architecture import Architecture
 
 @module
-def mod_settings(input, output, session, callback_fn, config_app):
+def mod_settings(input, output, session, callback_fn, config_app, reload_flag):
 
     with ui.hold() as content:
         with ui.div(class_='settings'):
@@ -15,14 +15,18 @@ def mod_settings(input, output, session, callback_fn, config_app):
                     ui.input_action_button('btn_save_settings', 'Save')
                     ui.input_action_button('btn_close_settings', 'Close')
             ui.tags.hr()
-            with ui.div(class_='row justify-content-between'):
-                ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=config_app.llm)
-                ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=config_app.temperature)
-            ui.input_text_area('text_instructions', 'Instructions', value=config_app.instructions)
+            @render.express
+            def loadInputs():
+                if reload_flag() in [True, False]:
+                    with ui.div(class_='row justify-content-between'):
+                        ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=config_app.llm)
+                        ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=config_app.temperature)
+                    ui.input_text_area('text_instructions', 'Instructions', value=config_app.instructions)
 
     @reactive.effect
     @reactive.event(input.btn_save_settings)
     def saveSettings():
+
         config_app.llm = input.select_llm()
         config_app.temperature = input.slide_temp()
         config_app.instructions = input.text_instructions()
@@ -35,7 +39,6 @@ def mod_settings(input, output, session, callback_fn, config_app):
     @reactive.effect
     @reactive.event(input.btn_close_settings)
     def close():
-        print('closing')
         ui.modal_remove()
 
     return content

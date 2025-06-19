@@ -1,59 +1,77 @@
 from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module, expressify
-from shiny.types import FileInfo
+from shiny.types import FileInfo, ImgData
 import faicons
 from utils import Config, read_in_chunks
-from .db import updateDB, selectFromDB, insertIntoDB
+from .db import updateDB, selectFromDB, insertIntoDB, \
+            generated_files_ai_architecture, \
+            generated_files_status, \
+            uploaded_files_status, \
+            vector_db_collections_status
+from src.backend.vectordb import getLoader, ChromaDB, deleteCollection
 import asyncio
 import json
 import textwrap
 from datetime import datetime
+from pathlib import Path
+
+def getFileType(file_name):
+
+    if Path(file_name).suffix not in ['.docx', '.pdf']:
+        return 'txt'
+    return Path(file_name).suffix[1:]
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag):
+def getFileTypeIcon(input, output, session, file_type):
+    
+    @render.image()
+    def icon():
+        img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'{file_type}_icon.png'), 
+                        "width": "30px"}
+        return img
+
+@module
+def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag):
     
     file_change_flag = reactive.value(True)
-    sidebar_reset_flag = reactive.value(True)
     show_outline = reactive.value(True)
+    reload_flag_sidebar = reactive.value(True)
+    selected_docs_changed_flag = reactive.value(True)
+    reload_rag_and_ref_flag = reactive.value(True)
+    select_all_docs = reactive.value(False)
 
     stream = ui.MarkdownStream("stream")
 
     @module
-    def getSavedDocItem(input, output, session, info, show_expanded_view):
-
-        d_status = {'created': 'Document created',
-                    'running': 'Writing on process',
-                    'success': 'Writing finished', 
-                    'error': 'Writing stopped due to error', 
-                    'cancelled': 'Writing was stopped by user',
-                    'deleted': 'Document was deleted'}
+    def getSavedDocItemView(input, output, session, info, show_expanded_view):
 
         @reactive.effect
         @reactive.event(input.btn_show, ignore_init=True)
         def showFile():
-            setCurrentFile(info['session'], info['file_name'])
+            setCurrentFile(info['id'], info['file_name'], info['vector_db_collections_id'])
 
         @reactive.effect
         @reactive.event(input.btn_delete, ignore_init=True)
         def deleteFile():
             updateDB('generated_files', 
-                    update_fields=['file_status', 'update_date'], 
-                    update_values=['deleted', datetime.now()], 
-                    select_fields=['email', 'session', 'file_name'], 
-                    select_values=[[info['email']], [info['session']], [info['file_name']]])
-            sidebar_reset_flag.set(not sidebar_reset_flag.get())
+                    update_fields=['status', 'update_date'], 
+                    update_values=[generated_files_status.DELETED.value, datetime.now()], 
+                    select_fields=['id'], 
+                    select_values=[[info['id']]])
+            reload_flag_sidebar.set(not reload_flag_sidebar.get())
         
         with ui.hold() as content:
             if not show_expanded_view:
-                with ui.div(class_='row gap-3'):
+                with ui.div(class_='d-flex gap-3'):
                     with ui.div(class_='col d-flex flex-column justify-content-center'):
-                        ui.input_action_link('btn_show', info["file_name"])
-                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
+                        with ui.tooltip():
+                            ui.input_action_link('btn_show', info['file_name'], class_='cut-text')
+                            info['file_name']                       
+                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
                     with ui.div(class_='col-auto d-flex align-items-center'):
                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                         async def downloadDoc():
-                            file_name_part = info['file_name'].lower().replace(' ', '_')
-                            doc_path = Config.DIR_DATA / f'manuscript_{info['session']}_{file_name_part}.md'
+                            doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
 
                             if not doc_path.exists(): return
                             with open(doc_path) as f:
@@ -66,36 +84,56 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                     with ui.div(class_='app-td col'):
                         ui.input_action_link('btn_show', info["file_name"])
                     with ui.div(class_='app-td col-2'):
-                        ui.span(info['file_status'])
+                        ui.span(config_app.generated_files_status_desc[info['status']])
                     with ui.div(class_='app-td col-2'):
                         ui.span(info['create_date'].strftime('%Y-%m-%d %H:%M:%S'))
                     with ui.div(class_='app-td col-2'):
                         ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                    with ui.div(class_='app-td col-1 d-flex justify-content-center'):
-                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                        async def downloadDoc():
-                            file_name_part = info['file_name'].lower().replace(' ', '_')
-                            doc_path = Config.DIR_DATA / f'manuscript_{info['session']}_{file_name_part}.md'
+                    with ui.div(class_='app-td col-1 justify-content-center'):
+                        with ui.div():
+                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                            async def downloadDoc():
+                                doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
 
-                            if not doc_path.exists(): return
-                            with open(doc_path) as f:
-                                for l in f.readlines():
-                                    yield l
-                    with ui.div(class_='app-td col-1 d-flex justify-content-center'):
-                        ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
+                                if not doc_path.exists(): return
+                                with open(doc_path) as f:
+                                    for l in f.readlines():
+                                        yield l
+                    with ui.div(class_='app-td col-1 justify-content-center'):
+                        with ui.div():
+                            ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
 
         return content
     
     @module
-    def getUploadedDocItem(input, output, session, doc):
+    def getUploadedDocItemView(input, output, session, doc, is_selected):
+
+        @reactive.effect
+        @reactive.event(input.chk_file, ignore_init=True)
+        def addOrRemoveDoc():
+            print('add or remove doc')
+            print((doc['id'], doc['file_name']), input.chk_file())
+            changeSelectedDocs(doc['id'], doc['file_name'], input.chk_file())
+
+        @reactive.effect
+        @reactive.event(select_all_docs, ignore_init=True)
+        def addOrRemoveDocSelectAll():
+            print('add or remove doc all')
+            ui.update_checkbox(id='chk_file', value=select_all_docs.get())
         
         with ui.hold() as content:
-            with ui.div(class_='row gap-3'):
+            with ui.div(class_='d-flex gap-3'):
                 with ui.div(class_='col-auto d-flex align-items-center'):
-                    ui.input_checkbox(id=f'chk_file', label='', value=False)
-                with ui.div(class_='col d-flex flex-column justify-content-center'):
-                    ui.span(doc.name)
-                    ui.span(datetime.fromtimestamp(doc.stat().st_ctime).strftime('%Y-%m-%d %H:%M:%S'))
+                    ui.input_checkbox(id='chk_file', label='', value=is_selected)
+                with ui.div(class_='col'):
+                    with ui.div(class_='uploaded-file-info-container'):
+                        with ui.div(class_='col-2 d-flex align-items-center'):
+                            getFileTypeIcon('icon', file_type=getFileType(doc['file_name']))
+                        with ui.div(class_='col d-flex flex-column'):
+                            with ui.tooltip():
+                                ui.span(doc['file_name'], class_='cut-text')
+                                doc['file_name']
+                            ui.span(doc['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
 
@@ -112,41 +150,61 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                             with ui.accordion_panel('Generated Documents'):
                                 
                                 with ui.div(class_='side-bar-docs-container'):
-                                    with ui.div(class_='d-flex justify-content-end'):
-                                        with ui.div(class_='d-flex', style='width:20px'):
-                                            ui.input_action_link(id='btn_show_saved_docs_details', 
-                                                                label='',
-                                                                icon=faicons.icon_svg('maximize'))
                                     @render.express
                                     def showSavedDocuments():
                                         records = loadDocuments()
-                                        if records.empty: return ui.span('No documents')
-                                        for i, row in records.iterrows():
-                                            getSavedDocItem(f'doc_list_item_{i}', 
-                                                            info=row,
-                                                            show_expanded_view=False)
+                                    
+                                        if records.empty: 
+                                            ui.span('No documents')
+                                            return
+                                        
+                                        with ui.div(class_='d-flex justify-content-end'):
+                                            with ui.div(class_='d-flex', style='width:20px'):
+                                                ui.input_action_link(id='btn_show_saved_docs_details', 
+                                                                    label='',
+                                                                    icon=faicons.icon_svg('maximize'))
+                                        with ui.div(class_='doc-container'):
+                                            with ui.div(class_='d-flex flex-column gap-3'):
+                                                for i, row in records.iterrows():
+                                                    getSavedDocItemView(f'doc_list_item_{i}', 
+                                                                    info=row,
+                                                                    show_expanded_view=False)
                                         
                             with ui.accordion_panel('Uploaded Documents'):
                                 ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
-                                with ui.div(class_='side-bar-docs-container'):  
+
+                                with ui.div(class_='side-bar-docs-container'):
+                                    
                                     @render.express
-                                    def showUploadedDocuments():
-                                        uploadDocs()
-                                        docs = []
-                                        for type in ['.csv', '.txt', 'docx', '.pdf']:
-                                            docs.extend((Config.DIR_DATA / 'uploaded_docs').glob(f'*{type}'))
-
-                                        if not docs: return
-
-                                        with ui.div(class_='row gap-3'):
+                                    def _():
+                                        with ui.div(class_='d-flex gap-3'):
                                             with ui.div(class_='col-auto d-flex align-items-center'):
                                                 ui.input_checkbox(id='chk_all_uploaded_files', label='', value=False)
                                             with ui.div(class_='col d-flex align-items-center'):
                                                 ui.strong('Select all documents')
+                                    
+                                    @render.express
+                                    def showUploadedDocuments():
 
-                                        for i, doc in enumerate(docs):
-                                            getUploadedDocItem(id=str(i), 
-                                                            doc=doc)
+                                        print('show uploaded docs')
+                                        
+                                        docs = getUploadedDocs()
+                                        if docs.empty: return
+
+                                        docs['is_selected'] = [(row['id'], row['file_name']) in config_app.selected_docs for _, row in docs.iterrows()]
+
+                                        with ui.div(class_='doc-container'):
+                                            with ui.div(class_='d-flex flex-column gap-3'):
+                                                for i, row in docs.iterrows():
+                                                    getUploadedDocItemView(id=str(i), doc=row, is_selected=row['is_selected'])
+
+                                @render.express
+                                def showAttachButton():
+                                    print('show uploaded docs attach')
+                                    if getSelectedDocs():
+                                        with ui.div(class_='text-center mt-2'):
+                                            ui.input_action_button(id='btn_attach_docs', label='Attach docs')
+
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
                         @render.express
@@ -159,9 +217,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                     with ui.div(class_='d-flex flex-column col-4 text-center'):
                                         @render.ui
                                         def showLLMandTemp():
-                                            llm, temp = getLLMandTemp()
-                                            return [ui.span(f'LLM: {llm}, Temperature: {temp}'),
-                                                    ui.span('(Can be changed in the settings panel in the top-right corner)')]
+                                            if reload_flag() in [True, False]:
+                                                return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
+                                                        ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                     with ui.div(class_='col-4 text-end'):
                                         ui.p("(Drag the text area from the bottom right corner to show more text)")
                                 ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
@@ -186,8 +244,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                                         async def downloadDoc():
 
-                                            file_name_part = config_app.file_name.lower().replace(' ', '_')
-                                            doc_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
+                                            doc_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
 
                                             if not doc_path.exists(): return
                                             with open(doc_path) as f:
@@ -195,10 +252,44 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
                                                     yield l
                                         "Download"
                                 
-                    with ui.div(class_='row content', id='content-container'):
-                        stream.ui(content=core_ui.p('Content starts here ...'), width='100%')
+                    with ui.div(class_='content-container'):
+                        with ui.div(class_='content-header'):
+                            ui.span('Content starts below ...')
+
+                            @render.express
+                            def showRAGAndRefInfo():
+                                file_names = getVectorDBFiles()
+                                
+                                if not file_names: return
+                
+                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                    ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
+                                    with ui.div(class_='d-flex flex-column gap-2'):
+                                        with ui.div():
+                                            for i, file_name in enumerate(file_names):
+                                                with ui.div(class_='row'):
+                                                    with ui.div(class_='col-2 d-flex align-items-center'):
+                                                        getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
+                                                    with ui.div(class_='col'):
+                                                        with ui.tooltip():
+                                                            ui.span(file_name, class_='cut-text')
+                                                            file_name
+                                        with ui.div(class_='text-end'):
+                                            with ui.popover():
+                                                with ui.div():
+                                                    ui.input_action_button(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
+                                                "Remove documents"
+                                        
+                        
+                        with ui.div(class_='content', id='content'):
+                            stream.ui(width='100%')
 
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
+
+    @reactive.calc
+    @reactive.event(selected_docs_changed_flag)
+    def getSelectedDocs():
+        return config_app.selected_docs        
 
     @reactive.effect
     @reactive.event(input.btn_show_saved_docs_details)
@@ -211,22 +302,22 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             with ui.div(class_='app-table-container'):
                 with ui.div(class_='app-table'):
                     with ui.div(class_='app-thead'):
-                        with ui.div(class_='app-th row'):
-                            with ui.div(class_='app-td col'):
+                        with ui.div(class_='app-tr row'):
+                            with ui.div(class_='app-th col'):
                                 ui.strong('Document')
-                            with ui.div(class_='app-td col-2'):
+                            with ui.div(class_='app-th col-2'):
                                 ui.strong('Status')
-                            with ui.div(class_='app-td col-2'):
+                            with ui.div(class_='app-th col-2'):
                                 ui.strong('Create date')
-                            with ui.div(class_='app-td col-2'):
+                            with ui.div(class_='app-th col-2'):
                                 ui.strong('Update date')
-                            with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                            with ui.div(class_='app-th col-1 justify-content-center'):
                                 ""
-                            with ui.div(class_='app-td col-1 d-flex justify-content-center'):
+                            with ui.div(class_='app-th col-1 justify-content-center'):
                                 ""
                     with ui.div(class_='app-tbody'):
                         for i, row in records.iterrows():
-                            getSavedDocItem(f'doc_list_item_exp_view_{i}', info=row, show_expanded_view=True)
+                            getSavedDocItemView(f'doc_list_item_exp_view_{i}', info=row, show_expanded_view=True)
 
         with ui.hold() as content:
             showSavedDocuments()
@@ -242,17 +333,181 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         ui.modal_show(m)
 
     @reactive.calc
-    def uploadDocs():
+    def getUploadedDocs():
         files: list[FileInfo] | None = input.btn_upload_docs()
-        if files is None: return
-        for file in files:
-            with open(Config.DIR_DATA / 'uploaded_docs' / file['name'], 'w') as fp:
-                fp.write('')
-            with open(Config.DIR_DATA / 'uploaded_docs' / file['name'], 'a') as fp:
-                with open(file['datapath'], encoding = "ISO-8859-1") as fp_r:
-                    for piece in read_in_chunks(fp_r):
-                        fp.write(piece)
+        if files is not None:
 
+            for file in files:
+
+                current_time = datetime.now()
+
+                if config_app.email != '':
+                    records = selectFromDB(table_name='uploaded_files', 
+                                    field_names=['email', 'file_name', 'status'],
+                                    field_values=[[config_app.email], [file['name']], [uploaded_files_status.UPLOADED.value]])
+                else:
+                    records = selectFromDB(table_name='uploaded_files', 
+                                    field_names=['session', 'file_name', 'status'],
+                                    field_values=[[config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value]])
+                
+                if records.empty:
+
+                    ids = insertIntoDB(table_name='uploaded_files', 
+                                field_names=['email', 'session', 'file_name', 'status', 'update_date'], 
+                                field_values=[[config_app.email], [config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time]])
+                    uploaded_file_id = ids[0]
+                    
+                else:
+                    updateDB(table_name='uploaded_files', 
+                            update_fields=['status', 'update_date'], 
+                            update_values=[uploaded_files_status.UPLOADED.value, current_time], 
+                            select_fields=['id'], 
+                            select_values=[list(map(int, records.id.values))])
+                    uploaded_file_id = records.iloc[0].id
+                    
+                with open(Config.DIR_DATA / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
+                    with open(file['datapath'], 'rb') as fp_r:
+                        fp.write(fp_r.read())
+
+        if config_app.email != '':
+            docs = selectFromDB(table_name='uploaded_files', 
+                            field_names=['email', 'status'],
+                            field_values=[[config_app.email], [uploaded_files_status.UPLOADED.value]],
+                            order_by_field_names=['file_name'])
+        else:
+            docs = selectFromDB(table_name='uploaded_files', 
+                            field_names=['session', 'status'],
+                            field_values=[[config_app.session_id], [uploaded_files_status.UPLOADED.value]],
+                            order_by_field_names=['file_name'])
+
+        return docs
+    
+    @reactive.effect
+    @reactive.event(input.chk_all_uploaded_files, ignore_init=True)
+    def selectAllUploadedDocs():
+        print('all uploaded files')
+
+        select_all_docs.set(input.chk_all_uploaded_files())
+
+    def changeSelectedDocs(file_id, file_name, is_selected):
+        if is_selected:
+            config_app.selected_docs |= {(file_id, file_name)}
+        else:
+            config_app.selected_docs -= {(file_id, file_name)}
+
+        selected_docs_changed_flag.set(not selected_docs_changed_flag.get())
+
+    def createVectorDBCollection(collection_name: str, file_paths: list[Path], progress=None):
+    
+        docs = []
+
+        progress_counter = 1
+
+        for file_path in file_paths:
+            
+            if progress is not None:
+                progress.set(progress_counter, f'Extracting file {progress_counter}')
+                progress_counter += 1
+            
+            loader = getLoader(file_path=file_path)
+            
+            for doc in loader:
+                doc.metadata = {k: str(v) for k, v in doc.metadata.items()}
+                docs.append(doc)
+
+        if progress is not None:
+            progress.set(progress_counter, 'Creating vector db')
+
+        db = ChromaDB(collection_name=collection_name, delete_if_exists=True)
+        db.add(docs=docs)
+
+    @reactive.effect
+    @reactive.event(input.btn_attach_docs)
+    def attachDocs():
+        
+        if not config_app.selected_docs:
+            ui.notification_show("Please select a document to attach.", type="error")
+            return
+        
+        if not config_app.generated_files_id:
+            ui.notification_show("Please create a new file or select an existing file.", type="error")
+            return
+
+        current_time = datetime.now()
+
+        ids = insertIntoDB(table_name='vector_db_collections', 
+                    field_names=['email', 'session', 'create_date', 'update_date'],
+                    field_values=[[config_app.email], [config_app.session_id], [current_time], [current_time]]) 
+
+        insertIntoDB(table_name='vector_db_collection_files', 
+                    field_names=['vector_db_collections_id', 'uploaded_files_id', 'create_date', 'update_date'],
+                    field_values=[ids * len(config_app.selected_docs), 
+                                sorted([file_id for file_id, _ in config_app.selected_docs]), 
+                                [current_time] * len(config_app.selected_docs), 
+                                [current_time] * len(config_app.selected_docs)])
+        
+        file_paths = [Config.DIR_DATA / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}' for file_id, file_name in config_app.selected_docs]
+        with ui.Progress(min=1, max=len(file_paths)+1) as p:
+
+            p.set(message="Processing", detail="This may take a while...")
+        
+            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{ids[0]}'
+            createVectorDBCollection(collection_name=vector_db_collection_name, file_paths=file_paths, progress=p)
+        
+        ai_architecture = generated_files_ai_architecture.RAG.value
+
+        updateDB(table_name='generated_files', 
+                update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
+                update_values=[ai_architecture, ids[0], current_time], 
+                select_fields=['id'], 
+                select_values=[[config_app.generated_files_id]])
+
+        config_app.ai_architecture = ai_architecture
+        config_app.vector_db_collections_id = ids[0]
+
+        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+
+    @reactive.calc
+    @reactive.event(reload_rag_and_ref_flag)
+    def getVectorDBFiles():
+        
+        if not config_app.vector_db_collections_id: return []
+        vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
+                                                  field_names=['vector_db_collections_id'], 
+                                                  field_values=[[config_app.vector_db_collections_id]])
+        
+        uploaded_files_records = selectFromDB(table_name='uploaded_files',
+                                              field_names=['id'],
+                                              field_values=[list(map(int, vector_db_collection_files_records['uploaded_files_id'].values))])
+        
+        return list(uploaded_files_records['file_name'].values)
+    
+    @reactive.effect
+    @reactive.event(input.btn_delete_rag)
+    def detachDocs():
+
+        current_time = datetime.now()
+
+        updateDB(table_name='generated_files', 
+                update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
+                update_values=[generated_files_ai_architecture.PRETRAINING.value, None, current_time], 
+                select_fields=['id'], 
+                select_values=[[config_app.generated_files_id]])
+        
+        updateDB(table_name='vector_db_collections', 
+                 update_fields=['status', 'update_date'],
+                 update_values=[vector_db_collections_status.DELETED.value, current_time],
+                 select_fields=['id'], 
+                 select_values=[[config_app.vector_db_collections_id]]) 
+
+        vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{config_app.vector_db_collections_id}'
+        deleteCollection(vector_db_collection_name)
+
+        config_app.vector_db_collections_id = None
+
+        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+
+        
     @reactive.effect
     @reactive.event(input.btn_show_hide_outline)
     def showOrHideOutline():
@@ -260,8 +515,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
         if not config_app.file_name: return
         
-        file_name_part = config_app.file_name.lower().replace(' ', '_')
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
 
         # Read outline
         with open(outline_file_path) as fp:
@@ -309,14 +563,13 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
     @reactive.effect
     @reactive.event(input.btn_regenerate_text)
-    def output_text():
+    def regenerateParagraph():
 
         hierarchy = input.selected_para_hierarchy()
         if not hierarchy: return
         
-        file_name_part = config_app.file_name.lower().replace(' ', '_')
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
-        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
         
         # Read outline
         with open(outline_file_path) as fp:
@@ -329,9 +582,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         loop.create_task(stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=1), clear=True))
 
     @reactive.effect
-    @reactive.event(reset_flag)
+    @reactive.event(reload_flag)
     def initView():
-        
         # Reset file name, outline and content
         ui.update_checkbox(id='chk_example', value=False)
         updateFileNameFlag(config_app.file_name)
@@ -343,23 +595,22 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         loop.create_task(stream._send_content_message(content, "replace", []))
 
     @reactive.calc()
-    def getLLMandTemp():
-        return config_app.llm, config_app.temperature
-
-    @reactive.calc()
-    @reactive.event(reset_flag)
-    def isLoggedIn():
-        return config_app.email != ''
-
-    @reactive.calc()
-    @reactive.event(reset_flag, sidebar_reset_flag)
+    @reactive.event(reload_flag, reload_flag_sidebar)
     def loadDocuments():
 
-        valid_file_statuses = ["created", "running", "success", "error", "cancelled"]
+        print('loading sidebar')
+
+        valid_file_statuses = {e.value for e in generated_files_status} - {generated_files_status.DELETED.value}
         if config_app.email != '':
-            records = selectFromDB(table_name='generated_files', field_names=['email', 'file_status'], field_values=[[config_app.email], valid_file_statuses])
+            records = selectFromDB(table_name='generated_files', 
+                                   field_names=['email', 'status'], 
+                                   field_values=[[config_app.email], valid_file_statuses],
+                                   order_by_field_names=['file_name'])
         else:
-            records = selectFromDB(table_name='generated_files', field_names=['session', 'file_status'], field_values=[[config_app.session_id], valid_file_statuses])
+            records = selectFromDB(table_name='generated_files', 
+                                   field_names=['session', 'status'], 
+                                   field_values=[[config_app.session_id], valid_file_statuses],
+                                   order_by_field_names=['file_name'])
         return records
 
     @reactive.effect
@@ -404,26 +655,20 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         return raw_outline
         
 
-    def setCurrentFile(session_id, file_name):
+    def setCurrentFile(id, file_name, vector_db_collections_id=None):
 
-        config_app.session_id = session_id
+        config_app.generated_files_id = id
         config_app.file_name = file_name
+        config_app.vector_db_collections_id = vector_db_collections_id
         file_change_flag.set(not file_change_flag.get())
+        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
         
     @reactive.effect
     @reactive.event(file_change_flag, ignore_init=True)
     def showFile():
-
-        records = selectFromDB('generated_files', 
-                            field_names=['session', 'file_name'], 
-                            field_values=[[config_app.session_id], [config_app.file_name]])
-
-        if records.empty:
-            return
         
-        file_name_part = config_app.file_name.lower().replace(' ', '_')
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.session_id}_{file_name_part}.json'
-        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.session_id}_{file_name_part}.md'
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
 
         # Read outline
         with open(outline_file_path) as fp:
@@ -431,8 +676,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
         raw_outline = '\n'.join(createRawOutline(d_outline))
         
-        # Change config
-        config_app.is_writing = False
+        # Cancel writing
+        stream.latest_stream.cancel()
 
         # Show file name, outline and content
         updateFileNameFlag(config_app.file_name)
@@ -501,8 +746,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             return d_outline
 
         records = selectFromDB('generated_files', 
-                            field_names=['session', 'file_name'], 
-                            field_values=[[config_app.session_id], [config_app.file_name]])
+                            field_names=['id', 'file_name'], 
+                            field_values=[[config_app.generated_files_id], [config_app.file_name]])
         
         if not (records.empty or regenerate): return True
 
@@ -527,31 +772,19 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
         # <content>
         # continue writing...
         # '''
-        
+    
         d_outline = processOutline(outline)
 
-        file_name_part = config_app.file_name.lower().replace(' ', '_')
-
-        with open(f'data/outline_{config_app.session_id}_{file_name_part}.json', 'w') as fp:
+        with open(f'data/outline_{config_app.generated_files_id}.json', 'w') as fp:
             json.dump(d_outline, fp)
-
-        with open(f'data/instructions_{config_app.session_id}_{file_name_part}.txt', 'w') as fp:
-            fp.write(config_app.instructions)
 
         current_time = datetime.now()
         
-        # File does not exist, first time generation
-        if records.empty:
-            insertIntoDB('generated_files', 
-                        field_names=['email', 'session', 'file_name', 'file_status', 'create_date', 'update_date', 'llm', 'temperature'], 
-                        field_values=[[config_app.email], [config_app.session_id], [config_app.file_name], 'created', [current_time], [current_time], [config_app.llm], [config_app.temperature]])
-        # File exists but regenerating
-        else:
-            updateDB('generated_files', 
-                        update_fields=['file_status', 'create_date', 'update_date'], 
-                        update_values=['created', current_time, current_time], 
-                        select_fields=['email', 'session', 'file_name'], 
-                        select_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
+        updateDB('generated_files', 
+                    update_fields=['status', 'create_date', 'update_date'], 
+                    update_values=[generated_files_status.CREATED.value, current_time, current_time], 
+                    select_fields=['id'], 
+                    select_values=[[config_app.generated_files_id]])
 
         return True
 
@@ -648,10 +881,10 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
             if not (write_n_contents != 0 and is_gen_needed): break
         
-            response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
+            #response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
-            response = response['response']
-            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
+            #response = response['response']
+            response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
 
             insertContent(d_outline, current_section_list, response)
             
@@ -673,10 +906,10 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             current_time = datetime.now()
 
             updateDB('generated_files', 
-                        update_fields=['file_status', 'update_date'], 
-                        update_values=['running', current_time], 
-                        select_fields=['email', 'session', 'file_name'], 
-                        select_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
+                        update_fields=['status', 'update_date'], 
+                        update_values=[generated_files_status.RUNNING.value, current_time], 
+                        select_fields=['id'], 
+                        select_values=[[config_app.generated_files_id]])
             
             if write_n_contents > 0: write_n_contents -= 1
 
@@ -690,9 +923,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
             ui.notification_show("Please provide an outline.", type="error")
             return
 
-        file_name_part = config_app.file_name.lower().replace(' ', '_')
-        outline_file_path = f'data/outline_{config_app.session_id}_{file_name_part}.json'
-        manuscript_file_path = f'data/manuscript_{config_app.session_id}_{file_name_part}.md'
+        outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
+        manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
 
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
@@ -701,50 +933,50 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reset_flag)
 
         config_app.is_writing = True
 
-        sidebar_reset_flag.set(not sidebar_reset_flag.get())
-
     @reactive.effect
     @reactive.event(input.btn_resume_pause)
     async def resumeOrPause():
 
-        if config_app.is_writing:
+        if config_app.is_writing: 
             stream.latest_stream.cancel()
-            config_app.is_writing = False
-            ui.notification_show("Writing stopped", type="warning")
             return
         
         await generate(regenerate=False)
 
     @reactive.effect
     @reactive.event(input.btn_regenerate)
-    async def start():
-
+    async def startFromBeginning():
         await generate(regenerate=True)
 
     @reactive.effect
     def _():
+
         stream_status = stream.latest_stream.status()
 
-        ui.update_action_button(
-            "btn_resume_pause", icon=faicons.icon_svg("play" if not config_app.is_writing else "pause")
-        )
-
         if stream_status in ["success", "error", "cancelled"]:
-            current_time = datetime.now()
 
-            updateDB('generated_files', 
-                        update_fields=['file_status', 'update_date'], 
-                        update_values=[stream_status, current_time], 
-                        select_fields=['email', 'session', 'file_name'], 
-                        select_values=[[config_app.email], [config_app.session_id], [config_app.file_name]])
-            
-            if config_app.is_writing and stream_status == "success":
-                ui.notification_show("Writing finished", type="message")
-                config_app.is_writing = False
+            if config_app.is_writing:
 
-            ui.update_action_button(
-                "btn_resume_pause", icon=faicons.icon_svg("play")
-            )
+                current_time = datetime.now()
+                updateDB('generated_files', 
+                            update_fields=['status', 'update_date'], 
+                            update_values=[stream_status, current_time], 
+                            select_fields=['id'], 
+                            select_values=[[config_app.generated_files_id]])
+                
+                reload_flag_sidebar.set(not reload_flag_sidebar.get())
+                
+                if stream_status == "success":
+                    ui.notification_show("Writing finished", type="message")
+                else:
+                    ui.notification_show("Writing stopped", type="warning")
+
+            config_app.is_writing = False
+
+            ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
+        else:
+            ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))
+
 
     @reactive.effect
     @reactive.event(input.btn_speed)

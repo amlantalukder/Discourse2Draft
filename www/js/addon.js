@@ -28,7 +28,7 @@ function getDOMHierarchy(element) {
     return hierarchy;
 }
 
-targetDiv = document.getElementById('content-container');
+targetDiv = document.getElementById('content');
 
 // let data = '';
 // logSelection = () => {
