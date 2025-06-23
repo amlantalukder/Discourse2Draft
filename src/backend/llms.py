@@ -1,6 +1,8 @@
 from langchain_openai import ChatOpenAI
 import requests
 from .utils import Config
+import truststore
+truststore.inject_into_ssl()
 
 # ---------------------------------------------------------------------------
 def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
@@ -34,11 +36,11 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
 
     except Exception as error:
         print('litellm proxy access error:', error)
-
+    
     llms_filtered = {}
     if Config.llms_selected:
         for category, d in Config.llms_selected.items():
-            category_filtered = {k:v for k, v in d.items() if k in available_llms or True}
+            category_filtered = {k:v for k, v in d.items() if k in available_llms}
             if category_filtered:
                 llms_filtered[category] = category_filtered
     available_llms = llms_filtered if llms_filtered else available_llms

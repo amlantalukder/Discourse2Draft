@@ -21,10 +21,6 @@ def encryptPassword(password):
     return hash_object.hexdigest()
 
 # -----------------------------------------------------------------------
-class Config:
-    env_config = dotenv.dotenv_values(Path(".env"))
-
-# -----------------------------------------------------------------------
 class generated_files_status(Enum):
 
     CREATED = 'created' 
@@ -54,6 +50,19 @@ class vector_db_collections_status(Enum):
 
     ACTIVE = 'active'
     DELETED = 'deleted'
+
+# -----------------------------------------------------------------------
+class Config:
+    env_config = dotenv.dotenv_values(Path(".env"))
+
+    generated_files_status_desc = {
+        generated_files_status.CREATED.value: 'Created',
+        generated_files_status.RUNNING.value: 'Writing in progress',
+        generated_files_status.SUCCESS.value: 'Writing finished', 
+        generated_files_status.ERROR.value: 'Writing stopped on error', 
+        generated_files_status.CANCELLED.value: 'Writing stopped by user',
+        generated_files_status.DELETED.value: 'Deleted'
+    }
 
 # -----------------------------------------------------------------------
 engine = sa.create_engine(f'postgresql://{Config.env_config["USER"]}:{Config.env_config["PASSWORD"]}@{Config.env_config["HOST"]}/{Config.env_config["DATABASE"]}')
@@ -210,7 +219,10 @@ def selectFromDB(table_name: str,
         if limit is not None:
             cursor = cursor.limit(limit)
 
-        return pd.DataFrame([c.__dict__ for c in cursor.all()])
+        df = pd.DataFrame([c.__dict__ for c in cursor.all()])
+        df = df.replace({float('nan'): None})
+
+        return df
     
 # -----------------------------------------------------------------------
 def insertIntoDB(table_name: str, field_names: list, field_values: list[list], 

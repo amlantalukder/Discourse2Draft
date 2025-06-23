@@ -571,6 +571,8 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
+truststore==0.10.1
+    # via word-processor-ai (pyproject.toml)
 typer==0.16.0
     # via chromadb
 typing-extensions==4.13.2

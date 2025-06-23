@@ -1,143 +1,25 @@
-from shiny import reactive, ui as core_ui
-from shiny.express import ui, render, module, expressify
-from shiny.types import FileInfo, ImgData
+from shiny import reactive
+from shiny.express import ui, render, module
 import faicons
-from utils import Config, read_in_chunks
-from .db import updateDB, selectFromDB, insertIntoDB, \
-            generated_files_ai_architecture, \
-            generated_files_status, \
-            uploaded_files_status, \
-            vector_db_collections_status
-from src.backend.vectordb import getLoader, ChromaDB, deleteCollection
+from utils import Config
+from .db import updateDB, selectFromDB, \
+                generated_files_status
+from .sidebar_modules.sidebar import mod_sidebar
+from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs
 import asyncio
 import json
 import textwrap
 from datetime import datetime
-from pathlib import Path
-
-def getFileType(file_name):
-
-    if Path(file_name).suffix not in ['.docx', '.pdf']:
-        return 'txt'
-    return Path(file_name).suffix[1:]
-
-@module
-def getFileTypeIcon(input, output, session, file_type):
-    
-    @render.image()
-    def icon():
-        img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'{file_type}_icon.png'), 
-                        "width": "30px"}
-        return img
 
 @module
 def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
-    reload_flag_sidebar = reactive.value(True)
-    selected_docs_changed_flag = reactive.value(True)
     reload_rag_and_ref_flag = reactive.value(True)
-    select_all_docs = reactive.value(False)
+    reload_flag_sidebar = reactive.value(True)
 
     stream = ui.MarkdownStream("stream")
-
-    @module
-    def getSavedDocItemView(input, output, session, info, show_expanded_view):
-
-        @reactive.effect
-        @reactive.event(input.btn_show, ignore_init=True)
-        def showFile():
-            setCurrentFile(info['id'], info['file_name'], info['vector_db_collections_id'])
-
-        @reactive.effect
-        @reactive.event(input.btn_delete, ignore_init=True)
-        def deleteFile():
-            updateDB('generated_files', 
-                    update_fields=['status', 'update_date'], 
-                    update_values=[generated_files_status.DELETED.value, datetime.now()], 
-                    select_fields=['id'], 
-                    select_values=[[info['id']]])
-            reload_flag_sidebar.set(not reload_flag_sidebar.get())
-        
-        with ui.hold() as content:
-            if not show_expanded_view:
-                with ui.div(class_='d-flex gap-3'):
-                    with ui.div(class_='col d-flex flex-column justify-content-center'):
-                        with ui.tooltip():
-                            ui.input_action_link('btn_show', info['file_name'], class_='cut-text')
-                            info['file_name']                       
-                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
-                    with ui.div(class_='col-auto d-flex align-items-center'):
-                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                        async def downloadDoc():
-                            doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
-
-                            if not doc_path.exists(): return
-                            with open(doc_path) as f:
-                                for l in f.readlines():
-                                    yield l
-                    with ui.div(class_='col-auto d-flex align-items-center'):
-                        ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
-            else:
-                with ui.div(class_='app-tr row'):
-                    with ui.div(class_='app-td col'):
-                        ui.input_action_link('btn_show', info["file_name"])
-                    with ui.div(class_='app-td col-2'):
-                        ui.span(config_app.generated_files_status_desc[info['status']])
-                    with ui.div(class_='app-td col-2'):
-                        ui.span(info['create_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                    with ui.div(class_='app-td col-2'):
-                        ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                    with ui.div(class_='app-td col-1 justify-content-center'):
-                        with ui.div():
-                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                            async def downloadDoc():
-                                doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
-
-                                if not doc_path.exists(): return
-                                with open(doc_path) as f:
-                                    for l in f.readlines():
-                                        yield l
-                    with ui.div(class_='app-td col-1 justify-content-center'):
-                        with ui.div():
-                            ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
-
-        return content
-    
-    @module
-    def getUploadedDocItemView(input, output, session, doc, is_selected):
-
-        @reactive.effect
-        @reactive.event(input.chk_file, ignore_init=True)
-        def addOrRemoveDoc():
-            print('add or remove doc')
-            print((doc['id'], doc['file_name']), input.chk_file())
-            changeSelectedDocs(doc['id'], doc['file_name'], input.chk_file())
-
-        @reactive.effect
-        @reactive.event(select_all_docs, ignore_init=True)
-        def addOrRemoveDocSelectAll():
-            print('add or remove doc all')
-            ui.update_checkbox(id='chk_file', value=select_all_docs.get())
-        
-        with ui.hold() as content:
-            with ui.div(class_='d-flex gap-3'):
-                with ui.div(class_='col-auto d-flex align-items-center'):
-                    ui.input_checkbox(id='chk_file', label='', value=is_selected)
-                with ui.div(class_='col'):
-                    with ui.div(class_='uploaded-file-info-container'):
-                        with ui.div(class_='col-2 d-flex align-items-center'):
-                            getFileTypeIcon('icon', file_type=getFileType(doc['file_name']))
-                        with ui.div(class_='col d-flex flex-column'):
-                            with ui.tooltip():
-                                ui.span(doc['file_name'], class_='cut-text')
-                                doc['file_name']
-                            ui.span(doc['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
-                with ui.div(class_='col-auto d-flex align-items-center'):
-                    ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
-
-        return content
 
     with ui.hold() as content:
         with ui.div(class_='app-body-container'):
@@ -145,65 +27,12 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                 ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
             with ui.layout_sidebar():
                 with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
-                    with ui.div():
-                        with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=False):
-                            with ui.accordion_panel('Generated Documents'):
-                                
-                                with ui.div(class_='side-bar-docs-container'):
-                                    @render.express
-                                    def showSavedDocuments():
-                                        records = loadDocuments()
-                                    
-                                        if records.empty: 
-                                            ui.span('No documents')
-                                            return
-                                        
-                                        with ui.div(class_='d-flex justify-content-end'):
-                                            with ui.div(class_='d-flex', style='width:20px'):
-                                                ui.input_action_link(id='btn_show_saved_docs_details', 
-                                                                    label='',
-                                                                    icon=faicons.icon_svg('maximize'))
-                                        with ui.div(class_='doc-container'):
-                                            with ui.div(class_='d-flex flex-column gap-3'):
-                                                for i, row in records.iterrows():
-                                                    getSavedDocItemView(f'doc_list_item_{i}', 
-                                                                    info=row,
-                                                                    show_expanded_view=False)
-                                        
-                            with ui.accordion_panel('Uploaded Documents'):
-                                ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
-
-                                with ui.div(class_='side-bar-docs-container'):
-                                    
-                                    @render.express
-                                    def _():
-                                        with ui.div(class_='d-flex gap-3'):
-                                            with ui.div(class_='col-auto d-flex align-items-center'):
-                                                ui.input_checkbox(id='chk_all_uploaded_files', label='', value=False)
-                                            with ui.div(class_='col d-flex align-items-center'):
-                                                ui.strong('Select all documents')
-                                    
-                                    @render.express
-                                    def showUploadedDocuments():
-
-                                        print('show uploaded docs')
-                                        
-                                        docs = getUploadedDocs()
-                                        if docs.empty: return
-
-                                        docs['is_selected'] = [(row['id'], row['file_name']) in config_app.selected_docs for _, row in docs.iterrows()]
-
-                                        with ui.div(class_='doc-container'):
-                                            with ui.div(class_='d-flex flex-column gap-3'):
-                                                for i, row in docs.iterrows():
-                                                    getUploadedDocItemView(id=str(i), doc=row, is_selected=row['is_selected'])
-
-                                @render.express
-                                def showAttachButton():
-                                    print('show uploaded docs attach')
-                                    if getSelectedDocs():
-                                        with ui.div(class_='text-center mt-2'):
-                                            ui.input_action_button(id='btn_attach_docs', label='Attach docs')
+                    @render.express
+                    def showSideBar():
+                        mod_sidebar(id='sidebar', config_app=config_app, 
+                                    reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
+                                    setCurrentFile=setCurrentFile, 
+                                    reload_flag_sidebar=reload_flag_sidebar)
 
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
@@ -258,7 +87,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
                             @render.express
                             def showRAGAndRefInfo():
-                                file_names = getVectorDBFiles()
+                                file_names = applyGetVectorDBFiles()
                                 
                                 if not file_names: return
                 
@@ -267,18 +96,17 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                     with ui.div(class_='d-flex flex-column gap-2'):
                                         with ui.div():
                                             for i, file_name in enumerate(file_names):
-                                                with ui.div(class_='row'):
+                                                with ui.div(class_='d-flex gap-1'):
                                                     with ui.div(class_='col-2 d-flex align-items-center'):
                                                         getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
-                                                    with ui.div(class_='col'):
+                                                    with ui.div(class_='col d-flex align-items-center'):
                                                         with ui.tooltip():
                                                             ui.span(file_name, class_='cut-text')
                                                             file_name
                                         with ui.div(class_='text-end'):
-                                            with ui.popover():
-                                                with ui.div():
-                                                    ui.input_action_button(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
-                                                "Remove documents"
+                                            with ui.tooltip():
+                                                ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
+                                                "De-attach documents"
                                         
                         
                         with ui.div(class_='content', id='content'):
@@ -287,226 +115,20 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
     @reactive.calc
-    @reactive.event(selected_docs_changed_flag)
-    def getSelectedDocs():
-        return config_app.selected_docs        
-
-    @reactive.effect
-    @reactive.event(input.btn_show_saved_docs_details)
-    def showDetailedSavedDocsView():
-
-        @expressify
-        def showSavedDocuments():
-            records = loadDocuments()
-            if records.empty: return ui.span('No documents')
-            with ui.div(class_='app-table-container'):
-                with ui.div(class_='app-table'):
-                    with ui.div(class_='app-thead'):
-                        with ui.div(class_='app-tr row'):
-                            with ui.div(class_='app-th col'):
-                                ui.strong('Document')
-                            with ui.div(class_='app-th col-2'):
-                                ui.strong('Status')
-                            with ui.div(class_='app-th col-2'):
-                                ui.strong('Create date')
-                            with ui.div(class_='app-th col-2'):
-                                ui.strong('Update date')
-                            with ui.div(class_='app-th col-1 justify-content-center'):
-                                ""
-                            with ui.div(class_='app-th col-1 justify-content-center'):
-                                ""
-                    with ui.div(class_='app-tbody'):
-                        for i, row in records.iterrows():
-                            getSavedDocItemView(f'doc_list_item_exp_view_{i}', info=row, show_expanded_view=True)
-
-        with ui.hold() as content:
-            showSavedDocuments()
-
-        m = ui.modal(
-            content,
-            title="Saved documents",
-            easy_close=True,
-            footer=None,
-            size='xl'
-        )
-
-        ui.modal_show(m)
-
-    @reactive.calc
-    def getUploadedDocs():
-        files: list[FileInfo] | None = input.btn_upload_docs()
-        if files is not None:
-
-            for file in files:
-
-                current_time = datetime.now()
-
-                if config_app.email != '':
-                    records = selectFromDB(table_name='uploaded_files', 
-                                    field_names=['email', 'file_name', 'status'],
-                                    field_values=[[config_app.email], [file['name']], [uploaded_files_status.UPLOADED.value]])
-                else:
-                    records = selectFromDB(table_name='uploaded_files', 
-                                    field_names=['session', 'file_name', 'status'],
-                                    field_values=[[config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value]])
-                
-                if records.empty:
-
-                    ids = insertIntoDB(table_name='uploaded_files', 
-                                field_names=['email', 'session', 'file_name', 'status', 'update_date'], 
-                                field_values=[[config_app.email], [config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time]])
-                    uploaded_file_id = ids[0]
-                    
-                else:
-                    updateDB(table_name='uploaded_files', 
-                            update_fields=['status', 'update_date'], 
-                            update_values=[uploaded_files_status.UPLOADED.value, current_time], 
-                            select_fields=['id'], 
-                            select_values=[list(map(int, records.id.values))])
-                    uploaded_file_id = records.iloc[0].id
-                    
-                with open(Config.DIR_DATA / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
-                    with open(file['datapath'], 'rb') as fp_r:
-                        fp.write(fp_r.read())
-
-        if config_app.email != '':
-            docs = selectFromDB(table_name='uploaded_files', 
-                            field_names=['email', 'status'],
-                            field_values=[[config_app.email], [uploaded_files_status.UPLOADED.value]],
-                            order_by_field_names=['file_name'])
-        else:
-            docs = selectFromDB(table_name='uploaded_files', 
-                            field_names=['session', 'status'],
-                            field_values=[[config_app.session_id], [uploaded_files_status.UPLOADED.value]],
-                            order_by_field_names=['file_name'])
-
-        return docs
-    
-    @reactive.effect
-    @reactive.event(input.chk_all_uploaded_files, ignore_init=True)
-    def selectAllUploadedDocs():
-        print('all uploaded files')
-
-        select_all_docs.set(input.chk_all_uploaded_files())
-
-    def changeSelectedDocs(file_id, file_name, is_selected):
-        if is_selected:
-            config_app.selected_docs |= {(file_id, file_name)}
-        else:
-            config_app.selected_docs -= {(file_id, file_name)}
-
-        selected_docs_changed_flag.set(not selected_docs_changed_flag.get())
-
-    def createVectorDBCollection(collection_name: str, file_paths: list[Path], progress=None):
-    
-        docs = []
-
-        progress_counter = 1
-
-        for file_path in file_paths:
-            
-            if progress is not None:
-                progress.set(progress_counter, f'Extracting file {progress_counter}')
-                progress_counter += 1
-            
-            loader = getLoader(file_path=file_path)
-            
-            for doc in loader:
-                doc.metadata = {k: str(v) for k, v in doc.metadata.items()}
-                docs.append(doc)
-
-        if progress is not None:
-            progress.set(progress_counter, 'Creating vector db')
-
-        db = ChromaDB(collection_name=collection_name, delete_if_exists=True)
-        db.add(docs=docs)
-
-    @reactive.effect
-    @reactive.event(input.btn_attach_docs)
-    def attachDocs():
-        
-        if not config_app.selected_docs:
-            ui.notification_show("Please select a document to attach.", type="error")
-            return
-        
-        if not config_app.generated_files_id:
-            ui.notification_show("Please create a new file or select an existing file.", type="error")
-            return
-
-        current_time = datetime.now()
-
-        ids = insertIntoDB(table_name='vector_db_collections', 
-                    field_names=['email', 'session', 'create_date', 'update_date'],
-                    field_values=[[config_app.email], [config_app.session_id], [current_time], [current_time]]) 
-
-        insertIntoDB(table_name='vector_db_collection_files', 
-                    field_names=['vector_db_collections_id', 'uploaded_files_id', 'create_date', 'update_date'],
-                    field_values=[ids * len(config_app.selected_docs), 
-                                sorted([file_id for file_id, _ in config_app.selected_docs]), 
-                                [current_time] * len(config_app.selected_docs), 
-                                [current_time] * len(config_app.selected_docs)])
-        
-        file_paths = [Config.DIR_DATA / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}' for file_id, file_name in config_app.selected_docs]
-        with ui.Progress(min=1, max=len(file_paths)+1) as p:
-
-            p.set(message="Processing", detail="This may take a while...")
-        
-            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{ids[0]}'
-            createVectorDBCollection(collection_name=vector_db_collection_name, file_paths=file_paths, progress=p)
-        
-        ai_architecture = generated_files_ai_architecture.RAG.value
-
-        updateDB(table_name='generated_files', 
-                update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
-                update_values=[ai_architecture, ids[0], current_time], 
-                select_fields=['id'], 
-                select_values=[[config_app.generated_files_id]])
-
-        config_app.ai_architecture = ai_architecture
-        config_app.vector_db_collections_id = ids[0]
-
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
-
-    @reactive.calc
     @reactive.event(reload_rag_and_ref_flag)
-    def getVectorDBFiles():
+    def applyGetVectorDBFiles():
         
-        if not config_app.vector_db_collections_id: return []
-        vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
-                                                  field_names=['vector_db_collections_id'], 
-                                                  field_values=[[config_app.vector_db_collections_id]])
-        
-        uploaded_files_records = selectFromDB(table_name='uploaded_files',
-                                              field_names=['id'],
-                                              field_values=[list(map(int, vector_db_collection_files_records['uploaded_files_id'].values))])
-        
-        return list(uploaded_files_records['file_name'].values)
+        return getVectorDBFiles(config_app.vector_db_collections_id)
     
     @reactive.effect
     @reactive.event(input.btn_delete_rag)
-    def detachDocs():
+    def applyDetachDocs():
 
-        current_time = datetime.now()
-
-        updateDB(table_name='generated_files', 
-                update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
-                update_values=[generated_files_ai_architecture.PRETRAINING.value, None, current_time], 
-                select_fields=['id'], 
-                select_values=[[config_app.generated_files_id]])
-        
-        updateDB(table_name='vector_db_collections', 
-                 update_fields=['status', 'update_date'],
-                 update_values=[vector_db_collections_status.DELETED.value, current_time],
-                 select_fields=['id'], 
-                 select_values=[[config_app.vector_db_collections_id]]) 
-
-        vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{config_app.vector_db_collections_id}'
-        deleteCollection(vector_db_collection_name)
+        detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
 
         config_app.vector_db_collections_id = None
 
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
-
         
     @reactive.effect
     @reactive.event(input.btn_show_hide_outline)
@@ -530,7 +152,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         '''
         
         if len(section_list) == 1:
-
+            
             assert 'content' in d_outline[section_list[0]], 'Hierarchy does not contain content'
 
             count_par = 0
@@ -576,6 +198,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
             d_outline = json.load(fp)
         
         *section_list, paragraph_index = hierarchy
+        
         resetContentPara(d_outline, section_list, paragraph_index)
 
         loop = asyncio.get_event_loop()
@@ -588,30 +211,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         ui.update_checkbox(id='chk_example', value=False)
         updateFileNameFlag(config_app.file_name)
         ui.update_text(id='text_outline', value='')
-        setContent('<p>Content starts here ...</p>')
-
-    def setContent(content):
-        loop = asyncio.get_event_loop()
-        loop.create_task(stream._send_content_message(content, "replace", []))
-
-    @reactive.calc()
-    @reactive.event(reload_flag, reload_flag_sidebar)
-    def loadDocuments():
-
-        print('loading sidebar')
-
-        valid_file_statuses = {e.value for e in generated_files_status} - {generated_files_status.DELETED.value}
-        if config_app.email != '':
-            records = selectFromDB(table_name='generated_files', 
-                                   field_names=['email', 'status'], 
-                                   field_values=[[config_app.email], valid_file_statuses],
-                                   order_by_field_names=['file_name'])
-        else:
-            records = selectFromDB(table_name='generated_files', 
-                                   field_names=['session', 'status'], 
-                                   field_values=[[config_app.session_id], valid_file_statuses],
-                                   order_by_field_names=['file_name'])
-        return records
 
     @reactive.effect
     @reactive.event(input.chk_example)
@@ -657,6 +256,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
     def setCurrentFile(id, file_name, vector_db_collections_id=None):
 
+        # If the function is called from the generated doc modal view
+        ui.modal_remove()
+        
         config_app.generated_files_id = id
         config_app.file_name = file_name
         config_app.vector_db_collections_id = vector_db_collections_id
@@ -881,10 +483,10 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
             if not (write_n_contents != 0 and is_gen_needed): break
         
-            #response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
+            response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
-            #response = response['response']
-            response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
+            response = response['response']
+            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
 
             insertContent(d_outline, current_section_list, response)
             

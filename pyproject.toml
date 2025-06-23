@@ -20,5 +20,6 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "shiny>=1.4.0",
     "shinywidgets>=0.5.2",
+    "truststore>=0.10.1",
     "unstructured[docx]>=0.17.2",
 ]

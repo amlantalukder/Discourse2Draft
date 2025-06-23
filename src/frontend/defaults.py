@@ -10,16 +10,6 @@ class ConfigApp:
     def setDefaults(self):
         self.settings_id = None
         self.generated_files_id = None
-
-        self.generated_files_status_desc = {
-            generated_files_status.CREATED.value: 'Created',
-            generated_files_status.RUNNING.value: 'Writing in progress',
-            generated_files_status.SUCCESS.value: 'Writing finished', 
-            generated_files_status.ERROR.value: 'Writing stopped on error', 
-            generated_files_status.CANCELLED.value: 'Writing stopped by user',
-            generated_files_status.DELETED.value: 'Deleted'
-        }
-    
         self.ai_architecture = generated_files_ai_architecture.PRETRAINING.value
         self.vector_db_collections_id = None
         self.selected_docs = set()

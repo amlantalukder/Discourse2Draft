@@ -1,5 +1,10 @@
 console.log('addon.js loaded');
 
+function htmlDecode(input) {
+    var doc = new DOMParser().parseFromString(input, "text/html");
+    return doc.documentElement.textContent;
+}
+
 function getDOMHierarchy(element) {
 
     if (element.tagName != 'P') {
@@ -8,17 +13,24 @@ function getDOMHierarchy(element) {
 
     var elements = [...document.getElementsByTagName('shiny-markdown-stream')[0].children];
 
-    var expected_htag_level = 1;
     var hierarchy = [];
+    var hierarchy_options = [];
     var para_index = 0;
     for (let i = 0; i < elements.length; i++) {
         if (elements[i] == element) {
+            for (let j in hierarchy_options) {
+                hierarchy.push(hierarchy_options[j].at(-1));
+            }
             hierarchy.push(para_index);
             break;
         }
-        if (elements[i].tagName == `H${expected_htag_level}`) {
-            hierarchy.push(elements[i].innerHTML);
-            expected_htag_level++;
+
+        if (elements[i].tagName.startsWith('H')) {
+            index = parseInt(elements[i].tagName.slice(1), 10) - 1;
+            if (!Array.isArray(hierarchy_options[index])) {
+                hierarchy_options[index] = [];
+            }
+            hierarchy_options[index].push(htmlDecode(elements[i].innerHTML));
             para_index = 0;
         }
         else if (elements[i].tagName == 'P') {
