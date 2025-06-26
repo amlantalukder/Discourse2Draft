@@ -33,7 +33,7 @@ class generated_files_status(Enum):
 # -----------------------------------------------------------------------
 class generated_files_ai_architecture(Enum):
 
-    PRETRAINING = 'pretraining', 
+    BASE = 'base', 
     RAG = 'rag'
     #'rag+ref', 'rag+pretraining', 'rag+pretraining+ref', 
     #'graphrag', 'graphrag+ref', 'graphrag+pretraining', 'graphrag+pretraining+ref',

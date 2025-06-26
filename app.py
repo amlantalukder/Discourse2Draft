@@ -22,6 +22,7 @@ config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
 reload_flag_main_view = reactive.value(True)
+settings_changed_flag_main_view = reactive.value(True)
 reload_flag_settings_view = reactive.value(True)
 current_file_name = reactive.value('')
 
@@ -34,8 +35,9 @@ def loadViews():
     auth_view = mod_authentication(id="auth", config_app=config_app, changeLoginStatus=changeLoginStatus)
     main_view = mod_main(id=f"main", 
                          config_app=config_app, 
-                         updateFileNameFlag=updateFileNameFlag, 
-                         reload_flag=reload_flag_main_view,
+                         updateFileNameFlag=updateFileNameFlag,
+                         reload_flag=reload_flag_main_view, 
+                         settings_changed_flag=settings_changed_flag_main_view,
     )
     
     settings_view = mod_settings(id=f'settings', 
@@ -83,7 +85,7 @@ def saveFileName():
 
     open(manuscript_file_path, 'w').close()
 
-    reload_flag_main_view.set(not reload_flag_main_view.get())
+    settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
     ui.notification_show('File name saved.', type='message')
 
 @reactive.effect
@@ -122,7 +124,7 @@ def changeLoginStatus(status):
     login_status.set(status)
     logIn()
     reload_flag_settings_view.set(not reload_flag_settings_view.get())
-    reload_flag_main_view.set(not reload_flag_main_view.get())
+    settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
     
 def logOut():
 
@@ -132,7 +134,7 @@ def logOut():
     config_app.setDefaults()
     config_app.session_id = session.id
     reload_flag_settings_view.set(not reload_flag_settings_view.get())
-    reload_flag_main_view.set(not reload_flag_main_view.get())
+    settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
 
     login_status.set('logged_out')
 
@@ -194,7 +196,7 @@ def changeSettings():
     saveSettingsToDB()
     
     reload_flag_settings_view.set(not reload_flag_settings_view.get())
-    reload_flag_main_view.set(not reload_flag_main_view.get())
+    settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
 
 
 with ui.div(class_="app-container"):

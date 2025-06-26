@@ -1,8 +1,15 @@
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 import requests
 from .utils import Config
+
+import httpx
 import truststore
 truststore.inject_into_ssl()
+
+#import ssl
+#ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+
+client = httpx.Client(verify=False)
 
 # ---------------------------------------------------------------------------
 def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
@@ -16,7 +23,8 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     litellm_api_key = Config.env_config['AI_API_KEY']
     try:
         response = requests.get(url=f'{Config.env_config.get("AI_BASE_URL")}/model/info',
-                                headers={'API-Key': litellm_api_key})
+                                headers={'API-Key': litellm_api_key},
+                                verify=False)
         if response.ok:
             response_d = response.json()
             if response_d and ('data' in response_d):
@@ -53,13 +61,15 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
 # ---------------------------------------------------------------------------
 def getOpenAIModel(model_name, temperature):
 
-    return ChatOpenAI(
+    return AzureChatOpenAI(
         model=model_name,
-        base_url=Config.env_config.get('AI_BASE_URL'),
+        azure_endpoint=Config.env_config.get('AI_BASE_URL'),
         api_key=Config.env_config.get('AI_API_KEY'),
         temperature=temperature,
         max_tokens=None,
         timeout=None,
         max_retries=2,
-        seed=1000
+        seed=1000,
+        api_version='2024-02-01',
+        http_client=client
     )

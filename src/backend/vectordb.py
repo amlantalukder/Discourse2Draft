@@ -4,15 +4,17 @@ from langchain_openai import OpenAIEmbeddings
 from .utils import Config
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents.base import Document
-from langchain_community.document_loaders import CSVLoader, JSONLoader
+from langchain_community.document_loaders import CSVLoader, JSONLoader, PyPDFLoader
 from langchain_unstructured import UnstructuredLoader
 from pathlib import Path
+import truststore
+truststore.inject_into_ssl()
 
 class ChromaDB:
 
-    def __init__(self, collection_name: str, embedding: str = 'text-embedding-3-large', delete_if_exists: bool = False):
+    def __init__(self, embedding: str = 'text-embedding-3-large'):
 
-        client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
+        self.client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
 
         self.embedding = OpenAIEmbeddings(
             model=embedding, 
@@ -20,13 +22,25 @@ class ChromaDB:
             api_key=Config.env_config.get('AI_API_KEY')
         )
 
-        if delete_if_exists and collection_name in [c.name for c in client.list_collections()]:
-            client.delete_collection(collection_name)
+    def create(self, collection_name: str, delete_if_exists: bool = False):
+
+        if delete_if_exists and collection_name in [c.name for c in self.client.list_collections()]:
+            self.client.delete_collection(collection_name)
 
         self.vector_store = Chroma(
-            client=client,
+            client=self.client,
             collection_name=collection_name,
             embedding_function=self.embedding,
+            create_collection_if_not_exists=True
+        )
+
+    def get(self, collection_name: str):
+
+        self.vector_store = Chroma(
+            client=self.client,
+            collection_name=collection_name,
+            embedding_function=self.embedding,
+            create_collection_if_not_exists=False
         )
 
         self.retriever = self.vector_store.as_retriever(search_type=Config.SIMILARITY_METRIC, 
@@ -62,6 +76,8 @@ def getLoader(file_path: Path):
             loader = CSVLoader(file_path=file_path)
         case '.json':
             loader = JSONLoader(file_path=file_path)
+        case '.pdf':
+            loader = PyPDFLoader(file_path=file_path)
         case _:
             loader = UnstructuredLoader(file_path=file_path)
 
@@ -69,7 +85,7 @@ def getLoader(file_path: Path):
 
 def deleteCollection(collection_name: str):
 
-    client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
+    client = ChromaDB().client
 
     if collection_name in [c.name for c in client.list_collections()]:
         client.delete_collection(collection_name)

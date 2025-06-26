@@ -1,23 +1,27 @@
 from shiny import reactive
-from shiny.express import ui, render, module
+from shiny.express import ui, render, module, expressify
 import faicons
 from utils import Config
 from .db import updateDB, selectFromDB, \
-                generated_files_status
+                generated_files_status, \
+                generated_files_ai_architecture
 from .sidebar_modules.sidebar import mod_sidebar
 from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs
+from ..backend.architecture import Architecture
 import asyncio
 import json
 import textwrap
+import re
 from datetime import datetime
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag):
+def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag, settings_changed_flag):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
     reload_rag_and_ref_flag = reactive.value(True)
     reload_flag_sidebar = reactive.value(True)
+    references = reactive.value([])
 
     stream = ui.MarkdownStream("stream")
 
@@ -46,7 +50,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                     with ui.div(class_='d-flex flex-column col-4 text-center'):
                                         @render.ui
                                         def showLLMandTemp():
-                                            if reload_flag() in [True, False]:
+                                            if reload_flag in [True, False] or settings_changed_flag() in [True, False]:
                                                 return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
                                                         ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                     with ui.div(class_='col-4 text-end'):
@@ -87,15 +91,15 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
                             @render.express
                             def showRAGAndRefInfo():
-                                file_names = applyGetVectorDBFiles()
+                                files = applyGetVectorDBFiles()
                                 
-                                if not file_names: return
+                                if not files: return
                 
                                 with ui.popover(placement='bottom', options={'trigger': 'focus'}):
                                     ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
                                     with ui.div(class_='d-flex flex-column gap-2'):
                                         with ui.div():
-                                            for i, file_name in enumerate(file_names):
+                                            for i, (_, file_name) in enumerate(files):
                                                 with ui.div(class_='d-flex gap-1'):
                                                     with ui.div(class_='col-2 d-flex align-items-center'):
                                                         getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
@@ -111,9 +115,53 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                         
                         with ui.div(class_='content', id='content'):
                             stream.ui(width='100%')
+                            @render.express
+                            def showReferences():
+                                refs = getReferences()
+                                if not refs: return
+                                with ui.div(class_='mt-4'):
+                                    ui.h2('References')
+                                    with ui.div(class_='d-flex flex-column gap-1 ms-3'):
+                                        for i, ref in enumerate(refs):
+                                            ui.span(f'{i+1}. {ref}')
 
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
+    @reactive.calc
+    @reactive.event(references)
+    def getReferences():
+        return references.get()
+
+    def setContent(content):
+        loop = asyncio.get_event_loop()
+        loop.create_task(stream._send_content_message(content, "replace", []))
+
+    @reactive.effect
+    @reactive.event(reload_flag)
+    def initView():
+        # Reset file name, outline and content
+        ui.update_checkbox(id='chk_example', value=False)
+        updateFileNameFlag(config_app.file_name)
+        ui.update_text(id='text_outline', value='')
+        setContent('')
+        references.set([])
+
+    @reactive.effect
+    @reactive.event(settings_changed_flag)
+    def initContentView():
+        # Reset content
+        setContent('')
+        references.set([])
+        manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
+        with open(manuscript_file_path, 'w') as fp:
+            fp.write('')
+
+        detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
+
+        config_app.vector_db_collections_id = None
+
+        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+        
     @reactive.calc
     @reactive.event(reload_rag_and_ref_flag)
     def applyGetVectorDBFiles():
@@ -201,16 +249,15 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         
         resetContentPara(d_outline, section_list, paragraph_index)
 
+        attached_files = applyGetVectorDBFiles()
+        references.set([])
         loop = asyncio.get_event_loop()
-        loop.create_task(stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=1), clear=True))
-
-    @reactive.effect
-    @reactive.event(reload_flag)
-    def initView():
-        # Reset file name, outline and content
-        ui.update_checkbox(id='chk_example', value=False)
-        updateFileNameFlag(config_app.file_name)
-        ui.update_text(id='text_outline', value='')
+        loop.create_task(stream.stream(generateResponse(d_outline, 
+                                                        outline_file_path, 
+                                                        manuscript_file_path, 
+                                                        write_n_contents=1,
+                                                        attached_files=attached_files), 
+                                        clear=True))
 
     @reactive.effect
     @reactive.event(input.chk_example)
@@ -249,6 +296,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                     raw_outline.append(v)
         else:
             for k in d:
+                if k == 'References':
+                    continue
                 raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
 
         return raw_outline
@@ -258,10 +307,21 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
         # If the function is called from the generated doc modal view
         ui.modal_remove()
-        
+
         config_app.generated_files_id = id
         config_app.file_name = file_name
-        config_app.vector_db_collections_id = vector_db_collections_id
+
+        if vector_db_collections_id is None: 
+            config_app.vector_db_collections_id = None
+        else:
+            config_app.vector_db_collections_id = int(vector_db_collections_id)
+            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{config_app.vector_db_collections_id}'
+            config_app.agent = Architecture(model_name=config_app.llm, 
+                                            temperature=config_app.temperature, 
+                                            instructions=config_app.instructions, 
+                                            type=generated_files_ai_architecture.RAG.value, 
+                                            collection_name=vector_db_collection_name).agent
+            
         file_change_flag.set(not file_change_flag.get())
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
         
@@ -285,8 +345,15 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         updateFileNameFlag(config_app.file_name)
         ui.update_text(id='text_outline', value=raw_outline)
 
+        attached_files = applyGetVectorDBFiles()
+        references.set([])
         loop = asyncio.get_event_loop()
-        loop.create_task(stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=0), clear=True))
+        loop.create_task(stream.stream(generateResponse(d_outline, 
+                                                        outline_file_path, 
+                                                        manuscript_file_path, 
+                                                        write_n_contents=0, 
+                                                        attached_files=attached_files), 
+                                        clear=True))
 
     def saveOutline(regenerate=False):
 
@@ -390,7 +457,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
         return True
 
-    async def generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=-1):
+    async def generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=-1, attached_files=[]):
 
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
             '''
@@ -399,7 +466,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
             is_gen_needed = False
             for k in d_outline:
-
+                if k == 'References': continue
                 if k != 'content':
                     content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline[k], 
                                                                 content_pre + [f'{'#' * counter} {k}'],
@@ -461,8 +528,42 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                         return
             else:
                 insertContent(d_outline[section_list[0]], section_list[1:], response)
+
+        def insertReferences(d_outline, ref_list):
+
+            top_level_key = list(d_outline.keys())[0]
+            d_outline[top_level_key]['References'] = ref_list
+
+        def processCitation(content, ref_list):
+
+            d_files = {str(k): v for k, v in attached_files}
+
+            refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
             
-        len_last_content_pre, section_header = 0, None
+            d_ref = {}
+            for ref in refs:
+                if ref not in d_files: continue
+                try:
+                    d_ref[ref] = ref_list.index(d_files[ref]) + 1
+                except ValueError:
+                    ref_list.append(d_files[ref])
+                    d_ref[ref] = len(ref_list)
+            
+            for ref, ref_index in d_ref.items():
+                content = content.replace(f'CITE({ref})', f'<a href="#:~:text=References">{ref_index}</a>')
+
+            return content, ref_list
+        
+        async def test(i):
+            await asyncio.sleep(3)
+            if i % 2:
+                return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].'
+            else:
+                return 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].'
+            
+        len_last_content_pre, content_pre_new = 0, None
+
+        ref_list = []
 
         while True:
 
@@ -470,33 +571,40 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
             
             current_section = getSectionText(current_section_list)
 
-            if section_header is None:
-                section_header = content_pre
+            if content_pre_new is None:
+                content_pre_new = content_pre
             else:
-                section_header = content_pre[len_last_content_pre + 1:]
+                content_pre_new = content_pre[len_last_content_pre + 1:]
+
+            content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
             
-            section_header = '\n\n'.join(section_header) + '\n\n'
+            content_pre_new, ref_list = processCitation(content_pre_new, ref_list)
 
             len_last_content_pre = len(content_pre)
             
-            yield section_header
+            yield content_pre_new
 
-            if not (write_n_contents != 0 and is_gen_needed): break
+            if not (write_n_contents != 0 and is_gen_needed):
+                references.set(ref_list.copy())
+                break
         
+            #response = await test(len(ref_list))
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
-            
             response = response['response']
-            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
+            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(The evolution of the diagnostic criteria of preeclampsia-eclampsia.pdf)]. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(test2.pdf)]. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor [CITE(test3.pdf)]. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
+
+            print(response)
+
+            response_with_citations, ref_list = processCitation(response, ref_list)
 
             insertContent(d_outline, current_section_list, response)
+            if ref_list: insertReferences(d_outline, ref_list)
             
-            print(response)
-            
-            tokens = response.split(' ')
+            tokens = response_with_citations.split(' ')
 
             for i, s in enumerate(tokens):
                 await asyncio.sleep(0.1 if not config_app.write_faster else 0.01)
-                yield s + ' ' if i < len(tokens)-1 else s + '<a id="#custom-id"></a>\n\n'
+                yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
             
             with open(outline_file_path, 'w') as fp:
                 json.dump(d_outline, fp)
@@ -504,6 +612,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
             with open(manuscript_file_path, 'w') as fp:
                 fp.write('\n\n'.join(content_pre) + '\n\n' + response + '\n\n')
                 ui.notification_show("Progress saved", type="message")
+
+            #await setReactive(ref_list)
 
             current_time = datetime.now()
 
@@ -531,7 +641,14 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
 
-        await stream.stream(generateResponse(d_outline, outline_file_path, manuscript_file_path), clear=True)
+        references.set([])
+
+        attached_files = applyGetVectorDBFiles()
+        await stream.stream(generateResponse(d_outline, 
+                                             outline_file_path, 
+                                             manuscript_file_path, 
+                                             attached_files=attached_files), 
+                            clear=True)
 
         config_app.is_writing = True
 

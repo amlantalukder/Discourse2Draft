@@ -26,23 +26,23 @@ def getFileTypeIcon(input, output, session, file_type):
     
 def getVectorDBFiles(vector_db_collections_id):
 
-    if not vector_db_collections_id: return []
+    if vector_db_collections_id is None: return []
 
     vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
                                                 field_names=['id', 'status'], 
-                                                field_values=[[vector_db_collections_id], [vector_db_collections_status.ACTIVE.value]])
+                                                field_values=[[int(vector_db_collections_id)], [vector_db_collections_status.ACTIVE.value]])
     
     if vector_db_collection_records.empty: return []
     
     vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
                                                 field_names=['vector_db_collections_id'], 
-                                                field_values=[[vector_db_collections_id]])
+                                                field_values=[[int(vector_db_collections_id)]])
     
     uploaded_files_records = selectFromDB(table_name='uploaded_files',
                                             field_names=['id'],
                                             field_values=[list(map(int, vector_db_collection_files_records['uploaded_files_id'].values))])
     
-    return list(uploaded_files_records['file_name'].values)
+    return list(uploaded_files_records[['id', 'file_name']].values)
 
 def detachDocs(generated_files_id, vector_db_collections_id):
 
@@ -50,7 +50,7 @@ def detachDocs(generated_files_id, vector_db_collections_id):
 
     updateDB(table_name='generated_files', 
             update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
-            update_values=[generated_files_ai_architecture.PRETRAINING.value, None, current_time], 
+            update_values=[generated_files_ai_architecture.BASE.value, None, current_time], 
             select_fields=['id'], 
             select_values=[[generated_files_id]])
     
@@ -76,4 +76,5 @@ def getGeneratedDocuments(email, session_id):
                                 field_names=['session', 'status'], 
                                 field_values=[[session_id], valid_file_statuses],
                                 order_by_field_names=['file_name'])
+        
     return records

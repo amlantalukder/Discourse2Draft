@@ -33,6 +33,8 @@ class Config:
 class State(TypedDict):
     content_pre: str
     current_section: str
+    keyphrases: List[str]
+    rag_context: str
     steps: Annotated[List[str], add]
     response: str
 

@@ -137,8 +137,7 @@ div.app-body-container {
 div.app-body {
   display: flex !important;
   flex-direction: column;
-  height: 80vh;
-  min-height: 500px;
+  flex: 1 1 auto;
 }
 
 div.app-body-container {
@@ -147,14 +146,49 @@ div.app-body-container {
     border-radius: 0;
   }
   > div.bslib-sidebar-layout,
-  > div.bslib-sidebar-layout > div.main,
-  > div.bslib-sidebar-layout > div.main > div.app-body {
+  > div.bslib-sidebar-layout > div.main {
     height: 100%;
+  }
+
+  > div.bslib-sidebar-layout > div.main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  div.app-body div.content-container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+
+    div.content,
+    div.content-header {
+      font-size: 12px;
+      overflow-y: auto;
+      color: #646464;
+      padding: 15px;
+    }
+
+    div.content-header {
+      background-color: #e7e7f8;
+      display: flex;
+      justify-content: space-between;
+
+      .text-link {
+        font-family: inherit !important;
+        color: #3a3df4;
+        cursor: pointer;
+      }
+    }
+
+    div.content {
+      background-color: #f0f0fa;
+      flex: 1 1 auto;
+      height: 100px;
+    }
   }
 }
 
 div.input {
-  height: fit-content;
   padding-top: 10px;
   background-color: #e0e0f6;
   flex: 0 1 auto;
@@ -163,37 +197,6 @@ div.input {
 .fa {
   margin: 0 !important;
   color: #6c6c6c;
-}
-
-.app-body div.content-container {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-
-  div.content,
-  div.content-header {
-    font-size: 12px;
-    overflow-y: auto;
-    color: #646464;
-    padding: 15px;
-  }
-
-  div.content-header {
-    background-color: #e7e7f8;
-    display: flex;
-    justify-content: space-between;
-
-    .text-link {
-      font-family: inherit !important;
-      color: #3a3df4;
-      cursor: pointer;
-    }
-  }
-
-  div.content {
-    background-color: #f0f0fa;
-    flex: 1 1 auto;
-  }
 }
 
 div.content {

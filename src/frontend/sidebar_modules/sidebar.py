@@ -6,13 +6,14 @@ from .generated_docs import getGeneratedDocItemView, mod_genererated_doc_detaile
 from .uploaded_docs import getUploadedDocItemView
 from ..db import selectFromDB, insertIntoDB, updateDB, \
                 uploaded_files_status, \
-                generated_files_ai_architecture
+                generated_files_ai_architecture, \
+                vector_db_collections_status
 from ...backend.vectordb import getLoader, ChromaDB
+from ...backend.architecture import Architecture
 from ..common import getGeneratedDocuments
 from utils import Config
 from pathlib import Path
 from datetime import datetime
-import pandas as pd
 
 @module
 def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, setCurrentFile, reload_flag_sidebar):
@@ -93,7 +94,7 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
     @reactive.calc()
     @reactive.event(reload_flag_sidebar)
     def applyGetGeneratedDocuments():
-        
+
         return getGeneratedDocuments(email=config_app.email, session_id=config_app.session_id)
     
     def showDetailedGeneratedDocs():
@@ -213,13 +214,14 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
             loader = getLoader(file_path=file_path)
             
             for doc in loader:
-                doc.metadata = {k: str(v) for k, v in doc.metadata.items()}
+                doc.metadata = {**{'app_file_id': Path(file_path).stem}, **{k: str(v) for k, v in doc.metadata.items()}}
                 docs.append(doc)
 
         if progress is not None:
             progress.set(progress_counter, 'Creating vector db')
 
-        db = ChromaDB(collection_name=collection_name, delete_if_exists=True)
+        db = ChromaDB()
+        db.create(collection_name=collection_name, delete_if_exists=True)
         db.add(docs=docs)
 
     @reactive.effect
@@ -235,6 +237,14 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
             return
 
         current_time = datetime.now()
+
+        if config_app.vector_db_collections_id:
+
+            updateDB(table_name='vector_db_collections', 
+                update_fields=['status', 'update_date'], 
+                update_values=[vector_db_collections_status.DELETED.value, current_time], 
+                select_fields=['id'], 
+                select_values=[[config_app.vector_db_collections_id]])
 
         ids = insertIntoDB(table_name='vector_db_collections', 
                     field_names=['email', 'session', 'status', 'create_date', 'update_date'],
@@ -263,7 +273,11 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
                 select_fields=['id'], 
                 select_values=[[config_app.generated_files_id]])
 
-        config_app.ai_architecture = ai_architecture
         config_app.vector_db_collections_id = ids[0]
+        config_app.agent = Architecture(model_name=config_app.llm, 
+                                        temperature=config_app.temperature, 
+                                        instructions=config_app.instructions, 
+                                        type=ai_architecture, 
+                                        collection_name=vector_db_collection_name).agent
 
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())

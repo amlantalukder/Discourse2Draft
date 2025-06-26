@@ -10,7 +10,6 @@ class ConfigApp:
     def setDefaults(self):
         self.settings_id = None
         self.generated_files_id = None
-        self.ai_architecture = generated_files_ai_architecture.PRETRAINING.value
         self.vector_db_collections_id = None
         self.selected_docs = set()
         self.llm = 'azure-o1-mini'

@@ -47,6 +47,7 @@ cachetools==5.5.2
     # via google-auth
 certifi==2025.4.26
     # via
+    #   word-processor-ai (pyproject.toml)
     #   httpcore
     #   httpx
     #   kubernetes

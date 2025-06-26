@@ -63,11 +63,11 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                 with ui.div(class_='app-td col-2'):
                     @render.express
                     def showAttachedFiles():
-                        file_names = getVectorDBFiles(info['vector_db_collections_id'])
-                        if not file_names: return
+                        files = getVectorDBFiles(info['vector_db_collections_id'])
+                        if not files: return
                         with ui.div(class_='border rounded p-2'):
                             with ui.div():
-                                for i, file_name in enumerate(file_names):
+                                for i, (_, file_name) in enumerate(files):
                                     with ui.div(class_='d-flex gap-1'):
                                         with ui.div(class_='col-2 d-flex align-items-center'):
                                             getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
