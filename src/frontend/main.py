@@ -94,6 +94,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                 files = applyGetVectorDBFiles()
                                 
                                 if not files: return
+
+                                ui.span('References will be shown at the end of writing')
                 
                                 with ui.popover(placement='bottom', options={'trigger': 'focus'}):
                                     ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
