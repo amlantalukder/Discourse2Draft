@@ -1,6 +1,6 @@
 from chromadb import HttpClient
 from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
+from .llms import getAIModel
 from .utils import Config
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents.base import Document
@@ -16,11 +16,7 @@ class ChromaDB:
 
         self.client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
 
-        self.embedding = OpenAIEmbeddings(
-            model=embedding, 
-            base_url=Config.env_config.get('AI_BASE_URL'), 
-            api_key=Config.env_config.get('AI_API_KEY')
-        )
+        self.embedding = getAIModel(model_name=embedding, is_embedding=True)
 
     def create(self, collection_name: str, delete_if_exists: bool = False):
 

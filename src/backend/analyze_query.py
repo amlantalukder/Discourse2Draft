@@ -1,5 +1,5 @@
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
 from .utils import Config, State
 from .prompts import setPrompt
@@ -52,7 +52,7 @@ class AnalyzeQuery:
         '''
 
     def __init__(self, llm):
-        parser = PydanticOutputParser(pydantic_object=AnalyzeQuerySchema)
+        parser = parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=AnalyzeQuerySchema), llm=llm)
         self.analyze_query_prompt = setPrompt(self.analyze_query_system_prompt, 
                                               self.analyze_query_human_prompt, 
                                               parser)

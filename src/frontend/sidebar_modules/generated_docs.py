@@ -4,17 +4,22 @@ import faicons
 from ..db import selectFromDB, updateDB, \
                 generated_files_status, \
                 Config as db_config
-from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments
+from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
 import pandas as pd
-from utils import Config
 from datetime import datetime
+import uuid
 
 @module
-def getGeneratedDocItemView(input, output, session, info, show_expanded_view, setCurrentFile, reload_flag_parent_view):
+def getGeneratedDocItemView(input, output, session, info, show_expanded_view, setCurrentFile, reload_parent_view_flag):
+
+    @reactive.calc
+    def applyGetVectorDBFiles():
+        return getVectorDBFiles(info['vector_db_collections_id'])
 
     @reactive.effect
     @reactive.event(input.btn_show, ignore_init=True)
     def showFile():
+        print('showFile', info['file_name'])
         setCurrentFile(info['id'], info['file_name'], info['vector_db_collections_id'])
 
     @reactive.effect
@@ -25,13 +30,13 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                 update_values=[generated_files_status.DELETED.value, datetime.now()], 
                 select_fields=['id'], 
                 select_values=[[info['id']]])
-        reload_flag_parent_view.set(not reload_flag_parent_view.get())
+        reload_parent_view_flag.set(not reload_parent_view_flag.get())
 
     @reactive.effect
     @reactive.event(input.btn_delete_rag, ignore_init=True)
     def applyDetachDocs():
         detachDocs(generated_files_id = info['id'], vector_db_collections_id = info['vector_db_collections_id'])
-        reload_flag_parent_view.set(not reload_flag_parent_view.get())
+        reload_parent_view_flag.set(not reload_parent_view_flag.get())
     
     with ui.hold() as content:
         if not show_expanded_view:
@@ -44,12 +49,8 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                     async def downloadDoc():
-                        doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
-
-                        if not doc_path.exists(): return
-                        with open(doc_path) as f:
-                            for l in f.readlines():
-                                yield l
+                        attached_files = applyGetVectorDBFiles()
+                        yield getDocContent(file_id=info['id'], attached_files=attached_files)
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
         else:
@@ -63,7 +64,7 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                 with ui.div(class_='app-td col-2'):
                     @render.express
                     def showAttachedFiles():
-                        files = getVectorDBFiles(info['vector_db_collections_id'])
+                        files = applyGetVectorDBFiles()
                         if not files: return
                         with ui.div(class_='border rounded p-2'):
                             with ui.div():
@@ -104,12 +105,8 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                     with ui.div():
                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                         async def downloadDoc():
-                            doc_path = Config.DIR_DATA / f'manuscript_{info['id']}.md'
-
-                            if not doc_path.exists(): return
-                            with open(doc_path) as f:
-                                for l in f.readlines():
-                                    yield l
+                            attached_files = applyGetVectorDBFiles()
+                            yield getDocContent(file_id=info['id'], attached_files=attached_files)
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
@@ -117,7 +114,7 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
     return content
 
 @module
-def mod_genererated_doc_detailed_view(input, output, session, config_app, setCurrentFile):
+def mod_generated_doc_detailed_view(input, output, session, config_app, setCurrentFile):
 
     reload_flag = reactive.value(True)
 
@@ -135,35 +132,37 @@ def mod_genererated_doc_detailed_view(input, output, session, config_app, setCur
                             suffixes=[None, '_settings'])
         return records
     
-    @render.express
-    def showView():
-        records = getDocs()
+    with ui.hold() as content:
+        @render.express
+        def showView():
+            records = getDocs()
 
-        with ui.div(class_='app-table-container'):
-            with ui.div(class_='app-table'):
-                with ui.div(class_='app-thead'):
-                    with ui.div(class_='app-tr row'):
-                        with ui.div(class_='app-th col'):
-                            ui.strong('Document')
-                        with ui.div(class_='app-th col-2'):
-                            ui.strong('Status')
-                        with ui.div(class_='app-th col-2'):
-                            ui.strong('Attached documents')
-                        with ui.div(class_='app-th col-2'):
-                            ui.strong('Settings')
-                        with ui.div(class_='app-th col-1'):
-                            ui.strong('Create date')
-                        with ui.div(class_='app-th col-1'):
-                            ui.strong('Update date')
-                        with ui.div(class_='app-th col-1 justify-content-center'):
-                            ""
-                        with ui.div(class_='app-th col-1 justify-content-center'):
-                            ""
-                with ui.div(class_='app-tbody'):
-                    for i, row in records.iterrows():
-                        getGeneratedDocItemView(f'doc_list_item_exp_view_{i}', 
-                                            info=row, 
-                                            show_expanded_view=True,
-                                            setCurrentFile=setCurrentFile, 
-                                            reload_flag_parent_view=reload_flag)
-                    
+            with ui.div(class_='app-table-container'):
+                with ui.div(class_='app-table'):
+                    with ui.div(class_='app-thead'):
+                        with ui.div(class_='app-tr row'):
+                            with ui.div(class_='app-th col'):
+                                ui.strong('Document')
+                            with ui.div(class_='app-th col-2'):
+                                ui.strong('Status')
+                            with ui.div(class_='app-th col-2'):
+                                ui.strong('Attached documents')
+                            with ui.div(class_='app-th col-2'):
+                                ui.strong('Settings')
+                            with ui.div(class_='app-th col-1'):
+                                ui.strong('Create date')
+                            with ui.div(class_='app-th col-1'):
+                                ui.strong('Update date')
+                            with ui.div(class_='app-th col-1 justify-content-center'):
+                                ""
+                            with ui.div(class_='app-th col-1 justify-content-center'):
+                                ""
+                    with ui.div(class_='app-tbody'):
+                        for i, row in records.iterrows():
+                            getGeneratedDocItemView(f'doc_list_item_exp_view_{str(uuid.uuid4()).replace('-', '_')}_{i}', 
+                                                info=row, 
+                                                show_expanded_view=True,
+                                                setCurrentFile=setCurrentFile, 
+                                                reload_parent_view_flag=reload_flag)
+                            
+    return content

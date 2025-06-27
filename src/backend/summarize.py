@@ -1,4 +1,5 @@
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
 from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
@@ -37,7 +38,7 @@ class Summarize:
 
     def __init__(self, llm):
 
-        parser = PydanticOutputParser(pydantic_object=SummarizeSchema)
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=SummarizeSchema), llm=llm)
         self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt, parser)
         self.summarize_chain = self.summarize_prompt | llm | parser
 

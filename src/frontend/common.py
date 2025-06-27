@@ -8,6 +8,8 @@ from .db import selectFromDB, updateDB, \
                 generated_files_ai_architecture
 from ..backend.vectordb import deleteCollection
 from datetime import datetime
+import json
+import re
 
 def getFileType(file_name):
 
@@ -78,3 +80,48 @@ def getGeneratedDocuments(email, session_id):
                                 order_by_field_names=['file_name'])
         
     return records
+
+def getDocContent(file_id, attached_files=[]):
+
+    def processCitation(content):
+
+        d_files = {str(k): v for k, v in attached_files}
+
+        refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
+
+        d_ref = {}
+        ref_list = []
+        for ref in refs:
+            if ref not in d_files: continue
+            try:
+                d_ref[ref] = ref_list.index(d_files[ref]) + 1
+            except ValueError:
+                ref_list.append(d_files[ref])
+                d_ref[ref] = len(ref_list)
+        
+        for ref, ref_index in d_ref.items():
+            content = content.replace(f'CITE({ref})', f'{ref_index}')
+
+        return content
+
+    def extractContentFromOutline(d, raw_outline=[], counter=1):
+
+        if not isinstance(d, dict):
+            for k, v in d:
+                raw_outline.append(v)
+        else:
+            for k in d:
+                raw_outline = extractContentFromOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
+
+        return raw_outline
+
+    outline_file_path = Config.DIR_DATA / f'outline_{file_id}.json'
+
+    with open(outline_file_path) as fp:
+        d_outline = json.load(fp)
+
+    content = '\n'.join(extractContentFromOutline(d_outline))
+    if attached_files: content = processCitation(content)
+
+    return content
+    

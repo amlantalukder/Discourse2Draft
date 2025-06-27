@@ -1,4 +1,5 @@
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
 from .utils import State, Config, retryInvoke
 from .prompts import setPrompt
@@ -41,7 +42,7 @@ class GenerateContent:
 
     def __init__(self, llm, instructions):
 
-        parser = PydanticOutputParser(pydantic_object=GenerateContentSchema)
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateContentSchema), llm=llm)
         self.generate_content_prompt = setPrompt(self.generate_content_system_prompt(instructions), 
                                                 self.generate_content_human_prompt, 
                                                 parser)

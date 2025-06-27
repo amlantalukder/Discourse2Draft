@@ -1,7 +1,7 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, END, StateGraph
 from .utils import State
-from .llms import getOpenAIModel
+from .llms import getAIModel
 from .analyze_query import AnalyzeQuery
 from .gather_context import GatherContext
 from .summarize import Summarize
@@ -30,7 +30,7 @@ def check_if_summary_needed_rag(
 class Architecture:
 
     def __init__(self, model_name, temperature, instructions, type='base', collection_name=''):
-        llm = getOpenAIModel(model_name=model_name, temperature=temperature)
+        llm = getAIModel(model_name=model_name, temperature=temperature)
 
         print(f'Using {llm.model_name} with temperature {temperature} in {type} architecture\n')
 

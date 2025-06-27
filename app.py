@@ -6,7 +6,7 @@ from src.frontend.main import mod_main
 from src.frontend.authentication_modules.authentication import mod_authentication
 from src.frontend.settings import mod_settings
 from src.frontend.defaults import ConfigApp
-from src.frontend.db import selectFromDB, insertIntoDB, updateDB, generated_files_status
+from src.frontend.db import selectFromDB, insertIntoDB, updateDB, generated_files_status, generated_files_ai_architecture
 from datetime import datetime
 from utils import Config
 import json
@@ -21,7 +21,8 @@ ui.page_opts(title='', fillable=True, window_title=Config.APP_NAME)
 config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
-reload_flag_main_view = reactive.value(True)
+reload_content_view_flag = reactive.value(True)
+reload_sidebar_view_flag=reactive.value(True)
 settings_changed_flag_main_view = reactive.value(True)
 reload_flag_settings_view = reactive.value(True)
 current_file_name = reactive.value('')
@@ -36,7 +37,8 @@ def loadViews():
     main_view = mod_main(id=f"main", 
                          config_app=config_app, 
                          updateFileNameFlag=updateFileNameFlag,
-                         reload_flag=reload_flag_main_view, 
+                         reload_content_view_flag=reload_content_view_flag,
+                         reload_sidebar_view_flag=reload_sidebar_view_flag, 
                          settings_changed_flag=settings_changed_flag_main_view,
     )
     
@@ -69,30 +71,39 @@ def saveFileName():
     
     current_time = datetime.now()
 
-    ids = insertIntoDB('generated_files', 
-                 field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
-                 field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [config_app.ai_architecture], [file_name], 
-                               'created', [current_time], [current_time]])
-    
-    config_app.generated_files_id = ids[0]
-    config_app.file_name = file_name
+    if config_app.generated_files_id:
+        
+        updateDB(table_name='generated_files',
+                 update_fields=['file_name', 'update_date'],
+                 update_values=[file_name, current_time],
+                 select_fields=['id'],
+                 select_values=[[config_app.generated_files_id]])
+        
+        config_app.file_name = file_name
 
-    outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
-    manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
+    else:
+        ids = insertIntoDB(table_name='generated_files', 
+                    field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
+                    field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [generated_files_ai_architecture.BASE.value], [file_name], 
+                                'created', [current_time], [current_time]])
+        
+        config_app.generated_files_id = ids[0]
+        config_app.file_name = file_name
 
-    with open(outline_file_path, 'w') as fp:
-        json.dump({}, fp)
+        outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
 
-    open(manuscript_file_path, 'w').close()
-
-    settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
+        with open(outline_file_path, 'w') as fp:
+            json.dump({}, fp)
+        
+        settings_changed_flag_main_view.set(not settings_changed_flag_main_view.get())
+    reload_sidebar_view_flag.set(not reload_sidebar_view_flag.get())
     ui.notification_show('File name saved.', type='message')
 
 @reactive.effect
 @reactive.event(input.btn_new_file)
 def showNewFile():
     config_app.file_name = ''
-    reload_flag_main_view.set(not reload_flag_main_view.get())
+    reload_content_view_flag.set(not reload_content_view_flag.get())
 
 @reactive.effect
 @reactive.event(current_file_name)

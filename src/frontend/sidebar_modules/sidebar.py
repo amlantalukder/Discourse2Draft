@@ -2,7 +2,7 @@ from shiny import reactive
 from shiny.express import ui, render, module, expressify
 from shiny.types import FileInfo
 import faicons
-from .generated_docs import getGeneratedDocItemView, mod_genererated_doc_detailed_view
+from .generated_docs import getGeneratedDocItemView, mod_generated_doc_detailed_view
 from .uploaded_docs import getUploadedDocItemView
 from ..db import selectFromDB, insertIntoDB, updateDB, \
                 uploaded_files_status, \
@@ -14,98 +14,103 @@ from ..common import getGeneratedDocuments
 from utils import Config
 from pathlib import Path
 from datetime import datetime
+import uuid
 
 @module
-def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, setCurrentFile, reload_flag_sidebar):
+def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, setCurrentFile, reload_sidebar_view_flag):
 
     selected_docs_changed_flag = reactive.value(True)
     select_all_docs = reactive.value(False)
 
-    with ui.div():
-        with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=False):
-            with ui.accordion_panel('Generated Documents'):
+    with ui.hold() as content:
+        with ui.div():
+            with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=False):
+                with ui.accordion_panel('Generated Documents'):
 
-                with ui.div(class_='side-bar-docs-container'):
+                    with ui.div(class_='side-bar-docs-container'):
+                        
+                        @render.express
+                        def showGeneratedDocuments():
+
+                            print('showGeneratedDocuments')
+
+                            records = applyGetGeneratedDocuments()
+                        
+                            if records.empty: 
+                                ui.span('No generated documents')
+                                return
+                            
+                            with ui.div(class_='d-flex justify-content-end'):
+                                with ui.div(class_='d-flex', style='width:20px'):
+                                    ui.input_action_link(id='btn_show_generated_docs_details', 
+                                                        label='',
+                                                        icon=faicons.icon_svg('maximize'))
+                            with ui.div(class_='doc-container'):
+                                with ui.div(class_='d-flex flex-column gap-3'):
+                                    for i, row in records.iterrows():
+                                        getGeneratedDocItemView(f'doc_list_item_{str(uuid.uuid4()).replace('-', '_')}_{i}', 
+                                                        info=row,
+                                                        show_expanded_view=False,
+                                                        setCurrentFile=setCurrentFile, 
+                                                        reload_parent_view_flag=reload_sidebar_view_flag)
+                            
+                with ui.accordion_panel('Uploaded Documents'):
+                    ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
+
+                    with ui.div(class_='side-bar-docs-container'):
+                        
+                        @render.express
+                        def _():
+
+                            docs = getUploadedDocs()
+
+                            if docs.empty:
+                                ui.span('No uploaded documents')
+                                return
+
+                            with ui.div(class_='d-flex gap-3'):
+                                with ui.div(class_='col-auto d-flex align-items-center'):
+                                    ui.input_checkbox(id='chk_all_uploaded_files', label='', value=False)
+                                with ui.div(class_='col d-flex align-items-center'):
+                                    ui.strong('Select all documents')
+
+                            docs['is_selected'] = [(row['id'], row['file_name']) in config_app.selected_docs for _, row in docs.iterrows()]
+
+                            with ui.div(class_='doc-container'):
+                                with ui.div(class_='d-flex flex-column gap-3'):
+                                    for i, row in docs.iterrows():
+                                        getUploadedDocItemView(id=str(i), 
+                                                            doc=row, 
+                                                            is_selected=row['is_selected'],
+                                                            changeSelectedDocs=changeSelectedDocs, 
+                                                            select_all_docs=select_all_docs,
+                                                            reload_sidebar_view_flag=reload_sidebar_view_flag,
+                                                            showDetailedGeneratedDocs = showDetailedGeneratedDocs)
 
                     @render.express
-                    def showGeneratedDocuments():
-
-                        records = applyGetGeneratedDocuments()
-                    
-                        if records.empty: 
-                            ui.span('No generated documents')
-                            return
-                        
-                        with ui.div(class_='d-flex justify-content-end'):
-                            with ui.div(class_='d-flex', style='width:20px'):
-                                ui.input_action_link(id='btn_show_generated_docs_details', 
-                                                    label='',
-                                                    icon=faicons.icon_svg('maximize'))
-                        with ui.div(class_='doc-container'):
-                            with ui.div(class_='d-flex flex-column gap-3'):
-                                for i, row in records.iterrows():
-                                    getGeneratedDocItemView(f'doc_list_item_{i}', 
-                                                    info=row,
-                                                    show_expanded_view=False,
-                                                    setCurrentFile=setCurrentFile, 
-                                                    reload_flag_parent_view=reload_flag_sidebar)
+                    def showAttachButton():
                 
-                        
-            with ui.accordion_panel('Uploaded Documents'):
-                ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
+                        if getSelectedDocs():
+                            with ui.div(class_='text-center mt-2'):
+                                ui.input_action_button(id='btn_attach_docs', label='Attach docs')
 
-                with ui.div(class_='side-bar-docs-container'):
-                    
-                    @render.express
-                    def _():
-
-                        docs = getUploadedDocs()
-
-                        if docs.empty:
-                            ui.span('No uploaded documents')
-                            return
-
-                        with ui.div(class_='d-flex gap-3'):
-                            with ui.div(class_='col-auto d-flex align-items-center'):
-                                ui.input_checkbox(id='chk_all_uploaded_files', label='', value=False)
-                            with ui.div(class_='col d-flex align-items-center'):
-                                ui.strong('Select all documents')
-
-                        docs['is_selected'] = [(row['id'], row['file_name']) in config_app.selected_docs for _, row in docs.iterrows()]
-
-                        with ui.div(class_='doc-container'):
-                            with ui.div(class_='d-flex flex-column gap-3'):
-                                for i, row in docs.iterrows():
-                                    getUploadedDocItemView(id=str(i), 
-                                                           doc=row, 
-                                                           is_selected=row['is_selected'],
-                                                           changeSelectedDocs=changeSelectedDocs, 
-                                                           select_all_docs=select_all_docs,
-                                                           reload_flag_sidebar=reload_flag_sidebar,
-                                                           showDetailedGeneratedDocs = showDetailedGeneratedDocs)
-
-                @render.express
-                def showAttachButton():
-            
-                    if getSelectedDocs():
-                        with ui.div(class_='text-center mt-2'):
-                            ui.input_action_button(id='btn_attach_docs', label='Attach docs')
+    @reactive.effect
+    def loadViews():
+        global generated_doc_detailed_view
+        generated_doc_detailed_view = mod_generated_doc_detailed_view(id='generated_doc_detailed', 
+                                              config_app=config_app, 
+                                              setCurrentFile=setCurrentFile)
         
     @reactive.calc()
-    @reactive.event(reload_flag_sidebar)
+    @reactive.event(reload_sidebar_view_flag)
     def applyGetGeneratedDocuments():
 
         return getGeneratedDocuments(email=config_app.email, session_id=config_app.session_id)
     
     def showDetailedGeneratedDocs():
 
-        with ui.hold() as content:
-            mod_genererated_doc_detailed_view(id='generated_doc_detailed', 
-                                              config_app=config_app, 
-                                              setCurrentFile=setCurrentFile)
-
         m = ui.modal(
-            content,
+            generated_doc_detailed_view,
             title="Generated documents",
             easy_close=True,
             footer=None,
@@ -165,10 +170,10 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
                 with open(file['datapath'], 'rb') as fp_r:
                     fp.write(fp_r.read())
 
-        reload_flag_sidebar.set(not reload_flag_sidebar.get())
+        reload_sidebar_view_flag.set(not reload_sidebar_view_flag.get())
 
     @reactive.calc
-    @reactive.event(reload_flag_sidebar)
+    @reactive.event(reload_sidebar_view_flag)
     def getUploadedDocs():
 
         if config_app.email != '':
@@ -281,3 +286,5 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, set
                                         collection_name=vector_db_collection_name).agent
 
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+
+    return content

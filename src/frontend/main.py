@@ -6,7 +6,7 @@ from .db import updateDB, selectFromDB, \
                 generated_files_status, \
                 generated_files_ai_architecture
 from .sidebar_modules.sidebar import mod_sidebar
-from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs
+from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent
 from ..backend.architecture import Architecture
 import asyncio
 import json
@@ -15,15 +15,23 @@ import re
 from datetime import datetime
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag, settings_changed_flag):
+def mod_main(input, output, session, config_app, updateFileNameFlag, reload_content_view_flag, reload_sidebar_view_flag, settings_changed_flag):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
     reload_rag_and_ref_flag = reactive.value(True)
-    reload_flag_sidebar = reactive.value(True)
     references = reactive.value([])
 
     stream = ui.MarkdownStream("stream")
+
+    @reactive.effect
+    def loadViews():
+        global sidebar_view
+        sidebar_view = mod_sidebar(id='sidebar', config_app=config_app, 
+                                   reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
+                                   setCurrentFile=setCurrentFile, 
+                                   reload_sidebar_view_flag=reload_sidebar_view_flag)
+
 
     with ui.hold() as content:
         with ui.div(class_='app-body-container'):
@@ -31,12 +39,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                 ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
             with ui.layout_sidebar():
                 with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
-                    @render.express
+                    @render.ui
                     def showSideBar():
-                        mod_sidebar(id='sidebar', config_app=config_app, 
-                                    reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
-                                    setCurrentFile=setCurrentFile, 
-                                    reload_flag_sidebar=reload_flag_sidebar)
+                        return sidebar_view
 
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
@@ -50,7 +55,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                     with ui.div(class_='d-flex flex-column col-4 text-center'):
                                         @render.ui
                                         def showLLMandTemp():
-                                            if reload_flag in [True, False] or settings_changed_flag() in [True, False]:
+                                            if reload_content_view_flag in [True, False] or settings_changed_flag() in [True, False]:
                                                 return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
                                                         ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                     with ui.div(class_='col-4 text-end'):
@@ -76,13 +81,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                     with ui.tooltip(placement="right"):
                                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                                         async def downloadDoc():
-
-                                            doc_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
-
-                                            if not doc_path.exists(): return
-                                            with open(doc_path) as f:
-                                                for l in f.readlines():
-                                                    yield l
+                                            attached_files = applyGetVectorDBFiles()
+                                            yield getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
+                                                    
                                         "Download"
                                 
                     with ui.div(class_='content-container'):
@@ -94,8 +95,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                                 files = applyGetVectorDBFiles()
                                 
                                 if not files: return
-
-                                ui.span('References will be shown at the end of writing')
                 
                                 with ui.popover(placement='bottom', options={'trigger': 'focus'}):
                                     ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
@@ -119,7 +118,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                             stream.ui(width='100%')
                             @render.express
                             def showReferences():
-                                refs = getReferences()
+                                refs = references.get()
                                 if not refs: return
                                 with ui.div(class_='mt-4'):
                                     ui.h2('References')
@@ -129,17 +128,12 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
-    @reactive.calc
-    @reactive.event(references)
-    def getReferences():
-        return references.get()
-
     def setContent(content):
         loop = asyncio.get_event_loop()
         loop.create_task(stream._send_content_message(content, "replace", []))
 
     @reactive.effect
-    @reactive.event(reload_flag)
+    @reactive.event(reload_content_view_flag)
     def initView():
         # Reset file name, outline and content
         ui.update_checkbox(id='chk_example', value=False)
@@ -154,9 +148,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         # Reset content
         setContent('')
         references.set([])
-        manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
-        with open(manuscript_file_path, 'w') as fp:
-            fp.write('')
 
         detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
 
@@ -241,7 +232,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         if not hierarchy: return
         
         outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
-        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
         
         # Read outline
         with open(outline_file_path) as fp:
@@ -255,8 +245,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         references.set([])
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
-                                                        outline_file_path, 
-                                                        manuscript_file_path, 
+                                                        outline_file_path,
                                                         write_n_contents=1,
                                                         attached_files=attached_files), 
                                         clear=True))
@@ -306,6 +295,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         
 
     def setCurrentFile(id, file_name, vector_db_collections_id=None):
+        print('setCurrentFile', file_name)
 
         # If the function is called from the generated doc modal view
         ui.modal_remove()
@@ -332,8 +322,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
     def showFile():
         
         outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
-        manuscript_file_path = Config.DIR_DATA / f'manuscript_{config_app.generated_files_id}.md'
-
+        
         # Read outline
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
@@ -352,7 +341,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path, 
-                                                        manuscript_file_path, 
                                                         write_n_contents=0, 
                                                         attached_files=attached_files), 
                                         clear=True))
@@ -459,7 +447,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
         return True
 
-    async def generateResponse(d_outline, outline_file_path, manuscript_file_path, write_n_contents=-1, attached_files=[]):
+    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_files=[]):
 
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
             '''
@@ -534,7 +522,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
         def insertReferences(d_outline, ref_list):
 
             top_level_key = list(d_outline.keys())[0]
-            d_outline[top_level_key]['References'] = ref_list
+            d_outline[top_level_key]['References'] = [('ref', f'{i+1}. {v}') for i, v in enumerate(ref_list)]
 
         def processCitation(content, ref_list):
 
@@ -556,13 +544,15 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
             return content, ref_list
         
-        async def test(i):
+        async def dummy(i=None):
             await asyncio.sleep(3)
+            if i is None:
+                return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
             if i % 2:
                 return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].'
             else:
                 return 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].'
-            
+
         len_last_content_pre, content_pre_new = 0, None
 
         ref_list = []
@@ -580,29 +570,36 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
             content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
             
-            content_pre_new, ref_list = processCitation(content_pre_new, ref_list)
+            if attached_files:
+                content_pre_new, ref_list = processCitation(content_pre_new, ref_list)
+                references.set(ref_list.copy())
+                await reactive.flush()
 
             len_last_content_pre = len(content_pre)
             
             yield content_pre_new
 
-            if not (write_n_contents != 0 and is_gen_needed):
-                references.set(ref_list.copy())
-                break
+            if write_n_contents == 0 or not is_gen_needed: break
         
-            #response = await test(len(ref_list))
+            # if attached_files:
+            #     response = await dummy(len(ref_list))  
+            # else:
+            #     response = await dummy()
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             response = response['response']
-            #response = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(The evolution of the diagnostic criteria of preeclampsia-eclampsia.pdf)]. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(test2.pdf)]. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor [CITE(test3.pdf)]. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
 
             print(response)
 
-            response_with_citations, ref_list = processCitation(response, ref_list)
-
             insertContent(d_outline, current_section_list, response)
-            if ref_list: insertReferences(d_outline, ref_list)
-            
-            tokens = response_with_citations.split(' ')
+
+            if attached_files:
+                response_with_citations, ref_list = processCitation(response, ref_list)
+                references.set(ref_list.copy())
+                await reactive.flush()
+                insertReferences(d_outline, ref_list)
+                tokens = response_with_citations.split(' ')
+            else:
+                tokens = response.split(' ')
 
             for i, s in enumerate(tokens):
                 await asyncio.sleep(0.1 if not config_app.write_faster else 0.01)
@@ -611,11 +608,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
             with open(outline_file_path, 'w') as fp:
                 json.dump(d_outline, fp)
 
-            with open(manuscript_file_path, 'w') as fp:
-                fp.write('\n\n'.join(content_pre) + '\n\n' + response + '\n\n')
-                ui.notification_show("Progress saved", type="message")
-
-            #await setReactive(ref_list)
+            ui.notification_show("Progress saved", type="message")
 
             current_time = datetime.now()
 
@@ -637,9 +630,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
             ui.notification_show("Please provide an outline.", type="error")
             return
 
-        outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
-        manuscript_file_path = f'data/manuscript_{config_app.generated_files_id}.md'
-
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
 
@@ -647,8 +639,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
 
         attached_files = applyGetVectorDBFiles()
         await stream.stream(generateResponse(d_outline, 
-                                             outline_file_path, 
-                                             manuscript_file_path, 
+                                             outline_file_path,
                                              attached_files=attached_files), 
                             clear=True)
 
@@ -685,12 +676,13 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_flag
                             select_fields=['id'], 
                             select_values=[[config_app.generated_files_id]])
                 
-                reload_flag_sidebar.set(not reload_flag_sidebar.get())
+                reload_sidebar_view_flag.set(not reload_sidebar_view_flag.get())
                 
                 if stream_status == "success":
                     ui.notification_show("Writing finished", type="message")
                 else:
                     ui.notification_show("Writing stopped", type="warning")
+
 
             config_app.is_writing = False
 

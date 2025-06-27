@@ -48,3 +48,5 @@ def retryInvoke(chain, input):
         except OutputParserException as exp:
             print(str(exp))
             print('retrying')
+
+    raise Exception(f'Output could not be fixing after trying {Config.RETRY_COUNTER} times')

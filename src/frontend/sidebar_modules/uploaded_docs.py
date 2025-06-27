@@ -9,7 +9,7 @@ from ..db import selectFromDB, updateDB, \
 from datetime import datetime
 
 @module
-def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelectedDocs, select_all_docs, reload_flag_sidebar, showDetailedGeneratedDocs):
+def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelectedDocs, select_all_docs, reload_sidebar_view_flag, showDetailedGeneratedDocs):
 
     @reactive.effect
     @reactive.event(input.chk_file, ignore_init=True)
@@ -94,7 +94,7 @@ def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelec
                 select_fields=['id'], 
                 select_values=[[doc['id']]])
         
-        reload_flag_sidebar.set(not reload_flag_sidebar.get())
+        reload_sidebar_view_flag.set(not reload_sidebar_view_flag.get())
     
     with ui.hold() as content:
         with ui.div(class_='d-flex gap-3'):
