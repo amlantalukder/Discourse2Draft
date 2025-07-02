@@ -5,6 +5,7 @@ from typing_extensions import TypedDict
 from operator import add
 from typing import Annotated, List
 from langchain_core.exceptions import OutputParserException
+from rich import print
 
 # ---------------------------------------------------------------------------
 class Config:

@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui
+from utils import print_func_name
 import smtplib
 
 # -----------------------------------------------------------------------
@@ -22,6 +23,7 @@ def mod_forgot_password(input, output, session, changeView):
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_send_code)
+    @print_func_name
     def forgotPasswordSendLink():
         ui.notification_show('Not implemented yet', type='message')
         return
@@ -50,6 +52,7 @@ def mod_forgot_password(input, output, session, changeView):
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_show_login)
+    @print_func_name
     def showLogin():
         changeView('login')
 

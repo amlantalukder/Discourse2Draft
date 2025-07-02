@@ -2,6 +2,8 @@
 *__pycache__
 .venv
 .posit
+.vscode
+lib
 data/*
 docs
 certs

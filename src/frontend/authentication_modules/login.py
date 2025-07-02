@@ -1,6 +1,8 @@
 from shiny import reactive
 from shiny.express import module, ui
-from ..db import selectFromDB, encryptPassword
+from ..db import selectFromDB, insertIntoDB, encryptPassword
+from utils import print_func_name
+from datetime import datetime
 import asyncio
 
 # -----------------------------------------------------------------------
@@ -30,16 +32,8 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
 
     # -----------------------------------------------------------------------
     @reactive.effect
-    @reactive.event(input.email)
-    def setEmail():
-    
-        if not input.email(): return
-        config_app.email = input.email()
-        changeLoginStatus('logged_in')
-
-    # -----------------------------------------------------------------------
-    @reactive.effect
     @reactive.event(input.btn_login)
+    @print_func_name
     def login():
 
         email = input.text_email()
@@ -66,19 +60,29 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_create_account)
+    @print_func_name
     def showCreateAccount():
         changeView("create_account")
 
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_forgot_password)
+    @print_func_name
     def showForgotPassword():
         changeView("forgot_password")
 
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_guest)
-    def continueWithLogin():
+    @print_func_name
+    def guestLogin():
+
+        current_time = datetime.now()
+
+        insertIntoDB(table_name='settings', 
+                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
+                     field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
+
         changeLoginStatus('guest')
 
     return content

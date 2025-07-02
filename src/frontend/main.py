@@ -1,7 +1,7 @@
 from shiny import reactive
-from shiny.express import ui, render, module, expressify
+from shiny.express import ui, render, module
 import faicons
-from utils import Config
+from utils import Config, getUIID, print_func_name
 from .db import updateDB, selectFromDB, \
                 generated_files_status, \
                 generated_files_ai_architecture
@@ -13,9 +13,10 @@ import json
 import textwrap
 import re
 from datetime import datetime
+from rich import print
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, reload_content_view_flag, reload_sidebar_view_flag, settings_changed_flag):
+def mod_main(input, output, session, config_app, updateFileNameFlag, reload_content_view_flag, reload_generated_docs_view_flag, settings_changed_flag):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
@@ -24,29 +25,26 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     stream = ui.MarkdownStream("stream")
 
-    @reactive.effect
-    def loadViews():
-        global sidebar_view
-        sidebar_view = mod_sidebar(id='sidebar', config_app=config_app, 
-                                   reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
-                                   setCurrentFile=setCurrentFile, 
-                                   reload_sidebar_view_flag=reload_sidebar_view_flag)
-
-
     with ui.hold() as content:
         with ui.div(class_='app-body-container'):
             with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
                 ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
             with ui.layout_sidebar():
                 with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
-                    @render.ui
-                    def showSideBar():
-                        return sidebar_view
+                    @render.express
+                    @print_func_name
+                    def renderSideBar():
+                        mod_sidebar(id=getUIID('sidebar'), 
+                                    config_app=config_app, 
+                                    reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
+                                    reload_content_view_flag=reload_content_view_flag, 
+                                    reload_generated_docs_view_flag=reload_generated_docs_view_flag)
 
                 with ui.div(class_='app-body'):
                     with ui.div(class_='row input'):
                         @render.express
-                        def showOutline():
+                        @print_func_name
+                        def renderOutline():
                             class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
                             with ui.div(class_=class_name_outline):
                                 with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
@@ -54,17 +52,19 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                                         ui.input_checkbox('chk_example', 'Use example', value=False)
                                     with ui.div(class_='d-flex flex-column col-4 text-center'):
                                         @render.ui
+                                        @print_func_name
                                         def showLLMandTemp():
-                                            if reload_content_view_flag in [True, False] or settings_changed_flag() in [True, False]:
-                                                return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
-                                                        ui.span('(Can be changed in the settings panel in the top-right corner)')]
+                                            _ = reload_content_view_flag(), settings_changed_flag()
+                                            return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
+                                                    ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                     with ui.div(class_='col-4 text-end'):
                                         ui.p("(Drag the text area from the bottom right corner to show more text)")
                                 ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
                             with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                                 with ui.div(class_=class_name_controls):
                                     @render.express
-                                    def showOutlineControl():
+                                    @print_func_name
+                                    def renderOutlineControl():
                                         text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
                                         with ui.tooltip(placement="right"):
                                             ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
@@ -78,20 +78,28 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                                     with ui.tooltip(placement="right"):
                                         ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
                                         "Writing Speed"
-                                    with ui.tooltip(placement="right"):
-                                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                        async def downloadDoc():
-                                            attached_files = applyGetVectorDBFiles()
-                                            yield getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
-                                                    
-                                        "Download"
+
+                                    @render.express
+                                    def renderDownloadOption():
+                                        _ = reload_content_view_flag()
+                                        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+                                        if not outline_file_path.exists(): return
+                                        with ui.tooltip(placement="right"):
+                                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                            async def renderDownloadDoc():
+                                                attached_files = applyGetVectorDBFiles()
+                                                content = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
+                                                if content is None: return
+                                                yield content
+                                            "Download"
                                 
                     with ui.div(class_='content-container'):
                         with ui.div(class_='content-header'):
                             ui.span('Content starts below ...')
 
                             @render.express
-                            def showRAGAndRefInfo():
+                            @print_func_name
+                            def renderRAGAndRefInfo():
                                 files = applyGetVectorDBFiles()
                                 
                                 if not files: return
@@ -117,7 +125,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                         with ui.div(class_='content', id='content'):
                             stream.ui(width='100%')
                             @render.express
-                            def showReferences():
+                            @print_func_name
+                            def renderReferences():
                                 refs = references.get()
                                 if not refs: return
                                 with ui.div(class_='mt-4'):
@@ -128,41 +137,31 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
         ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
+    @print_func_name
     def setContent(content):
         loop = asyncio.get_event_loop()
         loop.create_task(stream._send_content_message(content, "replace", []))
 
     @reactive.effect
-    @reactive.event(reload_content_view_flag)
-    def initView():
-        # Reset file name, outline and content
-        ui.update_checkbox(id='chk_example', value=False)
-        updateFileNameFlag(config_app.file_name)
-        ui.update_text(id='text_outline', value='')
-        setContent('')
-        references.set([])
-
-    @reactive.effect
     @reactive.event(settings_changed_flag)
+    @print_func_name
     def initContentView():
         # Reset content
         setContent('')
         references.set([])
-
-        detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
-
         config_app.vector_db_collections_id = None
-
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
         
     @reactive.calc
     @reactive.event(reload_rag_and_ref_flag)
+    @print_func_name
     def applyGetVectorDBFiles():
         
         return getVectorDBFiles(config_app.vector_db_collections_id)
     
     @reactive.effect
     @reactive.event(input.btn_delete_rag)
+    @print_func_name
     def applyDetachDocs():
 
         detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
@@ -170,9 +169,73 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         config_app.vector_db_collections_id = None
 
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+
+    @print_func_name
+    def createRawOutline(d, raw_outline=[], counter=1):
+
+        if not isinstance(d, dict):
+            for k, v in d:
+                if k == 'content_ai':
+                    raw_outline.append('<content>')
+                else:
+                    raw_outline.append(v)
+        else:
+            for k in d:
+                if k == 'References':
+                    continue
+                raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
+
+        return raw_outline
+        
+    @reactive.effect
+    @reactive.event(reload_content_view_flag)
+    @print_func_name
+    def reloadContentView():
+            
+        file_change_flag.set(not file_change_flag.get())
+        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+        
+    @reactive.effect
+    @reactive.event(file_change_flag, ignore_init=True)
+    @print_func_name
+    def showContent():
+
+        if not config_app.file_name: 
+            # Reset file name, outline and content
+            ui.update_checkbox(id='chk_example', value=False)
+            updateFileNameFlag('')
+            ui.update_text(id='text_outline', value='')
+            setContent('')
+            references.set([])
+            return
+        
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        
+        # Read outline
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+
+        raw_outline = '\n'.join(createRawOutline(d_outline))
+        
+        # Cancel writing
+        stream.latest_stream.cancel()
+
+        # Show file name, outline and content
+        updateFileNameFlag(config_app.file_name)
+        ui.update_text(id='text_outline', value=raw_outline)
+
+        attached_files = applyGetVectorDBFiles()
+        references.set([])
+        loop = asyncio.get_event_loop()
+        loop.create_task(stream.stream(generateResponse(d_outline, 
+                                                        outline_file_path, 
+                                                        write_n_contents=0, 
+                                                        attached_files=attached_files), 
+                                        clear=True))
         
     @reactive.effect
     @reactive.event(input.btn_show_hide_outline)
+    @print_func_name
     def showOrHideOutline():
         show_outline.set(not show_outline.get())
 
@@ -187,6 +250,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         raw_outline = '\n'.join(createRawOutline(d_outline))
         ui.update_text(id='text_outline', value=raw_outline)
 
+    @print_func_name
     def resetContentPara(d_outline, section_list, paragraph_index):
         '''
         Resets specified paragraph for regeneration within a section hierarchy
@@ -226,6 +290,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     @reactive.effect
     @reactive.event(input.btn_regenerate_text)
+    @print_func_name
     def regenerateParagraph():
 
         hierarchy = input.selected_para_hierarchy()
@@ -252,6 +317,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     @reactive.effect
     @reactive.event(input.chk_example)
+    @print_func_name
     def useExample():
         
         example = textwrap.dedent('''\
@@ -277,74 +343,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
         ui.update_text_area('text_outline', value=example)
 
-    def createRawOutline(d, raw_outline=[], counter=1):
-
-        if not isinstance(d, dict):
-            for k, v in d:
-                if k == 'content_ai':
-                    raw_outline.append('<content>')
-                else:
-                    raw_outline.append(v)
-        else:
-            for k in d:
-                if k == 'References':
-                    continue
-                raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
-
-        return raw_outline
-        
-
-    def setCurrentFile(id, file_name, vector_db_collections_id=None):
-        print('setCurrentFile', file_name)
-
-        # If the function is called from the generated doc modal view
-        ui.modal_remove()
-
-        config_app.generated_files_id = id
-        config_app.file_name = file_name
-
-        if vector_db_collections_id is None: 
-            config_app.vector_db_collections_id = None
-        else:
-            config_app.vector_db_collections_id = int(vector_db_collections_id)
-            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{config_app.vector_db_collections_id}'
-            config_app.agent = Architecture(model_name=config_app.llm, 
-                                            temperature=config_app.temperature, 
-                                            instructions=config_app.instructions, 
-                                            type=generated_files_ai_architecture.RAG.value, 
-                                            collection_name=vector_db_collection_name).agent
-            
-        file_change_flag.set(not file_change_flag.get())
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
-        
-    @reactive.effect
-    @reactive.event(file_change_flag, ignore_init=True)
-    def showFile():
-        
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
-        
-        # Read outline
-        with open(outline_file_path) as fp:
-            d_outline = json.load(fp)
-
-        raw_outline = '\n'.join(createRawOutline(d_outline))
-        
-        # Cancel writing
-        stream.latest_stream.cancel()
-
-        # Show file name, outline and content
-        updateFileNameFlag(config_app.file_name)
-        ui.update_text(id='text_outline', value=raw_outline)
-
-        attached_files = applyGetVectorDBFiles()
-        references.set([])
-        loop = asyncio.get_event_loop()
-        loop.create_task(stream.stream(generateResponse(d_outline, 
-                                                        outline_file_path, 
-                                                        write_n_contents=0, 
-                                                        attached_files=attached_files), 
-                                        clear=True))
-
+    @print_func_name
     def saveOutline(regenerate=False):
 
         def insertOutline(d, outline_items):
@@ -360,6 +359,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
             return d
         
+        @print_func_name
         def processOutline(outline):
 
             d_outline, outline_items = {}, []
@@ -449,6 +449,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_files=[]):
 
+        @print_func_name
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
             '''
             Get all previous content and current section hierarchy up to the point that needs ai generation
@@ -486,6 +487,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                         
             return content_pre, current_section_list, is_gen_needed
         
+        @print_func_name
         def getSectionText(section_list):
             '''
             Get current section hierarchy up to the point that needs ai generation in markdown format 
@@ -504,6 +506,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
             
             return '\n\n'.join(section_text_lines)
         
+        @print_func_name
         def insertContent(d_outline, section_list, response):
             '''
             Inserts the ai response to the appropriate position of the outline
@@ -519,11 +522,13 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
             else:
                 insertContent(d_outline[section_list[0]], section_list[1:], response)
 
+        @print_func_name
         def insertReferences(d_outline, ref_list):
 
             top_level_key = list(d_outline.keys())[0]
             d_outline[top_level_key]['References'] = [('ref', f'{i+1}. {v}') for i, v in enumerate(ref_list)]
 
+        @print_func_name
         def processCitation(content, ref_list):
 
             d_files = {str(k): v for k, v in attached_files}
@@ -661,7 +666,8 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         await generate(regenerate=True)
 
     @reactive.effect
-    def _():
+    @print_func_name
+    def checkWritingStatus():
 
         stream_status = stream.latest_stream.status()
 
@@ -676,7 +682,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                             select_fields=['id'], 
                             select_values=[[config_app.generated_files_id]])
                 
-                reload_sidebar_view_flag.set(not reload_sidebar_view_flag.get())
+                reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())
                 
                 if stream_status == "success":
                     ui.notification_show("Writing finished", type="message")
@@ -693,6 +699,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     @reactive.effect
     @reactive.event(input.btn_speed)
+    @print_func_name
     def speed():
         config_app.write_faster = not config_app.write_faster
         ui.update_action_button(

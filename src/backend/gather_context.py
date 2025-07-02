@@ -1,6 +1,6 @@
 from .vectordb import ChromaDB
 from .utils import Config, State
-from pathlib import Path
+from rich import print
 
 # ---------------------------------------------------------------------------
 class GatherContext:

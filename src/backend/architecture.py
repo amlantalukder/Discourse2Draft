@@ -9,6 +9,7 @@ from .generate_content import GenerateContent
 from .generate_content_rag import GenerateContentRAG
 from .add_citations import AddCitations
 from typing import Literal
+from rich import print
 
 # -----------------------------------------------------------------------
 def check_if_summary_needed(

@@ -1,7 +1,8 @@
 from shiny.express import render, module
 from shiny.types import ImgData
-from utils import Config
+from utils import Config, print_func_name
 from pathlib import Path
+import pandas as pd
 from .db import selectFromDB, updateDB, \
                 vector_db_collections_status, \
                 generated_files_status, \
@@ -11,6 +12,7 @@ from datetime import datetime
 import json
 import re
 
+@print_func_name
 def getFileType(file_name):
 
     if Path(file_name).suffix not in ['.docx', '.pdf']:
@@ -21,11 +23,13 @@ def getFileType(file_name):
 def getFileTypeIcon(input, output, session, file_type):
     
     @render.image()
+    @print_func_name
     def icon():
         img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'{file_type}_icon.png'), 
                         "width": "100%"}
         return img
     
+@print_func_name
 def getVectorDBFiles(vector_db_collections_id):
 
     if vector_db_collections_id is None: return []
@@ -46,7 +50,10 @@ def getVectorDBFiles(vector_db_collections_id):
     
     return list(uploaded_files_records[['id', 'file_name']].values)
 
+@print_func_name
 def detachDocs(generated_files_id, vector_db_collections_id):
+
+    if vector_db_collections_id is None: return
 
     current_time = datetime.now()
 
@@ -62,9 +69,10 @@ def detachDocs(generated_files_id, vector_db_collections_id):
                 select_fields=['id'], 
                 select_values=[[vector_db_collections_id]]) 
 
-    vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{vector_db_collections_id}'
+    vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{int(vector_db_collections_id)}'
     deleteCollection(vector_db_collection_name)
 
+@print_func_name
 def getGeneratedDocuments(email, session_id):
 
     valid_file_statuses = {e.value for e in generated_files_status} - {generated_files_status.DELETED.value}
@@ -79,10 +87,23 @@ def getGeneratedDocuments(email, session_id):
                                 field_values=[[session_id], valid_file_statuses],
                                 order_by_field_names=['file_name'])
         
+    
+    if records.empty: return records
+
+    records_settings = selectFromDB(table_name='settings',
+                        field_names=['id'],
+                        field_values=[list(map(int, records['settings_id'].unique()))])
+    records = pd.merge(left=records, 
+                        right=records_settings[['id', 'llm', 'temperature', 'instructions']], 
+                        left_on='settings_id', right_on='id', how='left',
+                        suffixes=[None, '_settings'])
     return records
 
+
+@print_func_name
 def getDocContent(file_id, attached_files=[]):
 
+    @print_func_name
     def processCitation(content):
 
         d_files = {str(k): v for k, v in attached_files}
@@ -104,6 +125,7 @@ def getDocContent(file_id, attached_files=[]):
 
         return content
 
+    @print_func_name
     def extractContentFromOutline(d, raw_outline=[], counter=1):
 
         if not isinstance(d, dict):

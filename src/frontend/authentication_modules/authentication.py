@@ -3,6 +3,7 @@ from shiny.express import module, ui, render
 from .login import mod_login
 from .create_account import mod_create_account
 from .forgot_password import mod_forgot_password
+from utils import print_func_name, getUIID
 
 # -----------------------------------------------------------------------
 @module
@@ -10,29 +11,24 @@ def mod_authentication(input, output, session, config_app, changeLoginStatus):
 
     view = reactive.value('login')
 
+    @print_func_name
     def changeView(value):
         view.set(value)
-
-    @reactive.effect
-    def loadViews():
-        global login_view, create_account_view, forgot_password_view
-        login_view = mod_login(id='login', config_app=config_app, changeView=changeView, changeLoginStatus=changeLoginStatus)
-        create_account_view = mod_create_account(id='create_account', config_app=config_app, changeView=changeView)
-        forgot_password_view = mod_forgot_password(id='forgot_password', changeView=changeView)
 
     with ui.hold() as content:
         with ui.div(class_='app-dialog-container'):
             with ui.div(class_='app-dialog'):
                 @render.ui
-                def showView():
+                @print_func_name
+                def renderView():
                     match view.get():
                         case 'login':
-                            return login_view
+                            return mod_login(id=getUIID('login'), config_app=config_app, changeView=changeView, changeLoginStatus=changeLoginStatus)
                         case 'create_account':
-                            return create_account_view
+                            return mod_create_account(id=getUIID('create_account'), config_app=config_app, changeView=changeView)
                         case 'forgot_password':
-                            return forgot_password_view
+                            return mod_forgot_password(id=getUIID('forgot_password'), changeView=changeView)
                         case _:
-                            return login_view
+                            return mod_login(id=getUIID('login'), config_app=config_app, changeView=changeView, changeLoginStatus=changeLoginStatus)
 
     return content

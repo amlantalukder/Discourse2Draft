@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import ui, module, render
+from utils import print_func_name
 from ..backend.llms import extractAvailableLLMs
 from ..backend.architecture import Architecture
 
@@ -16,15 +17,17 @@ def mod_settings(input, output, session, callback_fn, config_app, reload_flag):
                     ui.input_action_button('btn_close_settings', 'Close')
             ui.tags.hr()
             @render.express
-            def loadInputs():
-                if reload_flag() in [True, False]:
-                    with ui.div(class_='row justify-content-between'):
-                        ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=config_app.llm)
-                        ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=config_app.temperature)
-                    ui.input_text_area('text_instructions', 'Instructions', value=config_app.instructions)
+            @print_func_name
+            def renderInputs():
+                _ = reload_flag()
+                with ui.div(class_='row justify-content-between'):
+                    ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs(), selected=config_app.llm)
+                    ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=config_app.temperature)
+                ui.input_text_area('text_instructions', 'Instructions', value=config_app.instructions)
 
     @reactive.effect
     @reactive.event(input.btn_save_settings)
+    @print_func_name
     def saveSettings():
 
         config_app.llm = input.select_llm()
@@ -38,6 +41,7 @@ def mod_settings(input, output, session, callback_fn, config_app, reload_flag):
 
     @reactive.effect
     @reactive.event(input.btn_close_settings)
+    @print_func_name
     def close():
         ui.modal_remove()
 

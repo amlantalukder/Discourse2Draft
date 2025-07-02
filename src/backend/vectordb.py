@@ -3,6 +3,10 @@ from langchain_chroma import Chroma
 from .llms import getAIModel
 from .utils import Config
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_graph_retriever.transformers import ShreddingTransformer
+from langchain_graph_retriever.adapters.chroma import ChromaAdapter
+from langchain_graph_retriever import GraphRetriever
+from graph_retriever.strategies import Eager
 from langchain_core.documents.base import Document
 from langchain_community.document_loaders import CSVLoader, JSONLoader, PyPDFLoader
 from langchain_unstructured import UnstructuredLoader
@@ -20,7 +24,7 @@ class ChromaDB:
 
     def create(self, collection_name: str, delete_if_exists: bool = False):
 
-        if delete_if_exists and collection_name in [c.name for c in self.client.list_collections()]:
+        if delete_if_exists and collection_name in self.client.list_collections():
             self.client.delete_collection(collection_name)
 
         self.vector_store = Chroma(
@@ -30,7 +34,7 @@ class ChromaDB:
             create_collection_if_not_exists=True
         )
 
-    def get(self, collection_name: str):
+    def get(self, collection_name: str, is_graph: bool = False):
 
         self.vector_store = Chroma(
             client=self.client,
@@ -39,25 +43,33 @@ class ChromaDB:
             create_collection_if_not_exists=False
         )
 
-        self.retriever = self.vector_store.as_retriever(search_type=Config.SIMILARITY_METRIC, 
+        if not is_graph:
+            self.retriever = self.vector_store.as_retriever(search_type=Config.SIMILARITY_METRIC, 
                                                         search_kwargs={'k': Config.NUM_DOCS_MAX, 
                                                                         'score_threshold': Config.SIMILARITY_THRESHOLD
                                                                         }
                                                         )
+        else:    
+            self.retriever = GraphRetriever(store=self.vector_store, 
+                                            strategy = Eager(select_k=Config.NUM_DOCS_MAX, start_k=Config.NUM_DOCS_MAX, max_depth=2))
 
-    def add(self, docs: list[Document], chunk_size: int = 1000, chunk_overlap: int = 200):
+    def add(self, docs: list[Document], chunk_size: int = 1000, chunk_overlap: int = 200, is_graph: bool = False):
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size, 
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-            add_start_index=True
-        )
+        if not is_graph:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size, 
+                chunk_overlap=chunk_overlap,
+                length_function=len,
+                add_start_index=True
+            )
 
-        all_splits = text_splitter.split_documents(docs)
+            document_chunks = text_splitter.split_documents(docs)
+        else:
+            shredder = ShreddingTransformer()
+            document_chunks = list(shredder.transform_documents(docs))
 
         # Index chunks
-        _ = self.vector_store.add_documents(documents=all_splits)
+        _ = self.vector_store.add_documents(documents=document_chunks)
 
     def invoke(self, query: str):
         return self.retriever.invoke(query)
@@ -83,6 +95,6 @@ def deleteCollection(collection_name: str):
 
     client = ChromaDB().client
 
-    if collection_name in [c.name for c in client.list_collections()]:
+    if collection_name in client.list_collections():
         client.delete_collection(collection_name)
     

@@ -5,6 +5,7 @@ import requests
 from pathlib import Path
 from .utils import Config
 from utils import Config as config_base
+from rich import print
 
 import httpx
 import truststore

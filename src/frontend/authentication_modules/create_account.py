@@ -1,6 +1,7 @@
 from shiny import reactive
 from shiny.express import module, ui
 from ..db import selectFromDB, insertIntoDB, encryptPassword
+from utils import print_func_name
 from datetime import datetime
 
 # -----------------------------------------------------------------------
@@ -29,12 +30,14 @@ def mod_create_account(input, output, session, config_app, changeView):
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_show_login)
+    @print_func_name
     def showLogin():
         changeView("login")
 
     # -----------------------------------------------------------------------
     @reactive.effect
     @reactive.event(input.btn_create_account)
+    @print_func_name
     def createAccount():
     
         first_name = input.text_first_name()

@@ -11,7 +11,6 @@ class ConfigApp:
         self.settings_id = None
         self.generated_files_id = None
         self.vector_db_collections_id = None
-        self.selected_docs = set()
         self.llm = 'azure-o1-mini'
         self.temperature = 0.
         self.instructions = textwrap.dedent('''\

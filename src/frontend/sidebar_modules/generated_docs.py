@@ -1,42 +1,22 @@
 from shiny import reactive
 from shiny.express import ui, render, module
 import faicons
-from ..db import selectFromDB, updateDB, \
+from utils import Config, getUIID, print_func_name
+from ..db import updateDB, \
                 generated_files_status, \
+                generated_files_ai_architecture, \
                 Config as db_config
 from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
-import pandas as pd
+from ...backend.architecture import Architecture
 from datetime import datetime
-import uuid
 
 @module
-def getGeneratedDocItemView(input, output, session, info, show_expanded_view, setCurrentFile, reload_parent_view_flag):
-
-    @reactive.calc
-    def applyGetVectorDBFiles():
-        return getVectorDBFiles(info['vector_db_collections_id'])
-
-    @reactive.effect
-    @reactive.event(input.btn_show, ignore_init=True)
-    def showFile():
-        print('showFile', info['file_name'])
-        setCurrentFile(info['id'], info['file_name'], info['vector_db_collections_id'])
-
-    @reactive.effect
-    @reactive.event(input.btn_delete, ignore_init=True)
-    def deleteFile():
-        updateDB('generated_files', 
-                update_fields=['status', 'update_date'], 
-                update_values=[generated_files_status.DELETED.value, datetime.now()], 
-                select_fields=['id'], 
-                select_values=[[info['id']]])
-        reload_parent_view_flag.set(not reload_parent_view_flag.get())
-
-    @reactive.effect
-    @reactive.event(input.btn_delete_rag, ignore_init=True)
-    def applyDetachDocs():
-        detachDocs(generated_files_id = info['id'], vector_db_collections_id = info['vector_db_collections_id'])
-        reload_parent_view_flag.set(not reload_parent_view_flag.get())
+def getGeneratedDocItemView(input, output, session, 
+                            info, show_expanded_view,
+                            config_app, 
+                            reload_content_view_flag,
+                            reload_generated_docs_view_flag,
+                            reload_generated_docs_detailed_view_flag=None):
     
     with ui.hold() as content:
         if not show_expanded_view:
@@ -48,9 +28,12 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                    async def downloadDoc():
+                    @print_func_name
+                    async def renderDownloadDoc():
                         attached_files = applyGetVectorDBFiles()
-                        yield getDocContent(file_id=info['id'], attached_files=attached_files)
+                        content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                        if content is None: return
+                        yield content
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
         else:
@@ -63,7 +46,7 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                     ui.span(db_config.generated_files_status_desc[info['status']])
                 with ui.div(class_='app-td col-2'):
                     @render.express
-                    def showAttachedFiles():
+                    def renderAttachedFiles():
                         files = applyGetVectorDBFiles()
                         if not files: return
                         with ui.div(class_='border rounded p-2'):
@@ -104,37 +87,92 @@ def getGeneratedDocItemView(input, output, session, info, show_expanded_view, se
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                        async def downloadDoc():
+                        async def renderDownloadDoc():
                             attached_files = applyGetVectorDBFiles()
-                            yield getDocContent(file_id=info['id'], attached_files=attached_files)
+                            content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                            if content is None: return
+                            yield content
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
 
+    @reactive.calc
+    @print_func_name
+    def applyGetVectorDBFiles():
+        return getVectorDBFiles(info['vector_db_collections_id'])
+
+    @reactive.effect
+    @reactive.event(input.btn_show, ignore_init=True)
+    @print_func_name
+    def showFile():
+
+        # If invoked from the generated files detailed view
+        ui.modal_remove()
+        
+        config_app.generated_files_id = info['id']
+        config_app.file_name = info['file_name']
+        config_app.vector_db_collections_id = info['vector_db_collections_id']
+        config_app.llm = info['llm']
+        config_app.temperature = info['temperature']
+        config_app.instructions = info['instructions']
+        
+        if config_app.vector_db_collections_id is None:
+
+            config_app.agent = Architecture(model_name=config_app.llm, 
+                                            temperature=config_app.temperature, 
+                                            instructions=config_app.instructions, 
+                                            type=generated_files_ai_architecture.BASE.value).agent
+            
+        else:
+
+            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{int(config_app.vector_db_collections_id)}'
+            config_app.agent = Architecture(model_name=config_app.llm, 
+                                            temperature=config_app.temperature, 
+                                            instructions=config_app.instructions, 
+                                            type=generated_files_ai_architecture.RAG.value, 
+                                            collection_name=vector_db_collection_name).agent
+
+
+        reload_content_view_flag.set(not reload_content_view_flag.get())
+
+    @reactive.effect
+    @reactive.event(input.btn_delete, ignore_init=True)
+    @print_func_name
+    def deleteFile():
+        updateDB('generated_files', 
+                update_fields=['status', 'update_date'], 
+                update_values=[generated_files_status.DELETED.value, datetime.now()], 
+                select_fields=['id'], 
+                select_values=[[info['id']]])
+        if reload_generated_docs_detailed_view_flag:
+            reload_generated_docs_detailed_view_flag.set(not reload_generated_docs_detailed_view_flag.get())
+        reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())
+
+        # If the deleted file was selected in the content, clear the content
+        if config_app.generated_files_id == info['id']:
+
+            config_app.generated_files_id = None
+            config_app.file_name = ''
+            config_app.vector_db_collections_id = None
+
+            reload_content_view_flag.set(not reload_content_view_flag.get())
+
+    @reactive.effect
+    @reactive.event(input.btn_delete_rag, ignore_init=True)
+    @print_func_name
+    def applyDetachDocs():
+        detachDocs(generated_files_id = info['id'], vector_db_collections_id = info['vector_db_collections_id'])
+        reload_generated_docs_detailed_view_flag.set(not reload_generated_docs_detailed_view_flag.get())
+
     return content
 
 @module
-def mod_generated_doc_detailed_view(input, output, session, config_app, setCurrentFile):
+def mod_generated_docs_detailed_view(input, output, session, config_app, reload_content_view_flag, reload_view_flag, reload_parent_view_flag):
 
-    reload_flag = reactive.value(True)
-
-    @reactive.calc
-    @reactive.event(reload_flag)
-    def getDocs():
-        records = getGeneratedDocuments(email=config_app.email, session_id=config_app.session_id)
-        if records.empty: return ui.span('No documents')
-        records_settings = selectFromDB(table_name='settings',
-                            field_names=['id'],
-                            field_values=[list(map(int, records['settings_id'].unique()))])
-        records = pd.merge(left=records, 
-                            right=records_settings[['id', 'llm', 'temperature', 'instructions']], 
-                            left_on='settings_id', right_on='id', how='left',
-                            suffixes=[None, '_settings'])
-        return records
-    
     with ui.hold() as content:
         @render.express
-        def showView():
+        @print_func_name
+        def renderView():
             records = getDocs()
 
             with ui.div(class_='app-table-container'):
@@ -159,10 +197,77 @@ def mod_generated_doc_detailed_view(input, output, session, config_app, setCurre
                                 ""
                     with ui.div(class_='app-tbody'):
                         for i, row in records.iterrows():
-                            getGeneratedDocItemView(f'doc_list_item_exp_view_{str(uuid.uuid4()).replace('-', '_')}_{i}', 
+                            getGeneratedDocItemView(getUIID('doc_list_item_exp_view'), 
                                                 info=row, 
                                                 show_expanded_view=True,
-                                                setCurrentFile=setCurrentFile, 
-                                                reload_parent_view_flag=reload_flag)
+                                                config_app=config_app,
+                                                reload_content_view_flag=reload_content_view_flag, 
+                                                reload_generated_docs_view_flag=reload_parent_view_flag,
+                                                reload_generated_docs_detailed_view_flag=reload_view_flag)
+
+    @reactive.calc
+    @reactive.event(reload_view_flag)
+    @print_func_name
+    def getDocs():
+
+        return getGeneratedDocuments(email=config_app.email, session_id=config_app.session_id)
                             
     return content
+
+@module
+def mod_generated_docs_view(input, output, session, config_app, reload_content_view_flag, reload_view_flag, reload_detailed_view_flag):
+
+    with ui.div(class_='side-bar-docs-container'):
+                        
+        @render.express
+        @print_func_name
+        def showGeneratedDocuments():
+
+            records = getDocs()
+        
+            if records.empty: 
+                ui.span('No generated documents')
+                return
+            
+            with ui.div(class_='d-flex justify-content-end'):
+                with ui.div(class_='d-flex', style='width:20px'):
+                    ui.input_action_link(id='btn_show_generated_docs_details', 
+                                        label='',
+                                        icon=faicons.icon_svg('maximize'))
+            with ui.div(class_='doc-container'):
+                with ui.div(class_='d-flex flex-column gap-3'):
+                    for i, row in records.iterrows():
+                        getGeneratedDocItemView(getUIID('doc_list_item'), 
+                                        info=row,
+                                        show_expanded_view=False,
+                                        config_app=config_app,
+                                        reload_content_view_flag = reload_content_view_flag, 
+                                        reload_generated_docs_view_flag=reload_view_flag)
+        
+    @reactive.calc()
+    @reactive.event(reload_view_flag)
+    @print_func_name
+    def getDocs():
+
+        return getGeneratedDocuments(email=config_app.email, session_id=config_app.session_id)
+
+    @reactive.effect
+    @reactive.event(input.btn_show_generated_docs_details)
+    @print_func_name
+    def showDetailedGeneratedDocsView():
+
+        generated_docs_detailed_view = mod_generated_docs_detailed_view(id=getUIID('generated_docs_detailed'), 
+                                                                        config_app=config_app,
+                                                                        reload_content_view_flag=reload_content_view_flag,
+                                                                        reload_view_flag=reload_detailed_view_flag,
+                                                                        reload_parent_view_flag=reload_view_flag)
+
+        m = ui.modal(
+            generated_docs_detailed_view,
+            title="Generated documents",
+            easy_close=True,
+            footer=None,
+            size='xl'
+        )
+
+        ui.modal_show(m)
