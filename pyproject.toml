@@ -12,6 +12,7 @@ dependencies = [
     "langchain-chroma==0.2.3",
     "langchain-community>=0.3.22",
     "langchain-core>=0.3.56",
+    "langchain-experimental>=0.3.4",
     "langchain-graph-retriever[chroma]>=0.8.0",
     "langchain-openai>=0.3.14",
     "langchain-unstructured>=0.1.6",

@@ -82,19 +82,19 @@ with ui.div(class_="app-container"):
                 # for which the header does not align center.
                 with ui.div(class_="col"):
                     ""
-    @render.ui
+    @render.express
     @print_func_name
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
-            return mod_main(id=getUIID('main'), 
-                            config_app=config_app, 
-                            updateFileNameFlag=updateFileNameFlag,
-                            reload_content_view_flag=reload_content_view_flag,
-                            reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
-                            settings_changed_flag=settings_changed_main_view_flag
+            mod_main(id=getUIID('main'), 
+                        config_app=config_app, 
+                        updateFileNameFlag=updateFileNameFlag,
+                        reload_content_view_flag=reload_content_view_flag,
+                        reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
+                        settings_changed_flag=settings_changed_main_view_flag
             )
         else:
-            return mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
+            mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
         
     ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js", method='inline')
 

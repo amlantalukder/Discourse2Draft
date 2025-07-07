@@ -3,8 +3,8 @@ from shiny.express import ui, render, module
 import faicons
 from utils import Config, getUIID, print_func_name
 from .db import updateDB, selectFromDB, \
-                generated_files_status, \
-                generated_files_ai_architecture
+                generated_files_status
+from .manage_outline import processOutline, createRawOutline, mod_outline_builder
 from .sidebar_modules.sidebar import mod_sidebar
 from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent
 from ..backend.architecture import Architecture
@@ -22,120 +22,148 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
     show_outline = reactive.value(True)
     reload_rag_and_ref_flag = reactive.value(True)
     references = reactive.value([])
+    outline_from_outline_builder = reactive.value('')
 
     stream = ui.MarkdownStream("stream")
 
-    with ui.hold() as content:
-        with ui.div(class_='app-body-container'):
-            with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
-                ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
-            with ui.layout_sidebar():
-                with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
+    with ui.div(class_='app-body-container'):
+        with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
+            ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
+        with ui.layout_sidebar():
+            with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
+                @render.express
+                @print_func_name
+                def renderSideBar():
+                    mod_sidebar(id=getUIID('sidebar'), 
+                                config_app=config_app, 
+                                reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
+                                reload_content_view_flag=reload_content_view_flag, 
+                                reload_generated_docs_view_flag=reload_generated_docs_view_flag)
+
+            with ui.div(class_='app-body'):
+                with ui.div(class_='row input'):
                     @render.express
                     @print_func_name
-                    def renderSideBar():
-                        mod_sidebar(id=getUIID('sidebar'), 
-                                    config_app=config_app, 
-                                    reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
-                                    reload_content_view_flag=reload_content_view_flag, 
-                                    reload_generated_docs_view_flag=reload_generated_docs_view_flag)
+                    def renderOutline():
+                        class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
+                        with ui.div(class_=class_name_outline):
+                            with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
+                                with ui.div(class_='col-auto'):
+                                    ui.input_checkbox('chk_use_example', 'Use example', value=False)
+                                with ui.div(class_='col'):
+                                    ui.input_action_button('btn_open_outline_builder', 'Manage outline')
+                                with ui.div(class_='d-flex flex-column col text-center'):
+                                    @render.ui
+                                    @print_func_name
+                                    def showLLMandTemp():
+                                        _ = reload_content_view_flag(), settings_changed_flag()
+                                        return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
+                                                ui.span('(Can be changed in the settings panel in the top-right corner)')]
+                                with ui.div(class_='col text-end'):
+                                    ui.p("(Drag the text area from the bottom right corner to show more text)")
+                            ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+                        with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
+                            with ui.div(class_=class_name_controls):
+                                @render.express
+                                @print_func_name
+                                def renderOutlineControl():
+                                    text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
+                                    with ui.tooltip(placement="right"):
+                                        ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
+                                        text 
+                                with ui.tooltip(placement="right"):
+                                    ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
+                                    "Write from the start"
+                                with ui.tooltip(placement="right"):
+                                    ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
+                                    "Resume / Pause"
+                                with ui.tooltip(placement="right"):
+                                    ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
+                                    "Writing Speed"
 
-                with ui.div(class_='app-body'):
-                    with ui.div(class_='row input'):
+                                @render.express
+                                def renderDownloadOption():
+                                    _ = reload_content_view_flag()
+                                    outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+                                    if not outline_file_path.exists(): return
+                                    with ui.tooltip(placement="right"):
+                                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                        async def renderDownloadDoc():
+                                            attached_files = applyGetVectorDBFiles()
+                                            content = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
+                                            if content is None: return
+                                            yield content
+                                        "Download"
+                            
+                with ui.div(class_='content-container'):
+                    with ui.div(class_='content-header'):
+                        ui.span('Content starts below ...')
+
                         @render.express
                         @print_func_name
-                        def renderOutline():
-                            class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
-                            with ui.div(class_=class_name_outline):
-                                with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
-                                    with ui.div(class_='col-4'):
-                                        ui.input_checkbox('chk_example', 'Use example', value=False)
-                                    with ui.div(class_='d-flex flex-column col-4 text-center'):
-                                        @render.ui
-                                        @print_func_name
-                                        def showLLMandTemp():
-                                            _ = reload_content_view_flag(), settings_changed_flag()
-                                            return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
-                                                    ui.span('(Can be changed in the settings panel in the top-right corner)')]
-                                    with ui.div(class_='col-4 text-end'):
-                                        ui.p("(Drag the text area from the bottom right corner to show more text)")
-                                ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
-                            with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
-                                with ui.div(class_=class_name_controls):
-                                    @render.express
-                                    @print_func_name
-                                    def renderOutlineControl():
-                                        text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
-                                        with ui.tooltip(placement="right"):
-                                            ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
-                                            text 
-                                    with ui.tooltip(placement="right"):
-                                        ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
-                                        "Write from the start"
-                                    with ui.tooltip(placement="right"):
-                                        ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
-                                        "Resume / Pause"
-                                    with ui.tooltip(placement="right"):
-                                        ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
-                                        "Writing Speed"
+                        def renderRAGAndRefInfo():
+                            files = applyGetVectorDBFiles()
+                            
+                            if not files: return
+            
+                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
+                                with ui.div(class_='d-flex flex-column gap-2'):
+                                    with ui.div():
+                                        for i, (_, file_name) in enumerate(files):
+                                            with ui.div(class_='d-flex gap-1'):
+                                                with ui.div(class_='col-2 d-flex align-items-center'):
+                                                    getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
+                                                with ui.div(class_='col d-flex align-items-center'):
+                                                    with ui.tooltip():
+                                                        ui.span(file_name, class_='cut-text')
+                                                        file_name
+                                    with ui.div(class_='text-end'):
+                                        with ui.tooltip():
+                                            ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
+                                            "De-attach documents"
+                                    
+                    
+                    with ui.div(class_='content outline', id='content'):
+                        stream.ui(width='100%')
+                        @render.express
+                        @print_func_name
+                        def renderReferences():
+                            refs = references.get()
+                            if not refs: return
+                            with ui.div(class_='mt-4'):
+                                ui.h2('References')
+                                with ui.div(class_='d-flex flex-column gap-1 ms-3'):
+                                    for i, ref in enumerate(refs):
+                                        ui.span(f'{i+1}. {ref}')
 
-                                    @render.express
-                                    def renderDownloadOption():
-                                        _ = reload_content_view_flag()
-                                        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
-                                        if not outline_file_path.exists(): return
-                                        with ui.tooltip(placement="right"):
-                                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                            async def renderDownloadDoc():
-                                                attached_files = applyGetVectorDBFiles()
-                                                content = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
-                                                if content is None: return
-                                                yield content
-                                            "Download"
-                                
-                    with ui.div(class_='content-container'):
-                        with ui.div(class_='content-header'):
-                            ui.span('Content starts below ...')
+    ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
-                            @render.express
-                            @print_func_name
-                            def renderRAGAndRefInfo():
-                                files = applyGetVectorDBFiles()
-                                
-                                if not files: return
-                
-                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                    ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
-                                    with ui.div(class_='d-flex flex-column gap-2'):
-                                        with ui.div():
-                                            for i, (_, file_name) in enumerate(files):
-                                                with ui.div(class_='d-flex gap-1'):
-                                                    with ui.div(class_='col-2 d-flex align-items-center'):
-                                                        getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
-                                                    with ui.div(class_='col d-flex align-items-center'):
-                                                        with ui.tooltip():
-                                                            ui.span(file_name, class_='cut-text')
-                                                            file_name
-                                        with ui.div(class_='text-end'):
-                                            with ui.tooltip():
-                                                ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
-                                                "De-attach documents"
-                                        
-                        
-                        with ui.div(class_='content', id='content'):
-                            stream.ui(width='100%')
-                            @render.express
-                            @print_func_name
-                            def renderReferences():
-                                refs = references.get()
-                                if not refs: return
-                                with ui.div(class_='mt-4'):
-                                    ui.h2('References')
-                                    with ui.div(class_='d-flex flex-column gap-1 ms-3'):
-                                        for i, ref in enumerate(refs):
-                                            ui.span(f'{i+1}. {ref}')
+    @reactive.effect
+    @reactive.event(input.text_outline)
+    @print_func_name
+    def enableOutlineBuilder():
+        ui.update_action_button('btn_open_outline_builder', disabled=not bool(input.text_outline().strip()))
 
-        ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
+    @reactive.effect
+    @reactive.event(input.btn_open_outline_builder)
+    @print_func_name
+    def openOutlineBuilder():
+
+        outline = input.text_outline().strip()
+        if outline == '': return False
+
+        outline_builder_view = mod_outline_builder(getUIID('outline_builder'), outline=outline, saved_outline=outline_from_outline_builder)
+
+        m = ui.modal(
+            outline_builder_view,
+            title="",
+            easy_close=False,
+            footer=None,
+            size='xl'
+        )
+
+        ui.modal_show(m)
 
     @print_func_name
     def setContent(content):
@@ -169,23 +197,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         config_app.vector_db_collections_id = None
 
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
-
-    @print_func_name
-    def createRawOutline(d, raw_outline=[], counter=1):
-
-        if not isinstance(d, dict):
-            for k, v in d:
-                if k == 'content_ai':
-                    raw_outline.append('<content>')
-                else:
-                    raw_outline.append(v)
-        else:
-            for k in d:
-                if k == 'References':
-                    continue
-                raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
-
-        return raw_outline
         
     @reactive.effect
     @reactive.event(reload_content_view_flag)
@@ -202,9 +213,9 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
         if not config_app.file_name: 
             # Reset file name, outline and content
-            ui.update_checkbox(id='chk_example', value=False)
+            ui.update_checkbox(id='chk_use_example', value=False)
             updateFileNameFlag('')
-            ui.update_text(id='text_outline', value='')
+            ui.update_text_area(id='text_outline', value='')
             setContent('')
             references.set([])
             return
@@ -222,7 +233,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
         # Show file name, outline and content
         updateFileNameFlag(config_app.file_name)
-        ui.update_text(id='text_outline', value=raw_outline)
+        ui.update_text_area(id='text_outline', value=raw_outline)
 
         attached_files = applyGetVectorDBFiles()
         references.set([])
@@ -248,7 +259,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
             d_outline = json.load(fp)
 
         raw_outline = '\n'.join(createRawOutline(d_outline))
-        ui.update_text(id='text_outline', value=raw_outline)
+        ui.update_text_area(id='text_outline', value=raw_outline)
 
     @print_func_name
     def resetContentPara(d_outline, section_list, paragraph_index):
@@ -316,7 +327,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                                         clear=True))
 
     @reactive.effect
-    @reactive.event(input.chk_example)
+    @reactive.event(input.chk_use_example)
     @print_func_name
     def useExample():
         
@@ -339,70 +350,17 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         #### 3. Preeclampsia
         <content>''')
         
-        if not input.chk_example(): example = ''
+        if not input.chk_use_example(): example = ''
 
         ui.update_text_area('text_outline', value=example)
 
+    @reactive.effect
+    @reactive.event(outline_from_outline_builder, ignore_init=True)
+    def saveOutlineFromOutlineBuilder():
+        ui.update_text('text_outline', value=outline_from_outline_builder.get())
+
     @print_func_name
     def saveOutline(regenerate=False):
-
-        def insertOutline(d, outline_items):
-
-            if len(outline_items) == 1:
-                d['content'] = d.get('content', []) + outline_items
-                return d
-            
-            if outline_items[0] not in d:
-                d[outline_items[0]] = {}
-            
-            d[outline_items[0]] = insertOutline(d[outline_items[0]].copy(), outline_items[1:])
-
-            return d
-        
-        @print_func_name
-        def processOutline(outline):
-
-            d_outline, outline_items = {}, []
-            chunks_leading_to_content = outline.split('<content>')
-            for i, x in enumerate(chunks_leading_to_content):
-                x = x.strip()
-                if not x: continue
-                text = ''
-                for line_x in x.split('\n'):
-            
-                    line_x = line_x.strip()
-                    if not line_x: continue
-                    if not line_x.startswith('#'):
-                        text += line_x
-                        continue
-
-                    if text: 
-                        d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
-                        text = ''
-                    
-                    hashes = line_x.split()[0]
-                    header = ' '.join(line_x.split()[1:])
-                    
-                    if hashes != '#' * len(hashes):
-                        ui.notification_show("'#'s must be followed by a space", type="error")
-                        return False
-                    
-                    if len(hashes) > len(outline_items) + 1:
-                        ui.notification_show(f"Expected no more than {len(outline_items) + 1} '#'s before {text}", type="error")
-                        return False
-                    
-                    if len(hashes) <= len(outline_items):
-                        outline_items = outline_items[:len(hashes)-1]
-
-                    outline_items.append(header)
-                    
-                if text: 
-                    d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
-                    
-                if i < len(chunks_leading_to_content)-1:
-                    d_outline = insertOutline(d_outline.copy(), outline_items + [['content_ai', '']])
-
-            return d_outline
 
         records = selectFromDB('generated_files', 
                             field_names=['id', 'file_name'], 
@@ -705,5 +663,3 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
         ui.update_action_button(
             "btn_speed", icon=faicons.icon_svg("person-walking" if config_app.write_faster else "person-running")
         )
-
-    return content

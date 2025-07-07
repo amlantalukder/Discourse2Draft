@@ -223,13 +223,16 @@ langchain-chroma==0.2.3
     #   word-processor-ai (pyproject.toml)
     #   langchain-graph-retriever
 langchain-community==0.3.23
-    # via word-processor-ai (pyproject.toml)
+    # via
+    #   word-processor-ai (pyproject.toml)
+    #   langchain-experimental
 langchain-core==0.3.65
     # via
     #   word-processor-ai (pyproject.toml)
     #   langchain
     #   langchain-chroma
     #   langchain-community
+    #   langchain-experimental
     #   langchain-graph-retriever
     #   langchain-openai
     #   langchain-text-splitters
@@ -237,6 +240,8 @@ langchain-core==0.3.65
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
+langchain-experimental==0.3.4
+    # via word-processor-ai (pyproject.toml)
 langchain-graph-retriever==0.8.0
     # via word-processor-ai (pyproject.toml)
 langchain-openai==0.3.16

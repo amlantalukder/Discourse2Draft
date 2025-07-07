@@ -184,6 +184,42 @@ div.app-body-container {
       background-color: #f0f0fa;
       flex: 1 1 auto;
       height: 100px;
+
+      h1 {
+        padding-top: 20px;
+      }
+
+      h2 {
+        padding-top: 10px;
+      }
+
+      h3 {
+        padding-top: 10px;
+      }
+
+      h4 {
+        padding-top: 5px;
+      }
+
+      h5 {
+        padding-top: 5px;
+      }
+
+      h6 {
+        padding-top: 5px;
+      }
+
+      p {
+        padding: 5px;
+      }
+
+      p.highlight-with-color {
+        background-color: #d3d3e9;
+      }
+
+      p.highlight-with-border {
+        border: 1px dotted #646464;
+      }
     }
   }
 }
@@ -199,47 +235,91 @@ div.input {
   color: #6c6c6c;
 }
 
-div.content {
+div.outline {
   h1 {
     font-size: 1.75em !important;
-    padding-top: 20px;
   }
 
   h2 {
     font-size: 1.5em !important;
-    padding-top: 10px;
   }
 
   h3 {
     font-size: 1.25em !important;
-    padding-top: 10px;
   }
 
   h4 {
     font-size: 1.15em !important;
-    padding-top: 5px;
   }
 
   h5 {
     font-size: 1.1em !important;
-    padding-top: 5px;
   }
 
   h6 {
     font-size: 1.05em !important;
-    padding-top: 5px;
   }
+}
 
-  p {
-    padding: 5px;
-  }
+div.outline-builder-container {
+  overflow-y: auto;
+  display: flex !important;
+  flex-direction: column;
+  height: 90vh;
+  padding: 10px;
 
-  p.highlight-with-color {
-    background-color: #d3d3e9;
-  }
+  div.outline-builder {
+    margin: 20px;
 
-  p.highlight-with-border {
-    border: 1px dotted #646464;
+    div.content {
+      font-size: 0.8em;
+
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      p {
+        margin: 0;
+        padding: 0;
+      }
+
+      div:has(> div > h1, > div > h2, > div > h3, > div > h4, > div > h5, > div > h6, > div > p, > div > .form-group) {
+        border: 1px solid #000;
+        border-radius: 10px;
+        padding: 10px;
+      }
+
+      div:has(> div > h1) {
+        background-color: #f0e5e1;
+      }
+      div:has(> div > h2) {
+        background-color: #ecf0d9;
+      }
+      div:has(> div > h3) {
+        background-color: #e4f2e3;
+      }
+      div:has(> div > h4) {
+        background-color: #dee7ef;
+      }
+      div:has(> div > h5) {
+        background-color: #dddfef;
+      }
+      div:has(> div > h6) {
+        background-color: #eadbeb;
+      }
+      div:has(> div > p) {
+        background-color: #ede9eb;
+      }
+      div:has(> div > p.reserved-for-ai) {
+        background-color: #ecdde3;
+      }
+      div > div > .form-group {
+        margin: 0;
+        width: 100%;
+      }
+    }
   }
 }
 
