@@ -92,7 +92,8 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
         with ui.hold() as content:
             with ui.div(class_='d-flex justify-content-between gap-2'):
                 @render.express
-                def showText():
+                @print_func_name
+                def renderText():
                     if show_text.get():
                         ui.input_text_area('txt_text', '', resize='vertical')
                     elif text == '[Reserved for AI content]':
@@ -120,7 +121,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
                             with ui.tooltip():
                                 with ui.div():
                                     with ui.popover(placement='bottom', options={'trigger': 'click'}):
-                                        ui.input_action_link('btn_insert_within_options', '', icon=faicons.icon_svg("plus-minus"))
+                                        ui.input_action_link('btn_insert_within_options', '', icon=faicons.icon_svg("arrow-right-to-bracket"))
                                         with ui.div(class_='d-flex flex-column gap-2'):
                                             ui.strong('Insert following content type within this header')
                                             ui.input_radio_buttons('radio_text_type_insert_within', 'Content type', choices=['Header', 'Text', 'AI'], inline=True)
@@ -143,6 +144,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
                                 ui.input_action_link('btn_save', '', icon=faicons.icon_svg("floppy-disk"))
                                 'Save'                            
 
+        @print_func_name
         def manageOutline(action, d, id_suffix_prev=''):
             d_new = []
             i_new = 0
@@ -213,17 +215,20 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
             return dict(d_new) 
 
         @reactive.effect
+        @print_func_name
         def isText():
             show_text.set(text.startswith('<new>'))
 
         @reactive.effect
         @reactive.event(input.btn_insert_header_above, ignore_init=True)
+        @print_func_name
         def insert_header_above():
             action = {'type': 'insert_above'}
             d_outline.set(manageOutline(action, d_outline.get()))
 
         @reactive.effect
         @reactive.event(input.btn_insert_above, ignore_init=True)
+        @print_func_name
         def insert_text_above():
             text_type = input.radio_text_type_insert_above()
             if text_type not in ['Text', 'AI']: return
@@ -232,6 +237,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
 
         @reactive.effect
         @reactive.event(input.btn_insert_within, ignore_init=True)
+        @print_func_name
         def insert_within():
             text_type = input.radio_text_type_insert_within()
             if text_type not in ['Header', 'Text', 'AI']: return
@@ -240,12 +246,14 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
 
         @reactive.effect
         @reactive.event(input.btn_remove, ignore_init=True)
+        @print_func_name
         def remove():
             action = {'type': 'remove'}
             d_outline.set(manageOutline(action, d_outline.get()))
 
         @reactive.effect
         @reactive.event(input.btn_edit)
+        @print_func_name
         def edit():
             show_text.set(True)
             is_edit_mode.set(True)
@@ -253,12 +261,14 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
 
         @reactive.effect
         @reactive.event(input.btn_undo)
+        @print_func_name
         def undo():
             show_text.set(text.startswith('<new>'))
             is_edit_mode.set(False)
 
         @reactive.effect
         @reactive.event(input.btn_save)
+        @print_func_name
         def save():
             text_new = input.txt_text().strip()
             if text_new == '': return

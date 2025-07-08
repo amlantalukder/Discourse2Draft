@@ -48,14 +48,16 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                         class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
                         with ui.div(class_=class_name_outline):
                             with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
-                                with ui.div(class_='col-auto'):
+                                with ui.div(class_='col-2'):
                                     ui.input_checkbox('chk_use_example', 'Use example', value=False)
                                 with ui.div(class_='col'):
-                                    ui.input_action_button('btn_open_outline_builder', 'Manage outline')
+                                    @render.express
+                                    def renderManageOutline():
+                                        ui.input_action_button('btn_open_outline_builder', 'Manage outline', disabled=not bool(input.text_outline().strip()))
                                 with ui.div(class_='d-flex flex-column col text-center'):
                                     @render.ui
                                     @print_func_name
-                                    def showLLMandTemp():
+                                    def renderLLMandTemp():
                                         _ = reload_content_view_flag(), settings_changed_flag()
                                         return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
                                                 ui.span('(Can be changed in the settings panel in the top-right corner)')]
@@ -138,12 +140,6 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
                                         ui.span(f'{i+1}. {ref}')
 
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
-
-    @reactive.effect
-    @reactive.event(input.text_outline)
-    @print_func_name
-    def enableOutlineBuilder():
-        ui.update_action_button('btn_open_outline_builder', disabled=not bool(input.text_outline().strip()))
 
     @reactive.effect
     @reactive.event(input.btn_open_outline_builder)
@@ -356,6 +352,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_cont
 
     @reactive.effect
     @reactive.event(outline_from_outline_builder, ignore_init=True)
+    @print_func_name
     def saveOutlineFromOutlineBuilder():
         ui.update_text('text_outline', value=outline_from_outline_builder.get())
 
