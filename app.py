@@ -22,7 +22,7 @@ ui.page_opts(title='', fillable=True, window_title=Config.APP_NAME)
 config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
-reload_content_view_flag = reactive.value(True)
+reload_main_view_flag = reactive.value(True)
 reload_generated_docs_view_flag=reactive.value(True)
 settings_changed_main_view_flag = reactive.value(True)
 reload_settings_view_flag = reactive.value(True)
@@ -89,7 +89,7 @@ with ui.div(class_="app-container"):
             mod_main(id=getUIID('main'), 
                         config_app=config_app, 
                         updateFileNameFlag=updateFileNameFlag,
-                        reload_content_view_flag=reload_content_view_flag,
+                        reload_main_view_flag=reload_main_view_flag,
                         reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
                         settings_changed_flag=settings_changed_main_view_flag
             )
@@ -174,7 +174,7 @@ def showNewFile():
     config_app.vector_db_collections_id = None
     initProfile()
 
-    reload_content_view_flag.set(not reload_content_view_flag.get())
+    reload_main_view_flag.set(not reload_main_view_flag.get())
 
 @reactive.effect
 @reactive.event(current_file_name)

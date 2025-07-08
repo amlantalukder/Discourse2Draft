@@ -1,7 +1,7 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
-from .utils import State, Config, retryInvoke
+from .utils import State, retryInvoke
 from .prompts import setPrompt
 
 class GenerateContentSchema(BaseModel):
@@ -59,4 +59,4 @@ class GenerateContent:
         except:
             raise Exception(f'GenerateContent response does not have content, response: {response}')
 
-        return {'response': response, 'steps': ['Generate Report']}
+        return {'response': response, 'steps': ['Generate Content']}

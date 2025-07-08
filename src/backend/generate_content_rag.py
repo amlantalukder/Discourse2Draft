@@ -71,4 +71,4 @@ class GenerateContentRAG:
         except:
             raise Exception(f'GenerateContent response does not have content, response: {response}')
 
-        return {'response': response, 'steps': ['Generate Report']}
+        return {'response': response, 'steps': ['Generate Content']}

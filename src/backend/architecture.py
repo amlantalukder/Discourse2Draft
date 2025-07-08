@@ -1,6 +1,6 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, END, StateGraph
-from .utils import State
+from .utils import State, StateOutline
 from .llms import getAIModel
 from .analyze_query import AnalyzeQuery
 from .gather_context import GatherContext
@@ -8,6 +8,7 @@ from .summarize import Summarize
 from .generate_content import GenerateContent
 from .generate_content_rag import GenerateContentRAG
 from .add_citations import AddCitations
+from .generate_outline import GenerateOutline
 from typing import Literal
 from rich import print
 
@@ -79,6 +80,29 @@ class Architecture:
         workflow.add_edge("Gather Context", "Generate Content")
         #workflow.add_edge("Generate Content", "Add Citations")
         #workflow.add_edge("Add Citations", END)
+
+        # Add memory
+        memory = MemorySaver()
+        self.agent = workflow.compile(checkpointer=memory)
+
+
+# -----------------------------------------------------------------------
+class ArchitectureOutline:
+     
+    def __init__(self, model_name, temperature, instructions):
+
+        llm = getAIModel(model_name=model_name, temperature=temperature)
+        
+        self.createOutlineAgent(llm, instructions)
+
+    def createOutlineAgent(self, llm, instructions):
+
+        # Define a new graph
+        workflow = StateGraph(state_schema=StateOutline)
+
+        # Define the (single) node in the graph
+        workflow.add_node("Generate Outline", GenerateOutline(llm=llm, instructions=instructions))
+        workflow.add_edge(START, "Generate Outline")
 
         # Add memory
         memory = MemorySaver()

@@ -1,6 +1,8 @@
 from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module
 from utils import print_func_name, getUIID
+from ..backend.llms import extractAvailableLLMs
+from ..backend.architecture import ArchitectureOutline
 import faicons
 import re
 
@@ -81,7 +83,7 @@ def createRawOutline(d, raw_outline=[], counter=1):
     return raw_outline                                         
 
 @module
-def mod_outline_builder(input, output, session, outline, saved_outline):
+def mod_outline_manager(input, output, session, outline, saved_outline, close_fn):
 
     @module
     def mod_outline_tools(input, output, session, id_suffix, text, show_insert_above=True, show_insert_within=True, show_remove=True):
@@ -95,7 +97,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
                 @print_func_name
                 def renderText():
                     if show_text.get():
-                        ui.input_text_area('txt_text', '', resize='vertical')
+                        ui.input_text_area('texttext', '', resize='vertical')
                     elif text == '[Reserved for AI content]':
                         ui.p(text, class_='reserved-for-ai')
                     else:
@@ -257,7 +259,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
         def edit():
             show_text.set(True)
             is_edit_mode.set(True)
-            ui.update_text_area(id='txt_text', value=re.sub('^#+ ', '', text))
+            ui.update_text_area(id='texttext', value=re.sub('^#+ ', '', text))
 
         @reactive.effect
         @reactive.event(input.btn_undo)
@@ -270,7 +272,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
         @reactive.event(input.btn_save)
         @print_func_name
         def save():
-            text_new = input.txt_text().strip()
+            text_new = input.texttext().strip()
             if text_new == '': return
 
             action = {'type': 'edit', 'text_new': text_new}
@@ -281,10 +283,10 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
     d_outline = reactive.value({}) 
 
     with ui.hold() as content:
-        with ui.div(class_='outline-builder-container'):
+        with ui.div(class_='outline-manager-container'):
             with ui.div(class_='d-flex justify-content-between'):
-                ui.h4('Manage outline')
-                with ui.div():
+                ui.h4('Outline')
+                with ui.div(class_='d-flex gap-2'):
                     with ui.tooltip():
                         ui.input_action_button('btn_undo', '', icon=faicons.icon_svg("rotate-left"))
                         'Undo changes'
@@ -294,55 +296,53 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
                     with ui.tooltip():
                         ui.input_action_button('btn_close', '', icon=faicons.icon_svg("xmark"))
                         'Close'
-            with ui.div(class_='outline-builder'):
-                with ui.div(class_='content-container'):
-                    with ui.div(class_='content outline'):
-                        @render.ui
-                        @print_func_name
-                        def renderOutlineHierarchy():
+            with ui.div(class_='outline-manager outline'):
+                @render.ui
+                @print_func_name
+                def renderOutlineHierarchy():
 
-                            print_func_name
-                            def loadHierarchy(d, level=0, id_suffix_prev=''):
+                    print_func_name
+                    def loadHierarchy(d, level=0, id_suffix_prev=''):
 
-                                outline_ui_elements = []
+                        outline_ui_elements = []
+                        
+                        for index, k in enumerate(list(d.keys())):
+                            if k == 'References':
+                                continue
                                 
-                                for index, k in enumerate(list(d.keys())):
-                                    if k == 'References':
-                                        continue
-                                     
-                                    if k.startswith('content'):
-                                        show_insert_within = False
-                                        for index_content, (v1, v2) in enumerate(d[k]):
-                                            id_suffix_current = f'{id_suffix_prev}_{index}_content{index_content}' if id_suffix_prev else f'{index}_content{index_content}'
-                                            print(id_suffix_current, k)
-                                            text = v2 if v2.startswith('<new>') else '[Reserved for AI content]' if v1 == 'content_ai' else v2
-                                            outline_ui_elements.append(
-                                                core_ui.div(
-                                                    mod_outline_tools(id=getUIID(id_suffix_current), id_suffix=id_suffix_current, text=text, show_insert_within=show_insert_within),    
-                                                    class_='ps-4'
-                                                )
-                                            )
-                                        continue
-
-                                    id_suffix_current = f'{id_suffix_prev}_{index}' if id_suffix_prev else f'{index}'
+                            if k.startswith('content'):
+                                show_insert_within = False
+                                for index_content, (v1, v2) in enumerate(d[k]):
+                                    id_suffix_current = f'{id_suffix_prev}_{index}_content{index_content}' if id_suffix_prev else f'{index}_content{index_content}'
                                     print(id_suffix_current, k)
-                                    text = f'{'#' * (level+1)} {k}' if not k.startswith('<new>') else k
+                                    text = v2 if v2.startswith('<new>') else '[Reserved for AI content]' if v1 == 'content_ai' else v2
                                     outline_ui_elements.append(
                                         core_ui.div(
-                                            mod_outline_tools(id=getUIID(id_suffix_current), 
-                                                              id_suffix=id_suffix_current, 
-                                                              text=text, 
-                                                              show_insert_above=(level > 0),
-                                                              show_insert_within=(not k.startswith('<new>')),
-                                                              show_remove=(level > 0)),
-                                            loadHierarchy(d[k], level=level+1, id_suffix_prev = id_suffix_current) if not k.startswith('<new>') else '',
-                                            class_='ps-4' if level > 0 else ''
-                                        )   
+                                            mod_outline_tools(id=getUIID(id_suffix_current), id_suffix=id_suffix_current, text=text, show_insert_within=show_insert_within),    
+                                            class_='ps-4'
+                                        )
                                     )
+                                continue
 
-                                return outline_ui_elements
-                            
-                            return loadHierarchy(d_outline.get())
+                            id_suffix_current = f'{id_suffix_prev}_{index}' if id_suffix_prev else f'{index}'
+                            print(id_suffix_current, k)
+                            text = f'{'#' * (level+1)} {k}' if not k.startswith('<new>') else k
+                            outline_ui_elements.append(
+                                core_ui.div(
+                                    mod_outline_tools(id=getUIID(id_suffix_current), 
+                                                        id_suffix=id_suffix_current, 
+                                                        text=text, 
+                                                        show_insert_above=(level > 0),
+                                                        show_insert_within=(not k.startswith('<new>')),
+                                                        show_remove=(level > 0)),
+                                    loadHierarchy(d[k], level=level+1, id_suffix_prev = id_suffix_current) if not k.startswith('<new>') else '',
+                                    class_='ps-4' if level > 0 else ''
+                                )   
+                            )
+
+                        return outline_ui_elements
+                    
+                    return loadHierarchy(d_outline.get())
                         
     @reactive.calc
     @print_func_name
@@ -359,7 +359,7 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
     @reactive.event(input.btn_close)
     @print_func_name
     def close():
-        ui.modal_remove()
+        close_fn()
 
     @reactive.effect
     @reactive.event(input.btn_undo)
@@ -375,3 +375,82 @@ def mod_outline_builder(input, output, session, outline, saved_outline):
         ui.modal_remove()
                         
     return content
+
+@module
+def mod_ai_outline_creator(input, output, session, outline_creator_options, saved_outline, show_init_view=True):
+
+    show_create_outline_view = reactive.value(not show_init_view)
+    outline_from_outline_manager = reactive.value('')
+    outline = reactive.value('')
+    
+    with ui.div(class_='outline-creator-container'):
+        @render.express
+        @print_func_name
+        def renderView():
+            if not show_create_outline_view.get():
+                with ui.div(class_='outline-creator-init-view'):
+                    ui.input_action_button('btn_show_create_outline_ai', 'Create outline with AI')
+                    ui.span('OR')
+                    ui.input_action_button('btn_use_custom_outline', 'Use custom outline')
+                    return
+            
+            with ui.div(class_='outline-creator gap-2'):
+                with ui.accordion(open=False, multiple=False):
+                    with ui.accordion_panel('AI settings'):
+                        with ui.div(class_='row justify-content-between'):
+                            ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
+                            ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
+                        ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
+                with ui.div(class_='d-flex gap-4 align-items-end'):
+                    with ui.div(class_='col'):
+                        ui.input_text_area('text_topic', '', placeholder='Write a topic', rows=4, width='100%', resize='vertical')
+                    with ui.div(class_='col-auto pb-4'):
+                        ui.input_action_button('btn_create_outline', 'Create outline')
+                @render.express
+                @print_func_name
+                def renderOutline():
+                    if not outline.get():
+                        "Outline will be shown here"
+                        return
+                    with ui.div(class_='border rounded'):
+                        mod_outline_manager(getUIID('outline_manager'), outline=outline.get(), saved_outline=outline_from_outline_manager, close_fn=clear)
+
+    @reactive.effect
+    @reactive.event(input.btn_use_custom_outline)
+    def useCustomOutline():
+        outline_creator_options.set({'show': False, 'show_init_view': False})
+
+    @reactive.effect
+    @reactive.event(input.btn_show_create_outline_ai)
+    def showCreateOutlineView():
+        show_create_outline_view.set(True)
+
+    @reactive.effect
+    @reactive.event(input.btn_create_outline)
+    def createOutline():
+
+        topic = input.text_topic().strip()
+        if not topic: 
+            ui.notification_show('Please provide a topic', type='error')
+            return
+        
+        llm = input.select_llm()
+        temperature = input.slide_temp()
+        instructions = input.text_instructions()
+
+        agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
+
+        response = agent.invoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})['response']
+
+        print(response)
+        
+        outline.set(response)
+
+    def clear():
+        outline.set('')
+
+    @reactive.effect
+    @reactive.event(outline_from_outline_manager, ignore_init=True)
+    def saveOutlineForContentGeneration():
+        saved_outline.set(outline_from_outline_manager.get())
+        outline_creator_options.set({'show': False, 'show_init_view': False})

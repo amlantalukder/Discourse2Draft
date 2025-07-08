@@ -26,6 +26,9 @@ body {
   padding-left: 10px;
   padding-right: 10px;
 }
+.app-container * {
+  font-family: inherit !important;
+}
 
 .btn:hover svg {
   fill: #fff !important;
@@ -166,7 +169,6 @@ div.app-body-container div.app-body div.content-container div.content-header .te
 div.app-body-container div.app-body div.content-container div.content {
   background-color: #f0f0fa;
   flex: 1 1 auto;
-  height: 100px;
 }
 div.app-body-container div.app-body div.content-container div.content h1 {
   padding-top: 20px;
@@ -226,61 +228,86 @@ div.outline h6 {
   font-size: 1.05em !important;
 }
 
-div.outline-builder-container {
-  overflow-y: auto;
+div.flex-rest {
+  flex: 1 1 auto;
+}
+
+div.outline-manager-container {
   display: flex !important;
   flex-direction: column;
-  height: 90vh;
+  padding: 20px;
+  gap: 10px;
+  height: 100%;
+}
+div.outline-manager-container div.outline-manager {
   padding: 10px;
-}
-div.outline-builder-container div.outline-builder {
-  margin: 20px;
-}
-div.outline-builder-container div.outline-builder div.content {
   font-size: 0.8em;
+  overflow-y: auto;
 }
-div.outline-builder-container div.outline-builder div.content h1,
-div.outline-builder-container div.outline-builder div.content h2,
-div.outline-builder-container div.outline-builder div.content h3,
-div.outline-builder-container div.outline-builder div.content h4,
-div.outline-builder-container div.outline-builder div.content h5,
-div.outline-builder-container div.outline-builder div.content h6,
-div.outline-builder-container div.outline-builder div.content p {
+div.outline-manager-container div.outline-manager h1,
+div.outline-manager-container div.outline-manager h2,
+div.outline-manager-container div.outline-manager h3,
+div.outline-manager-container div.outline-manager h4,
+div.outline-manager-container div.outline-manager h5,
+div.outline-manager-container div.outline-manager h6,
+div.outline-manager-container div.outline-manager p {
   margin: 0;
   padding: 0;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h1, > div > h2, > div > h3, > div > h4, > div > h5, > div > h6, > div > p, > div > .form-group) {
+div.outline-manager-container div.outline-manager div:has(> div > h1, > div > h2, > div > h3, > div > h4, > div > h5, > div > h6, > div > p, > div > .form-group) {
   border: 1px solid #000;
   border-radius: 10px;
   padding: 10px;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h1) {
+div.outline-manager-container div.outline-manager div:has(> div > h1) {
   background-color: #f0e5e1;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h2) {
+div.outline-manager-container div.outline-manager div:has(> div > h2) {
   background-color: #ecf0d9;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h3) {
+div.outline-manager-container div.outline-manager div:has(> div > h3) {
   background-color: #e4f2e3;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h4) {
+div.outline-manager-container div.outline-manager div:has(> div > h4) {
   background-color: #dee7ef;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h5) {
+div.outline-manager-container div.outline-manager div:has(> div > h5) {
   background-color: #dddfef;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > h6) {
+div.outline-manager-container div.outline-manager div:has(> div > h6) {
   background-color: #eadbeb;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > p) {
+div.outline-manager-container div.outline-manager div:has(> div > p) {
   background-color: #ede9eb;
 }
-div.outline-builder-container div.outline-builder div.content div:has(> div > p.reserved-for-ai) {
+div.outline-manager-container div.outline-manager div:has(> div > p.reserved-for-ai) {
   background-color: #ecdde3;
 }
-div.outline-builder-container div.outline-builder div.content div > div > .form-group {
+div.outline-manager-container div.outline-manager div > div > .form-group {
   margin: 0;
   width: 100%;
+}
+
+div.outline-creator-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+div.outline-creator-container div.outline-creator-init-view {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2em;
+  flex: 1 1 auto;
+}
+div.outline-creator-container div.outline-creator {
+  padding: 20px;
+  min-width: 500px;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2em;
 }
 
 div.side-bar-docs-container {

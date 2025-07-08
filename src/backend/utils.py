@@ -40,6 +40,12 @@ class State(TypedDict):
     response: str
 
 # ---------------------------------------------------------------------------
+class StateOutline(TypedDict):
+    topic: str
+    steps: Annotated[List[str], add]
+    response: str
+
+# ---------------------------------------------------------------------------
 def retryInvoke(chain, input):
 
     for counter_retry in range(Config.RETRY_COUNTER):

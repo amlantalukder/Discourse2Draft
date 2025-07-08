@@ -26,6 +26,9 @@ body {
     padding-left: 10px;
     padding-right: 10px;
   }
+  * {
+    font-family: inherit !important;
+  }
 }
 
 .btn:hover svg {
@@ -183,7 +186,6 @@ div.app-body-container {
     div.content {
       background-color: #f0f0fa;
       flex: 1 1 auto;
-      height: 100px;
 
       h1 {
         padding-top: 20px;
@@ -261,65 +263,91 @@ div.outline {
   }
 }
 
-div.outline-builder-container {
-  overflow-y: auto;
+div.flex-rest {
+  flex: 1 1 auto;
+}
+
+div.outline-manager-container {
   display: flex !important;
   flex-direction: column;
-  height: 90vh;
-  padding: 10px;
+  padding: 20px;
+  gap: 10px;
+  height: 100%;
 
-  div.outline-builder {
-    margin: 20px;
+  div.outline-manager {
+    padding: 10px;
+    font-size: 0.8em;
+    overflow-y: auto;
 
-    div.content {
-      font-size: 0.8em;
-
-      h1,
-      h2,
-      h3,
-      h4,
-      h5,
-      h6,
-      p {
-        margin: 0;
-        padding: 0;
-      }
-
-      div:has(> div > h1, > div > h2, > div > h3, > div > h4, > div > h5, > div > h6, > div > p, > div > .form-group) {
-        border: 1px solid #000;
-        border-radius: 10px;
-        padding: 10px;
-      }
-
-      div:has(> div > h1) {
-        background-color: #f0e5e1;
-      }
-      div:has(> div > h2) {
-        background-color: #ecf0d9;
-      }
-      div:has(> div > h3) {
-        background-color: #e4f2e3;
-      }
-      div:has(> div > h4) {
-        background-color: #dee7ef;
-      }
-      div:has(> div > h5) {
-        background-color: #dddfef;
-      }
-      div:has(> div > h6) {
-        background-color: #eadbeb;
-      }
-      div:has(> div > p) {
-        background-color: #ede9eb;
-      }
-      div:has(> div > p.reserved-for-ai) {
-        background-color: #ecdde3;
-      }
-      div > div > .form-group {
-        margin: 0;
-        width: 100%;
-      }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p {
+      margin: 0;
+      padding: 0;
     }
+
+    div:has(> div > h1, > div > h2, > div > h3, > div > h4, > div > h5, > div > h6, > div > p, > div > .form-group) {
+      border: 1px solid #000;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    div:has(> div > h1) {
+      background-color: #f0e5e1;
+    }
+    div:has(> div > h2) {
+      background-color: #ecf0d9;
+    }
+    div:has(> div > h3) {
+      background-color: #e4f2e3;
+    }
+    div:has(> div > h4) {
+      background-color: #dee7ef;
+    }
+    div:has(> div > h5) {
+      background-color: #dddfef;
+    }
+    div:has(> div > h6) {
+      background-color: #eadbeb;
+    }
+    div:has(> div > p) {
+      background-color: #ede9eb;
+    }
+    div:has(> div > p.reserved-for-ai) {
+      background-color: #ecdde3;
+    }
+    div > div > .form-group {
+      margin: 0;
+      width: 100%;
+    }
+  }
+}
+
+div.outline-creator-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+
+  div.outline-creator-init-view {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2em;
+    flex: 1 1 auto;
+  }
+
+  div.outline-creator {
+    padding: 20px;
+    min-width: 500px;
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2em;
   }
 }
 

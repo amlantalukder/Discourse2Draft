@@ -13,7 +13,7 @@ def mod_forgot_password(input, output, session, changeView):
         ui.tags.hr(),
         with ui.div(class_='d-flex flex-column p-3 gap-2'):
             with ui.div(class_='row'):
-                ui.input_text('txt_email', 'Email')
+                ui.input_text('textemail', 'Email')
             with ui.div(class_='row justify-content-between'):
                 with ui.div(class_='col-auto'):
                     ui.input_action_button('btn_show_login', 'Login')
@@ -41,7 +41,7 @@ def mod_forgot_password(input, output, session, changeView):
         # you == the recipient's email address
         msg['Subject'] = 'AI Word Processor: password reset'
         msg['From'] = 'amlanaccount@gmail.com'
-        msg['To'] = input.txt_email()
+        msg['To'] = input.textemail()
 
         # Send the message via our own SMTP server, but don't include the
         # envelope header.
