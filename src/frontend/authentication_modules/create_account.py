@@ -1,6 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui
-from ..db import selectFromDB, insertIntoDB, encryptPassword
+from ...backend.db import selectFromDB, insertIntoDB, encryptPassword
 from utils import print_func_name
 from datetime import datetime
 

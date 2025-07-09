@@ -1,4 +1,4 @@
-from .vectordb import ChromaDB
+from ..vectordb import ChromaDB
 from .utils import Config, State
 from rich import print
 

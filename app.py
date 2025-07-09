@@ -6,11 +6,10 @@ from src.frontend.main import mod_main
 from src.frontend.authentication_modules.authentication import mod_authentication
 from src.frontend.settings import mod_settings
 from src.frontend.defaults import ConfigApp
-from src.frontend.db import selectFromDB, insertIntoDB, updateDB, generated_files_status, generated_files_ai_architecture
-from src.frontend.common import detachDocs
+from src.frontend.common import detachDocs, initProfile
+from src.backend.db import selectFromDB, insertIntoDB, updateDB
 from datetime import datetime
 from utils import Config, print_func_name, getUIID
-import json
 import asyncio
 
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='link_files')
@@ -60,14 +59,8 @@ with ui.div(class_="app-container"):
         @print_func_name
         def renderFileNameSaveOption():
             if login_status.get() in ['logged_in', 'guest']:
-                with ui.div(class_='col file-name'):
-                    ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
-                    ui.input_action_button('btn_save_file_name', 'Save')
                 with ui.div(class_='col d-flex justify-content-end'):
                     with ui.div(class_='d-flex gap-2'):
-                        with ui.tooltip(placement="top"):
-                            ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
-                            "New File"
                         with ui.tooltip(placement="top"):
                             with ui.div():
                                 with ui.popover(placement='bottom', options={'trigger': 'focus'}):
@@ -87,8 +80,7 @@ with ui.div(class_="app-container"):
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
             mod_main(id=getUIID('main'), 
-                        config_app=config_app, 
-                        updateFileNameFlag=updateFileNameFlag,
+                        config_app=config_app,
                         reload_main_view_flag=reload_main_view_flag,
                         reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
                         settings_changed_flag=settings_changed_main_view_flag
@@ -108,106 +100,9 @@ def loadCachedEmail():
     changeLoginStatus('logged_in')
 
 @print_func_name
-def updateFileNameFlag(file_name):
-    current_file_name.set(file_name)
-
-@reactive.effect
-@reactive.event(input.btn_save_file_name)
-@print_func_name
-def saveFileName():
-    file_name = input.text_file_name()
-
-    if config_app.file_name == file_name: return
-
-    valid_file_statuses = list({e.value for e in generated_files_status} - {generated_files_status.DELETED.value})
-    if config_app.email != '':
-        records = selectFromDB('generated_files', 
-                            field_names=['email', 'file_name', 'status'], 
-                            field_values=[[config_app.email], [file_name], valid_file_statuses])
-    else:
-        records = selectFromDB('generated_files', 
-                            field_names=['session', 'file_name', 'status'], 
-                            field_values=[[config_app.session], [file_name], valid_file_statuses])
-    
-    if not records.empty:
-        ui.notification_show('File name already exists.', type='error')
-        return 
-    
-    current_time = datetime.now()
-
-    if config_app.generated_files_id:
-        
-        updateDB(table_name='generated_files',
-                 update_fields=['file_name', 'update_date'],
-                 update_values=[file_name, current_time],
-                 select_fields=['id'],
-                 select_values=[[config_app.generated_files_id]])
-        
-        config_app.file_name = file_name
-
-    else:
-        ids = insertIntoDB(table_name='generated_files', 
-                    field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
-                    field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [generated_files_ai_architecture.BASE.value], [file_name], 
-                                'created', [current_time], [current_time]])
-        
-        config_app.generated_files_id = ids[0]
-        config_app.file_name = file_name
-
-        outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
-
-        with open(outline_file_path, 'w') as fp:
-            json.dump({}, fp)
-        
-        settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())
-
-    reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())
-    
-    ui.notification_show('File name saved.', type='message')
-
-@reactive.effect
-@reactive.event(input.btn_new_file)
-@print_func_name
-def showNewFile():
-    config_app.file_name = ''
-    config_app.generated_files_id = None
-    config_app.vector_db_collections_id = None
-    initProfile()
-
-    reload_main_view_flag.set(not reload_main_view_flag.get())
-
-@reactive.effect
-@reactive.event(current_file_name)
-@print_func_name
-def updateFileName():
-    ui.update_text(id='text_file_name', value=current_file_name.get())
-
-@print_func_name
-def initProfile():
-    if config_app.email != '':
-        records = selectFromDB('settings', 
-                    field_names=['email'],
-                    field_values=[[config_app.email]],
-                    order_by_field_names=['update_date'],
-                    order_by_types=['DESC'],
-                    limit=1)
-    else:
-        records = selectFromDB('settings', 
-                    field_names=['session'],
-                    field_values=[[config_app.session_id]],
-                    order_by_field_names=['update_date'],
-                    order_by_types=['DESC'],
-                    limit=1)
-
-    config_app.settings_id = int(records['id'].iloc[0])
-    config_app.llm = records['llm'].iloc[0]
-    config_app.temperature = float(records['temperature'].iloc[0])
-    config_app.instructions = records['instructions'].iloc[0]
-
-@print_func_name
 def changeLoginStatus(status):
     login_status.set(status)
-    initProfile()
+    initProfile(config_app)
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
     settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())
     
@@ -264,7 +159,7 @@ def saveSettingsToDB():
                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
                     field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
         
-        initProfile()
+        initProfile(config_app)
 
     else:
         updateDB(table_name='settings',

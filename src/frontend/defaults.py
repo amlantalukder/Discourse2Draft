@@ -1,5 +1,4 @@
-from ..backend.architecture import Architecture
-from .db import generated_files_ai_architecture, generated_files_status
+from ..backend.ai.architecture import Architecture
 import textwrap
 
 class ConfigApp:

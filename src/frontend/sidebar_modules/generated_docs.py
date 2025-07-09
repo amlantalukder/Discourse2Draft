@@ -2,12 +2,12 @@ from shiny import reactive
 from shiny.express import ui, render, module
 import faicons
 from utils import Config, getUIID, print_func_name
-from ..db import updateDB, \
+from ...backend.db import updateDB, \
                 generated_files_status, \
                 generated_files_ai_architecture, \
                 Config as db_config
 from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
-from ...backend.architecture import Architecture
+from ...backend.ai.architecture import Architecture
 from datetime import datetime
 
 @module

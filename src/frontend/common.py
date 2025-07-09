@@ -3,7 +3,7 @@ from shiny.types import ImgData
 from utils import Config, print_func_name
 from pathlib import Path
 import pandas as pd
-from .db import selectFromDB, updateDB, \
+from ..backend.db import selectFromDB, updateDB, \
                 vector_db_collections_status, \
                 generated_files_status, \
                 generated_files_ai_architecture
@@ -11,6 +11,28 @@ from ..backend.vectordb import deleteCollection
 from datetime import datetime
 import json
 import re
+
+@print_func_name
+def initProfile(config_app):
+    if config_app.email != '':
+        records = selectFromDB('settings', 
+                    field_names=['email'],
+                    field_values=[[config_app.email]],
+                    order_by_field_names=['update_date'],
+                    order_by_types=['DESC'],
+                    limit=1)
+    else:
+        records = selectFromDB('settings', 
+                    field_names=['session'],
+                    field_values=[[config_app.session_id]],
+                    order_by_field_names=['update_date'],
+                    order_by_types=['DESC'],
+                    limit=1)
+
+    config_app.settings_id = int(records['id'].iloc[0])
+    config_app.llm = records['llm'].iloc[0]
+    config_app.temperature = float(records['temperature'].iloc[0])
+    config_app.instructions = records['instructions'].iloc[0]
 
 @print_func_name
 def getFileType(file_name):

@@ -3,12 +3,12 @@ from shiny.express import ui, module, render, expressify
 from shiny.types import FileInfo
 import faicons
 from ..common import getFileType, getFileTypeIcon
-from ..db import selectFromDB, insertIntoDB, updateDB, \
+from ...backend.db import selectFromDB, insertIntoDB, updateDB, \
                 uploaded_files_status, \
                 vector_db_collections_status, \
                 generated_files_status, \
                 generated_files_ai_architecture
-from ...backend.architecture import Architecture
+from ...backend.ai.architecture import Architecture
 from ...backend.vectordb import getLoader, ChromaDB
 from pathlib import Path
 from datetime import datetime

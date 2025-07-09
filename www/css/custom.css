@@ -116,7 +116,14 @@ div.title-bar {
   justify-content: space-between;
   align-items: center;
   background-color: #bfc0fd;
-  flex: 0 1 60px;
+  height: 60px;
+}
+
+div.name-bar {
+  justify-content: space-between;
+  align-items: center;
+  background-color: #cccdff;
+  flex: 0 1 auto;
 }
 
 div.app-body-container {
@@ -129,12 +136,13 @@ div.app-body-container {
 div.app-body {
   display: flex !important;
   flex-direction: column;
-  flex: 1 1 auto;
+  height: 100%;
 }
 
 div.app-body-container .bslib-sidebar-layout {
   margin-bottom: 0;
   border-radius: 0;
+  border: 0;
 }
 div.app-body-container > div.bslib-sidebar-layout,
 div.app-body-container > div.bslib-sidebar-layout > div.main {
@@ -143,6 +151,7 @@ div.app-body-container > div.bslib-sidebar-layout > div.main {
 div.app-body-container > div.bslib-sidebar-layout > div.main {
   display: flex;
   flex-direction: column;
+  padding: 0;
 }
 div.app-body-container div.app-body div.content-container {
   flex: 1 1 auto;
@@ -169,6 +178,7 @@ div.app-body-container div.app-body div.content-container div.content-header .te
 div.app-body-container div.app-body div.content-container div.content {
   background-color: #f0f0fa;
   flex: 1 1 auto;
+  height: 100px;
 }
 div.app-body-container div.app-body div.content-container div.content h1 {
   padding-top: 20px;
@@ -243,6 +253,8 @@ div.outline-manager-container div.outline-manager {
   padding: 10px;
   font-size: 0.8em;
   overflow-y: auto;
+  height: 100px;
+  flex: 1 1 auto;
 }
 div.outline-manager-container div.outline-manager h1,
 div.outline-manager-container div.outline-manager h2,
@@ -292,22 +304,35 @@ div.outline-creator-container {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  background-color: #f0f0fa;
 }
 div.outline-creator-container div.outline-creator-init-view {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 2em;
+  gap: 10px;
   flex: 1 1 auto;
 }
 div.outline-creator-container div.outline-creator {
-  padding: 20px;
   min-width: 500px;
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 2em;
+  gap: 20px;
+}
+div.outline-creator-container div.outline-creator div.outline-creator-controls {
+  background-color: #e0e0f6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+}
+div.outline-creator-container div.outline-creator div.outline-creator-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  padding: 20px;
 }
 
 div.side-bar-docs-container {

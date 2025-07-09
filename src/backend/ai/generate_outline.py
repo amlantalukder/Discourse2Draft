@@ -1,7 +1,7 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
-from .utils import StateOutline, retryInvoke
+from .utils import StateOutline, retryInvoke, Config
 from .prompts import setPrompt
 
 # ---------------------------------------------------------------------------
@@ -22,15 +22,15 @@ class GenerateOutline:
     - Generate an outline with section, subsection headers.
     - Each outline must start with a "Title".
     - Do not provide "References" section or any other extra sections or sub-sections that may not have content on the topic. 
-    - Do not write then contents under a section or sub-section header. Instead place "<content>" tag wherever the content should be written.
+    - Place "<content>" tag wherever the content should be written.
     </Instructions>
 
     <Output format>
     - The outline must have "<content>" tag in place of actual content.
-    - Generate output in markdown format. Strictly follow the example below.
+    - Generate output in markdown format. Strictly follow the following example.
+    </Output format>
 
-    **Example:**
-
+    <Example>
     Topic: Hypertensive Disorders of Pregnancy
     
     Output:
@@ -43,17 +43,7 @@ class GenerateOutline:
     ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
     #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
     <content>
-    #### 2. Economic Impact
-    <content>
-    ### C. Classification of HDP (Overview based on major international guidelines - e.g., ACOG, ISSHP, WHO)
-    #### 1. Chronic Hypertension (Pre-existing)
-    <content>
-    #### 2. Gestational Hypertension
-    <content>
-    #### 3. Preeclampsia
-    <content>
-
-    </Output format>
+    </Example>
     '''
 
     generate_outline_human_prompt = lambda self, instructions: (f'''
@@ -66,8 +56,6 @@ class GenerateOutline:
     <Topic>
     {topic}
     </Topic>
-
-    Generate the outline on the given topic in markdown format.
     ''')
 
 
@@ -83,10 +71,18 @@ class GenerateOutline:
     def __call__(self, state: StateOutline):
         '''LLM generates reports from a given outline'''
         
-        response = retryInvoke(self.generate_outline_chain, input={'topic': state['topic']})
-        try:
-            response = dict(response)['content']
-        except:
-            raise Exception(f'GenerateOutline response does not have content, response: {response}')
+        for _ in range(Config.RETRY_COUNTER):
+            
+            response = retryInvoke(self.generate_outline_chain, input={'topic': state['topic']})
+            try:
+                response = dict(response)['content']
+            except:
+                raise Exception(f'GenerateOutline response does not have content, response: {response}')
+            
+            if '<content>' in response:
+                break
+
+            print('Response does not have <content> tag. Retrying...')
+
 
         return {'response': response, 'steps': ['Generate Outline']}

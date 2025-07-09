@@ -1,8 +1,9 @@
 from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module
 from utils import print_func_name, getUIID
-from ..backend.llms import extractAvailableLLMs
-from ..backend.architecture import ArchitectureOutline
+from ..backend.ai.llms import extractAvailableLLMs
+from ..backend.ai.architecture import ArchitectureOutline
+from langsmith import traceable
 import faicons
 import re
 
@@ -381,7 +382,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
     show_create_outline_view = reactive.value(not show_init_view)
     outline_from_outline_manager = reactive.value('')
-    outline = reactive.value('')
+    outline_content = reactive.value('Outline will appear here')
     
     with ui.div(class_='outline-creator-container'):
         @render.express
@@ -394,39 +395,51 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
                     ui.input_action_button('btn_use_custom_outline', 'Use custom outline')
                     return
             
-            with ui.div(class_='outline-creator gap-2'):
-                with ui.accordion(open=False, multiple=False):
-                    with ui.accordion_panel('AI settings'):
-                        with ui.div(class_='row justify-content-between'):
-                            ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
-                            ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
-                        ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
-                with ui.div(class_='d-flex gap-4 align-items-end'):
-                    with ui.div(class_='col'):
-                        ui.input_text_area('text_topic', '', placeholder='Write a topic', rows=4, width='100%', resize='vertical')
-                    with ui.div(class_='col-auto pb-4'):
-                        ui.input_action_button('btn_create_outline', 'Create outline')
-                @render.express
-                @print_func_name
-                def renderOutline():
-                    if not outline.get():
-                        "Outline will be shown here"
-                        return
-                    with ui.div(class_='border rounded'):
-                        mod_outline_manager(getUIID('outline_manager'), outline=outline.get(), saved_outline=outline_from_outline_manager, close_fn=clear)
+            with ui.div(class_='outline-creator'):
+                with ui.div(class_='outline-creator-controls'):
+                    with ui.accordion(open=False, multiple=False):
+                        with ui.accordion_panel('AI settings'):
+                            with ui.div(class_='row justify-content-between'):
+                                ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
+                                ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
+                            ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
+                    with ui.div(class_='d-flex gap-4 align-items-end'):
+                        with ui.div(class_='col'):
+                            ui.input_text_area('text_topic', 'Topic', placeholder='Write a topic', rows=4, width='100%', resize='vertical')
+                        with ui.div(class_='col-auto pb-4'):
+                            ui.input_task_button('btn_create_outline', 'Create outline')
+                with ui.div(class_='outline-creator-content'):
+                    @render.express
+                    @print_func_name
+                    def renderOutline():
+                        outline_content.get()
+                                
 
     @reactive.effect
     @reactive.event(input.btn_use_custom_outline)
+    @print_func_name
     def useCustomOutline():
         outline_creator_options.set({'show': False, 'show_init_view': False})
 
     @reactive.effect
     @reactive.event(input.btn_show_create_outline_ai)
+    @print_func_name
     def showCreateOutlineView():
         show_create_outline_view.set(True)
 
+    @ui.bind_task_button(button_id="btn_create_outline")
+    @reactive.extended_task
+    @traceable
+    @print_func_name
+    async def generateOutline(agent, topic):
+        response = await agent.ainvoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})
+        response = response['response']
+        print(response)
+        return response
+    
     @reactive.effect
     @reactive.event(input.btn_create_outline)
+    @print_func_name
     def createOutline():
 
         topic = input.text_topic().strip()
@@ -440,17 +453,32 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
         agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
 
-        response = agent.invoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})['response']
+        generateOutline(agent, topic)
 
-        print(response)
-        
-        outline.set(response)
+    @reactive.effect
+    @print_func_name
+    def setContent():
+        match generateOutline.status():
+            case 'running':
+                outline_content.set("Creating outline...")
+            case 'error':
+                outline_content.set("Error in creating outline.")
+                print(generateOutline.result())
+            case 'success':
+                response = generateOutline.result()
+                content = core_ui.div(
+                        mod_outline_manager(getUIID('outline_manager'), outline=response, saved_outline=outline_from_outline_manager, close_fn=clearContent),
+                        class_='border rounded flex-rest'
+                    )
+                outline_content.set(content)
 
-    def clear():
-        outline.set('')
+    @print_func_name
+    def clearContent():
+        outline_content.set('Outline will appear here')
 
     @reactive.effect
     @reactive.event(outline_from_outline_manager, ignore_init=True)
+    @print_func_name
     def saveOutlineForContentGeneration():
         saved_outline.set(outline_from_outline_manager.get())
         outline_creator_options.set({'show': False, 'show_init_view': False})

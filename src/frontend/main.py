@@ -2,12 +2,12 @@ from shiny import reactive
 from shiny.express import ui, render, module
 import faicons
 from utils import Config, getUIID, print_func_name
-from .db import updateDB, selectFromDB, \
-                generated_files_status
+from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
+                generated_files_status, \
+                generated_files_ai_architecture
 from .manage_outline import processOutline, createRawOutline, mod_outline_manager, mod_ai_outline_creator
 from .sidebar_modules.sidebar import mod_sidebar
-from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent
-from ..backend.architecture import Architecture
+from .common import initProfile, getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent
 import asyncio
 import json
 import textwrap
@@ -16,7 +16,7 @@ from datetime import datetime
 from rich import print
 
 @module
-def mod_main(input, output, session, config_app, updateFileNameFlag, reload_main_view_flag, reload_generated_docs_view_flag, settings_changed_flag):
+def mod_main(input, output, session, config_app, reload_main_view_flag, reload_generated_docs_view_flag, settings_changed_flag):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
@@ -53,6 +53,13 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_main
                     if options['show']:
                         mod_ai_outline_creator(getUIID('ai_outline_creator'), outline_creator_options, saved_outline=outline_from_outline_manager, show_init_view=options['show_init_view'])
                         return
+                    with ui.div(class_='row name-bar'):
+                        with ui.div(class_='col file-name'):
+                            ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
+                            ui.input_action_button('btn_save_file_name', 'Save')
+                            with ui.tooltip(placement="top"):
+                                ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
+                                "New File"
                     with ui.div(class_='row input'):
                         class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
                         with ui.div(class_=class_name_outline):
@@ -161,6 +168,71 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_main
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
     @reactive.effect
+    @reactive.event(input.btn_new_file)
+    @print_func_name
+    def showNewFile():
+        config_app.file_name = ''
+        config_app.generated_files_id = None
+        config_app.vector_db_collections_id = None
+        initProfile(config_app)
+
+        reload_main_view_flag.set(not reload_main_view_flag.get())
+
+    @reactive.effect
+    @reactive.event(input.btn_save_file_name)
+    @print_func_name
+    def saveFileName():
+        file_name = input.text_file_name()
+
+        if config_app.file_name == file_name: return
+
+        valid_file_statuses = list({e.value for e in generated_files_status} - {generated_files_status.DELETED.value})
+        if config_app.email != '':
+            records = selectFromDB('generated_files', 
+                                field_names=['email', 'file_name', 'status'], 
+                                field_values=[[config_app.email], [file_name], valid_file_statuses])
+        else:
+            records = selectFromDB('generated_files', 
+                                field_names=['session', 'file_name', 'status'], 
+                                field_values=[[config_app.session], [file_name], valid_file_statuses])
+        
+        if not records.empty:
+            ui.notification_show('File name already exists.', type='error')
+            return 
+        
+        current_time = datetime.now()
+
+        if config_app.generated_files_id:
+            
+            updateDB(table_name='generated_files',
+                    update_fields=['file_name', 'update_date'],
+                    update_values=[file_name, current_time],
+                    select_fields=['id'],
+                    select_values=[[config_app.generated_files_id]])
+            
+            config_app.file_name = file_name
+
+        else:
+            ids = insertIntoDB(table_name='generated_files', 
+                        field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
+                        field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [generated_files_ai_architecture.BASE.value], [file_name], 
+                                    'created', [current_time], [current_time]])
+            
+            config_app.generated_files_id = ids[0]
+            config_app.file_name = file_name
+
+            outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
+
+            with open(outline_file_path, 'w') as fp:
+                json.dump({}, fp)
+            
+            settings_changed_flag.set(not settings_changed_flag.get())
+
+        reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())
+        
+        ui.notification_show('File name saved.', type='message')
+
+    @reactive.effect
     @reactive.event(input.btn_open_outline_manager)
     @print_func_name
     def openOutlineManager():
@@ -249,7 +321,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_main
         if not config_app.file_name: 
             # Reset file name, outline and content
             ui.update_checkbox(id='chk_use_example', value=False)
-            updateFileNameFlag('')
+            ui.update_text(id='text_file_name', value='')
             ui.update_text_area(id='text_outline', value='')
             setContent('')
             references.set([])
@@ -267,7 +339,7 @@ def mod_main(input, output, session, config_app, updateFileNameFlag, reload_main
         stream.latest_stream.cancel()
 
         # Show file name, outline and content
-        updateFileNameFlag(config_app.file_name)
+        ui.update_text(id='text_file_name', value=config_app.file_name)
         ui.update_text_area(id='text_outline', value=raw_outline)
 
         attached_files = applyGetVectorDBFiles()
