@@ -87,6 +87,7 @@ def getGeneratedDocItemView(input, output, session,
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                        @print_func_name
                         async def renderDownloadDoc():
                             attached_files = applyGetVectorDBFiles()
                             content = getDocContent(file_id=info['id'], attached_files=attached_files)

@@ -116,6 +116,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                     if not outline_file_path.exists(): return
                                     with ui.tooltip(placement="right"):
                                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                        @print_func_name
                                         async def renderDownloadDoc():
                                             attached_files = applyGetVectorDBFiles()
                                             content = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
@@ -513,6 +514,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
         return True
 
+    @print_func_name
     async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_files=[]):
 
         @print_func_name
@@ -615,6 +617,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
             return content, ref_list
         
+        @print_func_name
         async def dummy(i=None):
             await asyncio.sleep(3)
             if i is None:
@@ -691,6 +694,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
             
             if write_n_contents > 0: write_n_contents -= 1
 
+    @print_func_name
     async def generate(regenerate):
 
         if config_app.file_name == '':
@@ -718,6 +722,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
     @reactive.effect
     @reactive.event(input.btn_resume_pause)
+    @print_func_name
     async def resumeOrPause():
 
         if config_app.is_writing: 
@@ -728,6 +733,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
     @reactive.effect
     @reactive.event(input.btn_regenerate)
+    @print_func_name
     async def startFromBeginning():
         await generate(regenerate=True)
 
