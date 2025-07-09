@@ -3,6 +3,7 @@ import uuid
 import functools
 import inspect
 from rich import print
+from src.backend.ai.utils import Config as ai_config
 
 class Config:
 
@@ -11,7 +12,12 @@ class Config:
     APP_NAME = 'AI Word Processor'
 
     debug_config = {'print': True,
-                    'detailed': False}
+                    'detailed': False,
+                    'debug_ai': False}
+    
+    if debug_config['debug_ai']:
+        ai_config.setEnvWithPrefix('LANGCHAIN')
+
 
 def read_in_chunks(file_object, chunk_size=1024):
     """Lazy function (generator) to read a file piece by piece.

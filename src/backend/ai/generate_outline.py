@@ -31,10 +31,11 @@ class GenerateOutline:
     </Output format>
 
     <Example>
-    Topic: Hypertensive Disorders of Pregnancy
-    
-    Output:
-    
+    <Topic> 
+    Hypertensive Disorders of Pregnancy
+    </Topic>
+
+    <Output>
     # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
     ## I. Introduction
     <content>
@@ -43,16 +44,20 @@ class GenerateOutline:
     ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
     #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
     <content>
+    </Output>
     </Example>
     '''
 
     generate_outline_human_prompt = lambda self, instructions: (f'''
     <Instructions>
     {instructions}
-    </Instructions>
     '''
     +
     '''
+    - Provide the output in the following format.
+    {format_instructions}
+    </Instructions>
+
     <Topic>
     {topic}
     </Topic>

@@ -6,9 +6,11 @@ from operator import add
 from typing import Annotated, List
 from langchain_core.exceptions import OutputParserException
 from rich import print
+import os
 
 # ---------------------------------------------------------------------------
 class Config:
+
     llms_with_structured_output_support = {'azure-gpt-4o', 'claude-3-5-sonnet', 'gemini-1.5-pro'}
     llms_selected = {
         'OpenAI': {'azure-o1-mini': 'o1-mini', 'azure-o1': 'o1', 'azure-o3-mini': 'o3-mini', 'azure-o3': 'o3', 'azure-gpt-4o': 'GPT-4o'}, 
@@ -29,6 +31,12 @@ class Config:
     SIMILARITY_METRIC = 'similarity_score_threshold'
     NUM_DOCS_MAX = 5
     SIMILARITY_THRESHOLD = 0.3
+
+    @staticmethod
+    def setEnvWithPrefix(prefix):
+        for k, v in Config.env_config.items():
+            if k.startswith(prefix):
+                os.environ[k] = v
 
 # ---------------------------------------------------------------------------
 class State(TypedDict):
