@@ -3,7 +3,6 @@ from shiny.express import ui, render, module
 from utils import print_func_name, getUIID
 from ..backend.ai.llms import extractAvailableLLMs
 from ..backend.ai.architecture import ArchitectureOutline
-from langsmith import traceable
 import faicons
 import re
 
@@ -429,7 +428,6 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
     @ui.bind_task_button(button_id="btn_create_outline")
     @reactive.extended_task
-    @traceable
     @print_func_name
     async def generateOutline(agent, topic):
         response = await agent.ainvoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})

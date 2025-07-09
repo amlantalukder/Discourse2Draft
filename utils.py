@@ -53,4 +53,25 @@ def print_func_name(func):
             else:
                 print(f"Calling {func.__module__}.{func_name}")
         return func(*args, **kwargs)
+    
+    @functools.wraps(func)
+    async def async_wrapper(*args, **kwargs):
+        if Config.debug_config['print']:
+
+            if func.__qualname__.split('.')[-1].startswith('render'):
+                func_name = f'[bold magenta]{func.__qualname__}[/bold magenta]'
+            else:
+                func_name = func.__qualname__
+
+            if Config.debug_config['detailed']:
+                func_args = inspect.signature(func).bind(*args, **kwargs).arguments
+                func_args_str = ", ".join(map("{0[0]} = {0[1]!r}".format, func_args.items()))
+                print(f"Calling {func.__module__}.{func_name} ( {func_args_str} )")
+            else:
+                print(f"Calling {func.__module__}.{func_name}")
+        return await func(*args, **kwargs)
+    
+    if inspect.iscoroutinefunction(func):
+        return async_wrapper
+    
     return wrapper
