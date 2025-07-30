@@ -1,5 +1,6 @@
 from ..vectordb import ChromaDB
-from .utils import Config, State
+from ..utils import Config
+from .common import State
 from rich import print
 
 # ---------------------------------------------------------------------------
@@ -14,7 +15,9 @@ class GatherContext:
                 est = []
             
                 for kw, doc_list in docs.items():
-                    est += [[len(d.metadata['app_file_id'].strip().split())*2 + len(d.page_content.strip().split()), kw, i] for i, d in enumerate(doc_list)]
+                    est += [[len(d.metadata['app_file_id'].strip().split()) + 
+                             len(d.metadata['app_file_name'].strip().split()) + 
+                             len(d.page_content.strip().split()), kw, i] for i, d in enumerate(doc_list)]
 
                 est = sorted(est)
                 
@@ -32,18 +35,28 @@ class GatherContext:
             docs_str = ''
             for kw, doc_list in docs.items():
                 docs_str += f'\n\n**{kw}**'
+                d_docs = {}
                 for i, d in enumerate(doc_list):
                     try:
                         content = ' '.join(d.page_content.strip().split()[:d_tok_est[kw][i]])
                         file_id = d.metadata['app_file_id']
-                        docs_str += '\n\n' + f'<{file_id}>{content}</{file_id}>'
+                        file_name = d.metadata['app_file_name']
+                        d_docs[(file_id, file_name)] = d_docs.get((file_id, file_name), '') + content + '\n\n'
                     except Warning as w:
                         print(f'Resource retriever formatting: {str(w)}')
+
+                for (file_id, file_name), content in d_docs.items():
+                    docs_str += '\n\n' + f'''\
+                    <{file_id}>
+                        <Reference>{file_name}</Reference>
+                        <Content>{content}</Content>
+                    </{file_id}>
+                    '''
 
             return docs_str
         
         self.docs_res = {}
-        for kw in keyphrases[:Config.MAX_KEYWORDS]:
+        for kw in keyphrases[:Config.MAX_KEYPHRASES]:
             try:
                 docs = self.db.invoke(kw)
                 if len(docs): self.docs_res[kw] = docs

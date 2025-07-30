@@ -100,7 +100,7 @@ def getGeneratedDocItemView(input, output, session,
     @reactive.calc
     @print_func_name
     def applyGetVectorDBFiles():
-        return getVectorDBFiles(info['vector_db_collections_id'])
+        return getVectorDBFiles(info['vector_db_collections_id_uploaded_files'])
 
     @reactive.effect
     @reactive.event(input.btn_show, ignore_init=True)
@@ -109,30 +109,42 @@ def getGeneratedDocItemView(input, output, session,
 
         # If invoked from the generated files detailed view
         ui.modal_remove()
+
+        int_ = lambda x: x if x is None else int(x)
         
         config_app.generated_files_id = info['id']
         config_app.file_name = info['file_name']
-        config_app.vector_db_collections_id = info['vector_db_collections_id']
+        config_app.vector_db_collections_id = int_(info['vector_db_collections_id_uploaded_files'])
+        config_app.vector_db_collections_id_lit_search = int_(info['vector_db_collections_id_literature'])
         config_app.llm = info['llm']
         config_app.temperature = info['temperature']
         config_app.instructions = info['instructions']
         
-        if config_app.vector_db_collections_id is None:
+        match info['ai_architecture']:
 
-            config_app.agent = Architecture(model_name=config_app.llm, 
-                                            temperature=config_app.temperature, 
-                                            instructions=config_app.instructions, 
-                                            type=generated_files_ai_architecture.BASE.value).agent
+            case generated_files_ai_architecture.BASE.value:
+
+                config_app.agent = Architecture(model_name=config_app.llm, 
+                                                temperature=config_app.temperature, 
+                                                instructions=config_app.instructions, 
+                                                type=generated_files_ai_architecture.BASE.value).agent
             
-        else:
+            case generated_files_ai_architecture.RAG.value:
 
-            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{int(config_app.vector_db_collections_id)}'
-            config_app.agent = Architecture(model_name=config_app.llm, 
-                                            temperature=config_app.temperature, 
-                                            instructions=config_app.instructions, 
-                                            type=generated_files_ai_architecture.RAG.value, 
-                                            collection_name=vector_db_collection_name).agent
+                vector_db_collection_name, vector_db_collection_name_lit_search = '', ''
+                
+                if config_app.vector_db_collections_id:
+                    vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{int(config_app.vector_db_collections_id)}'
+                
+                if config_app.vector_db_collections_id_lit_search:
+                    vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{int(config_app.vector_db_collections_id_lit_search)}'
 
+                config_app.agent = Architecture(model_name=config_app.llm, 
+                                                temperature=config_app.temperature, 
+                                                instructions=config_app.instructions, 
+                                                type=generated_files_ai_architecture.RAG.value, 
+                                                collection_name=vector_db_collection_name,
+                                                collection_name_lit_search=vector_db_collection_name_lit_search).agent
 
         reload_content_view_flag.set(not reload_content_view_flag.get())
 
@@ -162,7 +174,7 @@ def getGeneratedDocItemView(input, output, session,
     @reactive.event(input.btn_delete_rag, ignore_init=True)
     @print_func_name
     def applyDetachDocs():
-        detachDocs(generated_files_id = info['id'], vector_db_collections_id = info['vector_db_collections_id'])
+        detachDocs(generated_files_id = info['id'], vector_db_collections_id = info['vector_db_collections_id_uploaded_files'])
         reload_generated_docs_detailed_view_flag.set(not reload_generated_docs_detailed_view_flag.get())
 
     return content

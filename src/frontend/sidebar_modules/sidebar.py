@@ -11,7 +11,7 @@ def mod_sidebar(input, output, session, config_app, reload_rag_and_ref_flag, rel
 
     with ui.hold() as content:
         with ui.div():
-            with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=False):
+            with ui.accordion(id='acc_sidebar', open='Generated Documents' if config_app.email != '' else '', multiple=True):
                 with ui.accordion_panel('Generated Documents'):
 
                     @render.express

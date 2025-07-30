@@ -2,12 +2,15 @@ from shiny import reactive
 from shiny.express import ui, render, module
 import faicons
 from utils import Config, getUIID, print_func_name
+from ..backend.ai.architecture import Architecture
 from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
                 generated_files_status, \
-                generated_files_ai_architecture
-from .manage_outline import processOutline, createRawOutline, mod_outline_manager, mod_ai_outline_creator
+                generated_files_ai_architecture, \
+                vector_db_collections_type, \
+                vector_db_collections_status
+from .manage_outline import processOutline, getRawOutline, getOutlineHierarchyList, mod_outline_manager, mod_ai_outline_creator
 from .sidebar_modules.sidebar import mod_sidebar
-from .common import initProfile, getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent
+from .common import initProfile, getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection
 import asyncio
 import json
 import textwrap
@@ -63,9 +66,16 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                     with ui.div(class_='row input'):
                         class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
                         with ui.div(class_=class_name_outline):
-                            with ui.div(class_='row justify-content-between', style='font-size: 0.8em !important'):
-                                with ui.div(class_='col-2'):
-                                    ui.input_checkbox('chk_use_example', 'Use example', value=False)
+                            with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):
+                                with ui.div(class_='col'):
+                                    ui.input_checkbox('chk_use_example', 'Use example', value=False)            
+                                with ui.div(class_='d-flex flex-column col text-center'):
+                                    @render.ui
+                                    @print_func_name
+                                    def renderLLMandTemp():
+                                        _ = reload_content_view_flag(), settings_changed_flag()
+                                        return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
+                                                ui.span('(Can be changed in the settings panel in the top-right corner)')]
                                 with ui.div(class_='col'):
                                     @render.express
                                     @print_func_name
@@ -79,16 +89,6 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                             with ui.div(class_='d-flex flex-column gap-2'):
                                                 ui.input_action_button('btn_open_outline_manager', 'Manage outline in outline manager')
                                                 ui.input_action_button('btn_open_outline_creator', 'Create outline with AI')
-                                            
-                                with ui.div(class_='d-flex flex-column col text-center'):
-                                    @render.ui
-                                    @print_func_name
-                                    def renderLLMandTemp():
-                                        _ = reload_content_view_flag(), settings_changed_flag()
-                                        return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
-                                                ui.span('(Can be changed in the settings panel in the top-right corner)')]
-                                with ui.div(class_='col text-end'):
-                                    ui.p("(Drag the text area from the bottom right corner to show more text)")
                             ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
                         with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                             with ui.div(class_=class_name_controls):
@@ -118,8 +118,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                         @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
                                         @print_func_name
                                         async def renderDownloadDoc():
-                                            attached_files = applyGetVectorDBFiles()
-                                            content = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files)
+                                            content = getDocContent(file_id=config_app.generated_files_id)
                                             if content is None: return
                                             yield content
                                         "Download"
@@ -128,33 +127,41 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                         with ui.div(class_='content-header'):
                             ui.span('Content starts below ...')
 
-                            @render.express
-                            @print_func_name
-                            def renderRAGAndRefInfo():
-                                files = applyGetVectorDBFiles()
-                                
-                                if not files: return
-                
-                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                    ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
-                                    with ui.div(class_='d-flex flex-column gap-2'):
-                                        with ui.div():
-                                            for i, (_, file_name) in enumerate(files):
-                                                with ui.div(class_='d-flex gap-1'):
-                                                    with ui.div(class_='col-2 d-flex align-items-center'):
-                                                        getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
-                                                    with ui.div(class_='col d-flex align-items-center'):
-                                                        with ui.tooltip():
-                                                            ui.span(file_name, class_='cut-text')
-                                                            file_name
-                                        with ui.div(class_='text-end'):
-                                            with ui.tooltip():
-                                                ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
-                                                "De-attach documents"
+                            with ui.div(class_='d-flex gap-5 align-items-center'):
+                                @render.express
+                                @print_func_name
+                                def renderShowLitResearch():
+                                    if input.text_outline().strip():
+                                        ui.input_switch('switch_show_lit_research', 'Literature Search', value=(config_app.vector_db_collections_id_lit_search is not None))
+
+                                @render.express
+                                @print_func_name
+                                def renderRAGAndRefInfo():
+                                    files = applyGetVectorDBFiles()
+                                    
+                                    if not files: return
+                    
+                                    with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                        ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
+                                        with ui.div(class_='d-flex flex-column gap-2'):
+                                            with ui.div():
+                                                for i, (_, file_name, file_type) in enumerate(files):
+                                                    if file_type != vector_db_collections_type.UPLOADED_FILES.value: continue
+                                                    with ui.div(class_='d-flex gap-1'):
+                                                        with ui.div(class_='col-2 d-flex align-items-center'):
+                                                            getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
+                                                        with ui.div(class_='col d-flex align-items-center'):
+                                                            with ui.tooltip():
+                                                                ui.span(file_name, class_='cut-text')
+                                                                file_name
+                                            with ui.div(class_='text-end'):
+                                                with ui.tooltip():
+                                                    ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
+                                                    "De-attach documents"
                                         
-                        
-                        with ui.div(class_='content outline', id='content'):
-                            stream.ui(width='100%')
+                        with ui.div(class_='content outline'):
+                            with ui.div(id='content'):
+                                stream.ui(width='100%')
                             @render.express
                             @print_func_name
                             def renderReferences():
@@ -164,7 +171,11 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                     ui.h2('References')
                                     with ui.div(class_='d-flex flex-column gap-1 ms-3'):
                                         for i, ref in enumerate(refs):
-                                            ui.span(f'{i+1}. {ref}')
+                                            if 'http://' in ref:
+                                                with ui.div(class_='d-flex gap-1 flex-wrap'):
+                                                    ui.HTML(re.sub(r'( https?://\S+)', r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', f'{i+1}. {ref}'))
+                                            else:
+                                                ui.span(f'{i+1}. {ref}')
 
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
 
@@ -277,13 +288,87 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         references.set([])
         config_app.vector_db_collections_id = None
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+
+    @reactive.effect
+    @reactive.event(input.switch_show_lit_research, ignore_init=True)
+    @print_func_name
+    def enableLitResearch():
         
+        if not config_app.generated_files_id:
+            ui.notification_show("Please create a new file or select an existing file.", type="error")
+            return
+        
+        if not input.switch_show_lit_research():
+            if config_app.vector_db_collections_id_lit_search:
+                detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id_lit_search)
+                config_app.vector_db_collections_id_lit_search = None
+            return
+        
+        if config_app.vector_db_collections_id_lit_search: return
+
+        current_time = datetime.now()
+
+        # Reuse deleted literature type collections
+        records = selectFromDB(table_name='vector_db_collections',
+                                field_names=['generated_files_id', 'type'], 
+                                field_values=[[config_app.generated_files_id], ['literature']],
+                                order_by_field_names=['update_date'],
+                                order_by_types=['DESC'],
+                                limit=1)
+        
+        if not records.empty:
+            vector_db_collections_id = int(records['id'].iloc[0])
+            updateDB(table_name='vector_db_collections', 
+                    update_fields=['status', 'update_date'], 
+                    update_values=[vector_db_collections_status.ACTIVE.value, current_time], 
+                    select_fields=['id'], 
+                    select_values=[[vector_db_collections_id]])
+        else:
+            ids = insertIntoDB(table_name='vector_db_collections', 
+                        field_names=['email', 'session', 'generated_files_id', 'type', 'status', 'create_date', 'update_date'],
+                        field_values=[[config_app.email], [config_app.session_id], [config_app.generated_files_id],
+                                    [vector_db_collections_type.LITERATURE.value], 
+                                    [vector_db_collections_status.ACTIVE.value], 
+                                    [current_time], [current_time]])
+            vector_db_collections_id = ids[0]
+        
+        vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
+        createVectorDBCollection(collection_name=vector_db_collection_name_lit_search)
+
+        ai_architecture = generated_files_ai_architecture.RAG.value
+
+        updateDB(table_name='generated_files', 
+                update_fields=['ai_architecture', 'update_date'], 
+                update_values=[ai_architecture, current_time], 
+                select_fields=['id'], 
+                select_values=[[config_app.generated_files_id]])
+
+        if config_app.vector_db_collections_id:
+            vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id}'
+        else:
+            vector_db_collection_name = ''
+
+        config_app.vector_db_collections_id_lit_search = vector_db_collections_id
+        config_app.agent = Architecture(model_name=config_app.llm, 
+                                        temperature=config_app.temperature, 
+                                        instructions=config_app.instructions, 
+                                        type=ai_architecture,
+                                        collection_name= vector_db_collection_name,
+                                        collection_name_lit_search=vector_db_collection_name_lit_search).agent
+
     @reactive.calc
     @reactive.event(reload_rag_and_ref_flag)
     @print_func_name
     def applyGetVectorDBFiles():
-        
-        return getVectorDBFiles(config_app.vector_db_collections_id)
+
+        files = []
+
+        if config_app.vector_db_collections_id is not None:
+            files += getVectorDBFiles(config_app.vector_db_collections_id)
+        if config_app.vector_db_collections_id_lit_search is not None:
+            files += getVectorDBFiles(config_app.vector_db_collections_id_lit_search)
+
+        return files
     
     @reactive.effect
     @reactive.event(input.btn_delete_rag)
@@ -291,9 +376,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
     def applyDetachDocs():
 
         detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
-
         config_app.vector_db_collections_id = None
-
         reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
 
     @reactive.effect
@@ -334,7 +417,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
 
-        raw_outline = '\n'.join(createRawOutline(d_outline))
+        raw_outline = '\n'.join(getRawOutline(d_outline))
         
         # Cancel writing
         stream.latest_stream.cancel()
@@ -343,13 +426,13 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         ui.update_text(id='text_file_name', value=config_app.file_name)
         ui.update_text_area(id='text_outline', value=raw_outline)
 
-        attached_files = applyGetVectorDBFiles()
+        attached_references = applyGetVectorDBFiles()
         references.set([])
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path, 
                                                         write_n_contents=0, 
-                                                        attached_files=attached_files), 
+                                                        attached_references=attached_references), 
                                         clear=True))
         
     @reactive.effect
@@ -366,7 +449,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
 
-        raw_outline = '\n'.join(createRawOutline(d_outline))
+        raw_outline = '\n'.join(getRawOutline(d_outline))
         ui.update_text_area(id='text_outline', value=raw_outline)
 
     @print_func_name
@@ -425,13 +508,13 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         
         resetContentPara(d_outline, section_list, paragraph_index)
 
-        attached_files = applyGetVectorDBFiles()
+        attached_references = applyGetVectorDBFiles()
         references.set([])
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path,
                                                         write_n_contents=1,
-                                                        attached_files=attached_files), 
+                                                        attached_references=attached_references), 
                                         clear=True))
 
     @reactive.effect
@@ -515,7 +598,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         return True
 
     @print_func_name
-    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_files=[]):
+    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_references=[]):
 
         @print_func_name
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
@@ -597,24 +680,28 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
             d_outline[top_level_key]['References'] = [('ref', f'{i+1}. {v}') for i, v in enumerate(ref_list)]
 
         @print_func_name
-        def processCitation(content, ref_list):
+        def processCitation(content, ref_list, attached_references):
 
-            d_files = {str(k): v for k, v in attached_files}
-
-            refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
-            
+            ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
+    
+            refs_seen = set()
             d_ref = {}
-            for ref in refs:
-                if ref not in d_files: continue
-                try:
-                    d_ref[ref] = ref_list.index(d_files[ref]) + 1
-                except ValueError:
-                    ref_list.append(d_files[ref])
-                    d_ref[ref] = len(ref_list)
+            for refs, _ in ref_groups:
+                if refs in refs_seen: continue
+                refs_seen.add(refs)
+                for ref in refs.split(','):
+                    ref = ref.strip()
+                    if ref not in attached_references: continue
+                    if ref in d_ref: continue
+                    try:
+                        d_ref[ref] = ref_list.index(attached_references[ref]) + 1
+                    except ValueError:
+                        ref_list.append(attached_references[ref])
+                        d_ref[ref] = len(ref_list)
             
-            for ref, ref_index in d_ref.items():
-                content = content.replace(f'CITE({ref})', f'<a href="#:~:text=References">{ref_index}</a>')
-
+                ref_links = sorted([d_ref[ref.strip()] for ref in refs.split(',') if ref in d_ref])
+                content = content.replace(f'[CITE({refs})]', f'[{', '.join([f'<a href="#:~:text=References">{ref_cite}</a>' for ref_cite in ref_links])}]')
+        
             return content, ref_list
         
         @print_func_name
@@ -630,7 +717,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         len_last_content_pre, content_pre_new = 0, None
 
         ref_list = []
-
+        attached_references = {str(k): v for k, v, _ in attached_references}
         while True:
 
             content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline)
@@ -643,9 +730,8 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                 content_pre_new = content_pre[len_last_content_pre + 1:]
 
             content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
-            
-            if attached_files:
-                content_pre_new, ref_list = processCitation(content_pre_new, ref_list)
+            if attached_references:
+                content_pre_new, ref_list = processCitation(content_pre_new, ref_list, attached_references)
                 references.set(ref_list.copy())
                 await reactive.flush()
 
@@ -655,25 +741,26 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
             if write_n_contents == 0 or not is_gen_needed: break
         
-            # if attached_files:
+            # if attached_references:
             #     response = await dummy(len(ref_list))  
             # else:
             #     response = await dummy()
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
-            response = response['response']
+            
+            content = response['content']
+            attached_references = response['references']
 
-            print(response)
+            print(content)
 
-            insertContent(d_outline, current_section_list, response)
-
-            if attached_files:
-                response_with_citations, ref_list = processCitation(response, ref_list)
+            insertContent(d_outline, current_section_list, content)
+            if attached_references:
+                response_with_citations, ref_list = processCitation(content, ref_list, attached_references)
                 references.set(ref_list.copy())
                 await reactive.flush()
                 insertReferences(d_outline, ref_list)
                 tokens = response_with_citations.split(' ')
             else:
-                tokens = response.split(' ')
+                tokens = content.split(' ')
 
             for i, s in enumerate(tokens):
                 await asyncio.sleep(0.1 if not config_app.write_faster else 0.01)
@@ -712,10 +799,10 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
         references.set([])
 
-        attached_files = applyGetVectorDBFiles()
+        attached_references = applyGetVectorDBFiles()
         await stream.stream(generateResponse(d_outline, 
                                              outline_file_path,
-                                             attached_files=attached_files), 
+                                             attached_references=attached_references), 
                             clear=True)
 
         config_app.is_writing = True
@@ -761,13 +848,11 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                 else:
                     ui.notification_show("Writing stopped", type="warning")
 
-
             config_app.is_writing = False
 
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
         else:
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))
-
 
     @reactive.effect
     @reactive.event(input.btn_speed)

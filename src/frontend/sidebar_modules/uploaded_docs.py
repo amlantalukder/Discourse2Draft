@@ -2,14 +2,14 @@ from shiny import reactive
 from shiny.express import ui, module, render, expressify
 from shiny.types import FileInfo
 import faicons
-from ..common import getFileType, getFileTypeIcon
+from ..common import getFileType, getFileTypeIcon, loadFilesToVectorDBCollection
 from ...backend.db import selectFromDB, insertIntoDB, updateDB, \
                 uploaded_files_status, \
+                vector_db_collections_type, \
                 vector_db_collections_status, \
                 generated_files_status, \
                 generated_files_ai_architecture
 from ...backend.ai.architecture import Architecture
-from ...backend.vectordb import getLoader, ChromaDB
 from pathlib import Path
 from datetime import datetime
 from utils import Config, print_func_name
@@ -98,8 +98,8 @@ def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelec
         valid_file_statuses = list({e.value for e in generated_files_status} - {generated_files_status.DELETED.value})
 
         records = selectFromDB(table_name='generated_files',
-                                field_names=['vector_db_collections_id', 'status'],
-                                field_values=[list(map(int, records['id'].unique())), valid_file_statuses])
+                                field_names=['id', 'status'],
+                                field_values=[list(map(int, records['generated_files_id'].unique())), valid_file_statuses])
         
         if records.empty: return []
         
@@ -210,8 +210,8 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
             if records.empty:
 
                 ids = insertIntoDB(table_name='uploaded_files', 
-                            field_names=['email', 'session', 'file_name', 'status', 'update_date'], 
-                            field_values=[[config_app.email], [config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time]])
+                            field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
+                            field_values=[[config_app.email], [config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
                 uploaded_file_id = ids[0]
                 
             else:
@@ -262,36 +262,10 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
 
         selected_docs_changed_flag.set(not selected_docs_changed_flag.get())
 
-    @print_func_name
-    def createVectorDBCollection(collection_name: str, file_paths: list[Path], progress=None):
-    
-        docs = []
-
-        progress_counter = 1
-
-        for file_path in file_paths:
-            
-            if progress is not None:
-                progress.set(progress_counter, f'Extracting file {progress_counter}')
-                progress_counter += 1
-            
-            loader = getLoader(file_path=file_path)
-            
-            for doc in loader:
-                doc.metadata = {**{'app_file_id': Path(file_path).stem}, **{k: str(v) for k, v in doc.metadata.items()}}
-                docs.append(doc)
-
-        if progress is not None:
-            progress.set(progress_counter, 'Creating vector db')
-
-        db = ChromaDB()
-        db.create(collection_name=collection_name, delete_if_exists=True)
-        db.add(docs=docs)
-
     @reactive.effect
     @reactive.event(input.btn_attach_docs)
     @print_func_name
-    def attachDocs():
+    def attachUploadedDocs():
         
         if not selected_docs:
             ui.notification_show("Please select a document to attach.", type="error")
@@ -304,41 +278,45 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
         current_time = datetime.now()
 
         if config_app.vector_db_collections_id:
-
+             
             updateDB(table_name='vector_db_collections', 
                 update_fields=['status', 'update_date'], 
                 update_values=[vector_db_collections_status.DELETED.value, current_time], 
                 select_fields=['id'], 
                 select_values=[[config_app.vector_db_collections_id]])
-
+        
         ids = insertIntoDB(table_name='vector_db_collections', 
-                    field_names=['email', 'session', 'status', 'create_date', 'update_date'],
-                    field_values=[[config_app.email], [config_app.session_id], ['active'], [current_time], [current_time]]) 
+                    field_names=['email', 'session', 'generated_files_id', 'type', 'status', 'create_date', 'update_date'],
+                    field_values=[[config_app.email], [config_app.session_id], [config_app.generated_files_id],
+                                [vector_db_collections_type.UPLOADED_FILES.value], 
+                                [vector_db_collections_status.ACTIVE.value], 
+                                [current_time], [current_time]])
+        vector_db_collections_id = ids[0] 
 
         insertIntoDB(table_name='vector_db_collection_files', 
                     field_names=['vector_db_collections_id', 'uploaded_files_id', 'create_date', 'update_date'],
-                    field_values=[ids * len(selected_docs), 
+                    field_values=[[vector_db_collections_id] * len(selected_docs), 
                                 sorted([file_id for file_id, _ in selected_docs]), 
                                 [current_time] * len(selected_docs), 
                                 [current_time] * len(selected_docs)])
         
-        file_paths = [Config.DIR_DATA / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}' for file_id, file_name in selected_docs]
+        file_paths = [(Config.DIR_DATA / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}', file_name) for file_id, file_name in selected_docs]
         with ui.Progress(min=1, max=len(file_paths)+1) as p:
 
             p.set(message="Processing", detail="This may take a while...")
         
-            vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{int(ids[0])}'
-            createVectorDBCollection(collection_name=vector_db_collection_name, file_paths=file_paths, progress=p)
+            vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
+            loadFilesToVectorDBCollection(collection_name=vector_db_collection_name, file_paths=file_paths, progress=p)
         
         ai_architecture = generated_files_ai_architecture.RAG.value
 
         updateDB(table_name='generated_files', 
-                update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
-                update_values=[ai_architecture, ids[0], current_time], 
+                update_fields=['ai_architecture', 'update_date'], 
+                update_values=[ai_architecture, current_time], 
                 select_fields=['id'], 
                 select_values=[[config_app.generated_files_id]])
 
-        config_app.vector_db_collections_id = ids[0]
+        config_app.vector_db_collections_id = vector_db_collections_id
         config_app.agent = Architecture(model_name=config_app.llm, 
                                         temperature=config_app.temperature, 
                                         instructions=config_app.instructions, 

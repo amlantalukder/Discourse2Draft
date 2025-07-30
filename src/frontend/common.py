@@ -5,9 +5,11 @@ from pathlib import Path
 import pandas as pd
 from ..backend.db import selectFromDB, updateDB, \
                 vector_db_collections_status, \
+                vector_db_collections_type, \
                 generated_files_status, \
                 generated_files_ai_architecture
-from ..backend.vectordb import deleteCollection
+from ..backend.vectordb import ChromaDB, deleteCollection, getLoader
+from ..backend.ai.tools.search_pubmed import formatAPA
 from datetime import datetime
 import json
 import re
@@ -52,9 +54,51 @@ def getFileTypeIcon(input, output, session, file_type):
         return img
     
 @print_func_name
+def createVectorDBCollection(collection_name: str, replace_collection: bool=True):
+
+    db = ChromaDB()
+    if replace_collection: 
+        db.create(collection_name=collection_name, delete_if_exists=True)
+    else:
+        db.get(collection_name=collection_name)
+
+    return db
+
+@print_func_name
+def loadFilesToVectorDBCollection(collection_name: str, file_paths: list[tuple[Path, str]], replace_collection: bool=True, progress=None):
+
+    def loadFiles(file_paths):
+
+        docs = []
+
+        progress_counter = 1
+
+        for file_path, file_name in file_paths:
+            
+            if progress is not None:
+                progress.set(progress_counter, f'Extracting file {progress_counter}')
+                progress_counter += 1
+            
+            loader = getLoader(file_path=file_path)
+            
+            for doc in loader:
+                doc.metadata = {**{'app_file_id': Path(file_path).stem, 'app_file_name': file_name}, **{k: str(v) for k, v in doc.metadata.items()}}
+                docs.append(doc)
+
+        if progress is not None:
+            progress.set(progress_counter, 'Creating vector db')
+
+        return docs
+
+    docs = loadFiles(file_paths)
+
+    db = createVectorDBCollection(collection_name=collection_name, replace_collection=replace_collection)
+    db.add(docs=docs)
+    
+@print_func_name
 def getVectorDBFiles(vector_db_collections_id):
 
-    if vector_db_collections_id is None: return []
+    uploaded_files_info, literature_info = [], []
 
     vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
                                                 field_names=['id', 'status'], 
@@ -66,22 +110,45 @@ def getVectorDBFiles(vector_db_collections_id):
                                                 field_names=['vector_db_collections_id'], 
                                                 field_values=[[int(vector_db_collections_id)]])
     
-    uploaded_files_records = selectFromDB(table_name='uploaded_files',
+    if vector_db_collection_files_records.empty: return []
+
+    uploaded_files_id_list = list(map(int, vector_db_collection_files_records['uploaded_files_id'].dropna().values))
+
+    if uploaded_files_id_list: 
+
+        uploaded_files_records = selectFromDB(table_name='uploaded_files',
                                             field_names=['id'],
-                                            field_values=[list(map(int, vector_db_collection_files_records['uploaded_files_id'].values))])
+                                            field_values=[uploaded_files_id_list])
+        
+        uploaded_files_records['type'] = vector_db_collections_type.UPLOADED_FILES.value
+        
+        uploaded_files_info = list(uploaded_files_records[['id', 'file_name', 'type']].values)
+
     
-    return list(uploaded_files_records[['id', 'file_name']].values)
+    literature_id_list = list(vector_db_collection_files_records['literature_id'].dropna().values)
+
+    if literature_id_list:
+    
+        literature_records = selectFromDB(table_name='literature',
+                                        field_names=['id'],
+                                        field_values=[literature_id_list])
+        
+        literature_records['authors'] = literature_records['authors'].map(lambda authors: json.loads(authors.replace("'first_name': '", '"first_name": "').replace("'first_name'", '"first_name"').replace("'last_name': '", '"last_name": "').replace("'last_name'", '"last_name"').replace("'}", '"}').replace("',", '",')))
+        literature_records['reference'] = literature_records.apply(lambda x: formatAPA(dict(x[['authors', 'title', 'year', 'journal', 'volume', 'issue', 'pages', 'doi', 'pmid']])), axis=1)
+        literature_records['type'] = vector_db_collections_type.LITERATURE.value
+        
+        literature_info = list(literature_records[['id', 'reference', 'type']].values)
+
+    return uploaded_files_info + literature_info
 
 @print_func_name
 def detachDocs(generated_files_id, vector_db_collections_id):
 
-    if vector_db_collections_id is None: return
-
     current_time = datetime.now()
 
     updateDB(table_name='generated_files', 
-            update_fields=['ai_architecture', 'vector_db_collections_id', 'update_date'], 
-            update_values=[generated_files_ai_architecture.BASE.value, None, current_time], 
+            update_fields=['ai_architecture', 'update_date'], 
+            update_values=[generated_files_ai_architecture.BASE.value, current_time], 
             select_fields=['id'], 
             select_values=[[generated_files_id]])
     
@@ -91,7 +158,7 @@ def detachDocs(generated_files_id, vector_db_collections_id):
                 select_fields=['id'], 
                 select_values=[[vector_db_collections_id]]) 
 
-    vector_db_collection_name = f'{Config.APP_NAME.lower().replace(' ', '_')}_collection_{int(vector_db_collections_id)}'
+    vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
     deleteCollection(vector_db_collection_name)
 
 @print_func_name
@@ -112,14 +179,40 @@ def getGeneratedDocuments(email, session_id):
     
     if records.empty: return records
 
+    records_vector_db_collections = selectFromDB(table_name='vector_db_collections',
+                        field_names=['generated_files_id', 'status'],
+                        field_values=[list(map(int, records['id'].unique())), [vector_db_collections_status.ACTIVE.value]])
+
     records_settings = selectFromDB(table_name='settings',
                         field_names=['id'],
                         field_values=[list(map(int, records['settings_id'].unique()))])
+    
+    records = pd.merge(left=records, 
+                        right=records_vector_db_collections[['id', 'generated_files_id', 'type']], 
+                        left_on='id', right_on='generated_files_id', how='left',
+                        suffixes=[None, '_vector_db_collections'])
+    
     records = pd.merge(left=records, 
                         right=records_settings[['id', 'llm', 'temperature', 'instructions']], 
                         left_on='settings_id', right_on='id', how='left',
                         suffixes=[None, '_settings'])
-    return records
+    
+    records_pivot = {}
+    cols = list(records.columns[~records.columns.isin(['type', 'id_vector_db_collections', '_sa_instance_state'])])
+    for i, row in records.iterrows():
+        key = tuple(row[cols])
+        records_pivot[key] = records_pivot.get(key, [None, None])
+        if not pd.isna(row['id_vector_db_collections']):
+            if row['type'] == 'uploaded_files':
+                records_pivot[key][0] = row['id_vector_db_collections']
+            elif row['type'] == 'literature':
+                records_pivot[key][1] = row['id_vector_db_collections']
+    
+    records_pivot = pd.DataFrame([list(k) + v for k, v in records_pivot.items()], columns = cols + ['vector_db_collections_id_uploaded_files', 'vector_db_collections_id_literature'])
+
+    records_pivot = records_pivot.replace({float('nan'): None})
+
+    return records_pivot
 
 
 @print_func_name

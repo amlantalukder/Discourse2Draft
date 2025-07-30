@@ -59,11 +59,11 @@ def mod_create_account(input, output, session, config_app, changeView):
         current_time = datetime.now()
 
         insertIntoDB(table_name='credentials', 
-                     field_names=['email', 'first_name', 'last_name', 'password', 'update_date'], 
-                     field_values=[[email], [first_name], [last_name], [encryptPassword(password)], current_time])
+                     field_names=['email', 'first_name', 'last_name', 'password', 'create_date', 'update_date'], 
+                     field_values=[[email], [first_name], [last_name], [encryptPassword(password)], [current_time], [current_time]])
         insertIntoDB(table_name='settings', 
-                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
-                     field_values=[[email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
+                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'create_date', 'update_date'], 
+                     field_values=[[email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time], [current_time]])
 
         ui.notification_show('Account created.', type='message')
 

@@ -1,7 +1,8 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
-from .utils import StateOutline, retryInvoke, Config
+from ..utils import Config
+from .common import StateOutline, Config
 from .prompts import setPrompt
 
 # ---------------------------------------------------------------------------
@@ -66,10 +67,14 @@ class GenerateOutline:
 
     def __init__(self, llm, instructions):
 
-        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateOutlineSchema), llm=llm)
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateOutlineSchema), 
+                                             llm=llm,
+                                             max_retries=Config.RETRY_COUNTER)
+        
         self.generate_outline_prompt = setPrompt(self.generate_outline_system_prompt, 
                                                  self.generate_outline_human_prompt(instructions),
                                                  parser)
+        
         self.generate_outline_chain = self.generate_outline_prompt | llm | parser
 
 
@@ -78,9 +83,9 @@ class GenerateOutline:
         
         for _ in range(Config.RETRY_COUNTER):
             
-            response = retryInvoke(self.generate_outline_chain, input={'topic': state['topic']})
+            response = self.generate_outline_chain.invoke(input={'topic': state['topic']})
             try:
-                response = dict(response)['content']
+                content = dict(response)['content']
             except:
                 raise Exception(f'GenerateOutline response does not have content, response: {response}')
             
@@ -90,4 +95,4 @@ class GenerateOutline:
             print('Response does not have <content> tag. Retrying...')
 
 
-        return {'response': response, 'steps': ['Generate Outline']}
+        return {'content': content, 'steps': ['Generate Outline']}

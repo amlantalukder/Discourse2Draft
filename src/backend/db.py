@@ -3,10 +3,10 @@ import pandas as pd
 import hashlib
 import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import mapped_column, Mapped, Session, relationship
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.types import DateTime
+from sqlalchemy.orm import mapped_column, Mapped, Session
 from datetime import datetime
-from typing import Literal, List, Optional, get_args
+from typing import Literal, List, Optional
 import dotenv
 from enum import Enum
 
@@ -35,6 +35,7 @@ class generated_files_ai_architecture(Enum):
 
     BASE = 'base', 
     RAG = 'rag'
+    GRAPH_RAG = 'graphrag'
     #'rag+ref', 'rag+pretraining', 'rag+pretraining+ref', 
     #'graphrag', 'graphrag+ref', 'graphrag+pretraining', 'graphrag+pretraining+ref',
     #'deepresearch', 'deepresearch+ref']
@@ -44,6 +45,12 @@ class uploaded_files_status(Enum):
 
     UPLOADED = 'uploaded'
     DELETED = 'deleted'
+
+# -----------------------------------------------------------------------
+class vector_db_collections_type(Enum):
+
+    UPLOADED_FILES = 'uploaded_files'
+    LITERATURE = 'literature'
 
 # -----------------------------------------------------------------------
 class vector_db_collections_status(Enum):
@@ -78,7 +85,8 @@ class Credentials(Base):
     first_name: Mapped[str]
     last_name: Mapped[str]
     password: Mapped[str]
-    update_date: Mapped[datetime]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -98,7 +106,8 @@ class Settings(Base):
     llm: Mapped[str]
     temperature: Mapped[float]
     instructions: Mapped[str]
-    update_date: Mapped[datetime]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -119,9 +128,8 @@ class GeneratedFiles(Base):
     status: Mapped[str]
     settings_id: Mapped[Optional[int]] = mapped_column(sa.ForeignKey('settings.id'))
     ai_architecture: Mapped[str]
-    vector_db_collections_id: Mapped[Optional[int]] = mapped_column(sa.ForeignKey('vector_db_collections.id'))
-    create_date: Mapped[datetime]
-    update_date: Mapped[datetime]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -140,7 +148,34 @@ class UploadedFiles(Base):
     session: Mapped[str]
     file_name: Mapped[str]
     status: Mapped[str]
-    update_date: Mapped[datetime]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    def __init__(self, data):
+        for k in data:
+            setattr(self, k, data[k])
+
+    def __repr__(self):
+        return '\n'.join([f'{k}: {v}' for k, v in self.__dict__.items()])
+    
+# -----------------------------------------------------------------------
+class Literature(Base):
+
+    __tablename__ = 'literature'
+    
+    id: Mapped[str] = mapped_column(primary_key=True, index=True, unique=True)
+    authors: Mapped[str]
+    title: Mapped[str]
+    year: Mapped[str]
+    journal: Mapped[str]
+    volume: Mapped[str]
+    issue: Mapped[str]
+    pages: Mapped[str]
+    doi: Mapped[str]
+    pmid: Mapped[Optional[str]]
+    pmcid: Mapped[str]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -157,9 +192,11 @@ class VectorDBCollections(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True, unique=True)
     email: Mapped[str]
     session: Mapped[str]
+    type: Mapped[str]
+    generated_files_id: Mapped[int] = mapped_column(sa.ForeignKey('generated_files.id'))
     status: Mapped[str]
-    create_date: Mapped[datetime]
-    update_date: Mapped[datetime]
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -175,9 +212,10 @@ class VectorDBCollectionFiles(Base):
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True, unique=True)
     vector_db_collections_id: Mapped[int] = mapped_column(sa.ForeignKey('vector_db_collections.id'))
-    uploaded_files_id: Mapped[int] = mapped_column(sa.ForeignKey('uploaded_files.id'))
-    create_date: Mapped[datetime]
-    update_date: Mapped[datetime]
+    uploaded_files_id: Mapped[Optional[int]] = mapped_column(sa.ForeignKey('uploaded_files.id'))
+    literature_id: Mapped[Optional[str]] = mapped_column(sa.ForeignKey('literature.id'))
+    create_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    update_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     def __init__(self, data):
         for k in data:
@@ -194,6 +232,7 @@ tables = {'credentials': Credentials,
           'settings': Settings, 
           'generated_files': GeneratedFiles, 
           'uploaded_files': UploadedFiles,
+          'literature': Literature,
           'vector_db_collections': VectorDBCollections,
           'vector_db_collection_files': VectorDBCollectionFiles}
 

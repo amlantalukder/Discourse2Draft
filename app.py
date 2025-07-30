@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import ui, render, input, session, module
+from shiny.types import ImgData
 import faicons
 from pathlib import Path
 from src.frontend.main import mod_main
@@ -52,9 +53,19 @@ def mod_account_options(input, output, session, logOut):
         logOut()
 
 with ui.div(class_="app-container"):
-    with ui.div(class_='row title-bar'):
-        with ui.div(class_='col'):
-            ui.h4(Config.APP_NAME)
+    with ui.div(class_='title-bar'):
+        with ui.div(class_='col d-flex gap-3'):
+            ui.span(faicons.icon_svg("pen-nib", width='25px'), class_='d-flex align-items-center')
+            for c in Config.APP_NAME:
+                ui.h4(c, style='color: #144545; margin: 0; text-shadow: 2px 2px 4px rgb(0 0 0 / 34%);')
+            ui.span(faicons.icon_svg("pen-nib", width='25px'), class_='d-flex align-items-center')
+            # with ui.div():
+            #     @render.image()
+            #     @print_func_name
+            #     def icon():
+            #         img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'logo.png'), 
+            #                         "width": "100%"}
+            #         return img
         @render.express
         @print_func_name
         def renderFileNameSaveOption():
@@ -156,8 +167,8 @@ def saveSettingsToDB():
         records_generated_files = selectFromDB(table_name='generated_files', field_names=['settings_id'], field_values=[[config_app.settings_id]])
     if config_app.settings_id is None or (records_generated_files is not None and not records_generated_files.empty):
         insertIntoDB(table_name='settings', 
-                    field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
-                    field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
+                    field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'create_date', 'update_date'], 
+                    field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time], [current_time]])
         
         initProfile(config_app)
 
@@ -174,6 +185,9 @@ def changeSettings():
 
     saveSettingsToDB()
     
-    detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
+    if config_app.generated_files_id and config_app.vector_db_collections_id:
+        detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
+        config_app.vector_db_collections_id = None
+
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
     settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())

@@ -3,20 +3,21 @@ import uuid
 import functools
 import inspect
 from rich import print
-from src.backend.ai.utils import Config as ai_config
+from src.backend.utils import Config as backend_config
 
 class Config:
 
     DIR_HOME = Path(__file__).parent
     DIR_DATA = DIR_HOME / 'data'
-    APP_NAME = 'AI Word Processor'
+    APP_NAME = 'Discourse2Draft'
+    APP_NAME_AS_PREFIX = 'discourse2draft'
 
-    debug_config = {'print': True,
+    debug_config = {'print': False,
                     'detailed': False,
                     'debug_ai': False}
     
     if debug_config['debug_ai']:
-        ai_config.setEnvWithPrefix('LANGCHAIN')
+        backend_config.setEnvWithPrefix('LANGCHAIN')
 
 
 def read_in_chunks(file_object, chunk_size=1024):

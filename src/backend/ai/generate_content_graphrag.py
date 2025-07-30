@@ -1,21 +1,40 @@
 from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables.base import RunnableLambda
 from langchain.output_parsers.fix import OutputFixingParser
-from typing import List
+from langchain_core.tools import tool
+from langchain.chains import GraphQAChain
+from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, Field
-from .common import State, ReferenceSchema
+from .llms import getAIModel
+from .common import State
 from .prompts import setPrompt
 from ..utils import Config
 
-# ---------------------------------------------------------------------------
-class GenerateContentRAGSchema(BaseModel):
+@tool
+def graphSearch(query: str) -> str:
     '''
-    The content to fill the provided outline section
+    This tool provides the answer of a query using graph search
+    '''
+    llm = getAIModel('azure-gpt-4o')
+    result = []
+    for app_file_id, nx_graph in d_nx_graph.items():
+        chain = GraphQAChain.from_llm(
+            llm=llm, 
+            graph=nx_graph
+        )
+
+        result.append(f'<{app_file_id}>{chain.invoke(query)['result']}</{app_file_id}>')
+
+    return '\n\n'.join(result)
+
+class GenerateContentGraphRAGSchema(BaseModel):
+    '''
+    Returns the content to fill the provided outline section
     '''
     content: str = Field(description='Content to fill the provided outline section')
-    references: List[ReferenceSchema] = Field(description='A list references of the citations in the content')
 
 # ---------------------------------------------------------------------------
-class GenerateContentRAG:
+class GenerateContentGraphRAG:
 
     generate_content_system_prompt = '''\
     <Instructions>
@@ -57,10 +76,6 @@ class GenerateContentRAG:
     <Current Section>
     {{current_section}}
     </Current Section>
-
-    <RAG Context>
-    {{rag_context}}
-    </RAG Context>
     
     <Instructions>
     {instructions}
@@ -68,13 +83,12 @@ class GenerateContentRAG:
     - Find the <content> tag in Current Section. 
     - Write output texts that will fit in the <content> tag position and that will maintain continuity and relevance with the text above and below it.
     <Adding text from context>
-    - The context is provided with RAG Context under file_id tags. Each file_id tag contains the reference and content.
-    - In your writing, take context from the RAG Context whenever possible.
-    - At the end of your writing from the context, cite the RAG context with the file_id within "[" and "]" in the following format: \[CITE(file_id)\].
-    - If the context of a line is taken from the RAG context of multiple file_id's, you can cite all the file_ids in a comma separated string within "[" and "]" in the following format: \[CITE(file_id1, file_id2)\]. 
+    - You can get the RAG Context calling the tool with any query. If the tool response is not enough, you can call the tool multiple times.
+    - The RAG context from the tool is provided within file_id tag. In your writing, take context from the RAG Context whenever possible. 
+    - At the end of your writing from the context, cite the RAG context with the file_id by within "[" and "]" in the following format: \[CITE(file_id)\].
+    - If the context of a line is taken from the RAG context of multiple file_id's, you can cite all the file_ids in a comma separated string within "[" and "]" in the following format: \[CITE(file_id1, file_id2)\].
     - Do not put the citation after texts if the written texts are not from the RAG context.
     - If the written texts from RAG context is divided into multiple paragraphs, put citation at the end of each of the paragraphs.
-    - You must put the citation before the ending "." of the corresponding line.
     </Adding text from context>
 
     - Provide the output in the following format.
@@ -86,7 +100,9 @@ class GenerateContentRAG:
 
     def __init__(self, llm, instructions):
 
-        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateContentRAGSchema), 
+        self.llm = llm
+
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateContentGraphRAGSchema), 
                                              llm=llm,
                                              max_retries=Config.RETRY_COUNTER)
         
@@ -94,23 +110,23 @@ class GenerateContentRAG:
                                                 self.generate_content_human_prompt(instructions), 
                                                 parser)
         
-        self.generate_content_chain = self.generate_content_prompt | llm | parser
+        llm_with_tools = create_react_agent(model=llm, tools=[graphSearch]) 
+
+        self.generate_content_chain = self.generate_content_prompt | llm_with_tools | RunnableLambda(lambda x: x['messages'][-1]) | parser
+
 
     def __call__(self, state: State):
         '''LLM generates reports from a given outline'''
+
+        global d_nx_graph
+        d_nx_graph = state['graphrag_context']
         
         response = self.generate_content_chain.invoke(input={'content_pre': state['content_pre'],
-                                                             'current_section': state['current_section'],
-                                                             'rag_context': state['rag_context']})
+                                                             'current_section': state['current_section']})
+
         try:
-            response = dict(response)
-            content = response['content']
-            references = {}
-
-            for ref in response['references']:
-                references |= {ref.file_id: ref.file_name}
-
+            content = dict(response)['content']
         except:
-            raise Exception(f'GenerateContent response does not have content or references, response: {response}')
+            raise Exception(f'GenerateContent response does not have content, response: {response}')
 
-        return {'content': content, 'references': references, 'steps': ['Generate Content']}
+        return {'content': content, 'steps': ['Generate Content']}

@@ -80,8 +80,8 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
         current_time = datetime.now()
 
         insertIntoDB(table_name='settings', 
-                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'update_date'], 
-                     field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time]])
+                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'create_date', 'update_date'], 
+                     field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time], [current_time]])
 
         changeLoginStatus('guest')
 

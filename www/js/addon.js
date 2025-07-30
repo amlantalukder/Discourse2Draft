@@ -62,59 +62,67 @@ targetDiv = document.getElementById('content');
 //     document.removeEventListener("selectionchange", logSelection);
 // })
 
-targetDiv.addEventListener('mouseover', (event) => {
-    var element = event.target;
-    if (element.tagName == 'P') {
-        if (!element.classList.contains('highlight-with-color')) {
-            element.classList.add('highlight-with-color');
+console.log(targetDiv);
+
+if (targetDiv) {
+
+    targetDiv.addEventListener('mouseover', (event) => {
+        console.log('hello');
+        var element = event.target;
+        if (element.tagName == 'P') {
+            if (!element.classList.contains('highlight-with-color')) {
+                element.classList.add('highlight-with-color');
+            }
+
+            element.addEventListener('mouseout', (event) => {
+                element.classList.remove('highlight-with-color');
+            });
+        }
+    });
+
+    var current_element;
+
+    targetDiv.addEventListener('contextmenu', (event) => {
+
+        if (current_element) {
+            current_element.classList.remove('highlight-with-border');
         }
 
-        element.addEventListener('mouseout', (event) => {
-            element.classList.remove('highlight-with-color');
-        });
-    }
-});
+        current_element = event.target;
+        var hierarchy = getDOMHierarchy(current_element);
 
-var current_element;
+        console.log(hierarchy, !hierarchy);
+        if (!hierarchy.length) {
+            return;
+        }
 
-targetDiv.addEventListener('contextmenu', (event) => {
+        event.preventDefault(); // Prevent default browser menu
+        let menu = document.getElementById('main-ctx_menu');
 
-    if (current_element) {
-        current_element.classList.remove('highlight-with-border');
-    }
+        let ancestor_props = document.getElementsByClassName('app-container')[0].getBoundingClientRect();
+        let container_props = targetDiv.getBoundingClientRect();
 
-    current_element = event.target;
-    var hierarchy = getDOMHierarchy(current_element);
+        let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
+        let top = Math.min(event.clientY, container_props.bottom - 75) - ancestor_props.top;
 
-    console.log(hierarchy, !hierarchy);
-    if (!hierarchy.length) {
-        return;
-    }
+        if (!current_element.classList.contains('highlight-with-border')) {
+            current_element.classList.add('highlight-with-border');
+        }
 
-    event.preventDefault(); // Prevent default browser menu
-    let menu = document.getElementById('main-ctx_menu');
+        menu.style.display = 'block';
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
 
-    let ancestor_props = document.getElementsByClassName('app-container')[0].getBoundingClientRect();
-    let container_props = targetDiv.getBoundingClientRect();
+        Shiny.setInputValue("main-selected_para_hierarchy", hierarchy);
+    });
 
-    let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
-    let top = Math.min(event.clientY, container_props.bottom - 75) - ancestor_props.top;
+    $(document).bind("click", function (event) {
+        document.getElementById("main-ctx_menu").style.display = "none";
 
-    if (!current_element.classList.contains('highlight-with-border')) {
-        current_element.classList.add('highlight-with-border');
-    }
+        if (current_element) {
+            current_element.classList.remove('highlight-with-border');
+        }
+    });
+}
 
-    menu.style.display = 'block';
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
 
-    Shiny.setInputValue("main-selected_para_hierarchy", hierarchy);
-});
-
-$(document).bind("click", function (event) {
-    document.getElementById("main-ctx_menu").style.display = "none";
-
-    if (current_element) {
-        current_element.classList.remove('highlight-with-border');
-    }
-});

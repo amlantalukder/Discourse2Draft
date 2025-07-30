@@ -66,7 +66,25 @@ def processOutline(outline):
     return d_outline
 
 @print_func_name
-def createRawOutline(d, raw_outline=[], counter=1):
+def getOutlineHierarchyList(d, outline_hierarchy=[], current_hierarchy=[], counter=1):
+
+    if not isinstance(d, dict):
+        for k, v in d:
+            if k == 'content_ai':
+                outline_hierarchy.append(current_hierarchy)
+                return outline_hierarchy
+            else:
+                current_hierarchy.append(v)
+    else:
+        for k in d:
+            if k == 'References':
+                continue
+            outline_hierarchy = getOutlineHierarchyList(d[k], outline_hierarchy, current_hierarchy + [f'{'#' * counter} {k}'] if k != 'content' else current_hierarchy, counter+1)
+
+    return outline_hierarchy 
+
+@print_func_name
+def getRawOutline(d, raw_outline=[], counter=1):
 
     if not isinstance(d, dict):
         for k, v in d:
@@ -78,7 +96,7 @@ def createRawOutline(d, raw_outline=[], counter=1):
         for k in d:
             if k == 'References':
                 continue
-            raw_outline = createRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
+            raw_outline = getRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
 
     return raw_outline                                         
 
@@ -280,7 +298,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
 
         return content
 
-    d_outline = reactive.value({}) 
+    d_outline = reactive.value({})
 
     with ui.hold() as content:
         with ui.div(class_='outline-manager-container'):
@@ -314,7 +332,6 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                 show_insert_within = False
                                 for index_content, (v1, v2) in enumerate(d[k]):
                                     id_suffix_current = f'{id_suffix_prev}_{index}_content{index_content}' if id_suffix_prev else f'{index}_content{index_content}'
-                                    print(id_suffix_current, k)
                                     text = v2 if v2.startswith('<new>') else '[Reserved for AI content]' if v1 == 'content_ai' else v2
                                     outline_ui_elements.append(
                                         core_ui.div(
@@ -325,7 +342,6 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                 continue
 
                             id_suffix_current = f'{id_suffix_prev}_{index}' if id_suffix_prev else f'{index}'
-                            print(id_suffix_current, k)
                             text = f'{'#' * (level+1)} {k}' if not k.startswith('<new>') else k
                             outline_ui_elements.append(
                                 core_ui.div(
@@ -371,7 +387,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
     @reactive.event(input.btn_save)
     @print_func_name
     def save():
-        saved_outline.set('\n'.join(createRawOutline(d_outline.get())))
+        saved_outline.set('\n'.join(getRawOutline(d_outline.get())))
         ui.modal_remove()
                         
     return content
@@ -431,7 +447,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @print_func_name
     async def generateOutline(agent, topic):
         response = await agent.ainvoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})
-        response = response['response']
+        response = response['content']
         print(response)
         return response
     

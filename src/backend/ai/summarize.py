@@ -1,7 +1,8 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
-from .utils import State, Config, retryInvoke
+from ..utils import Config
+from .common import State
 from .prompts import setPrompt
 
 class SummarizeSchema(BaseModel):
@@ -38,14 +39,16 @@ class Summarize:
 
     def __init__(self, llm):
 
-        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=SummarizeSchema), llm=llm)
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=SummarizeSchema), 
+                                             llm=llm,
+                                             max_retries=Config.RETRY_COUNTER)
         self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt, parser)
         self.summarize_chain = self.summarize_prompt | llm | parser
 
     def __call__(self, state: State):
         '''LLM generates summary for a given content'''
 
-        response = retryInvoke(self.summarize_chain, input={'content': state['content_pre']})
+        response = self.summarize_chain.invoke(input={'content': state['content_pre']})
 
         try:
             response = dict(response)['summary']

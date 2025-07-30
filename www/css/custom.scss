@@ -124,10 +124,13 @@ div.account-container {
 }
 
 div.title-bar {
+  display: flex;
   justify-content: space-between;
   align-items: center;
   background-color: #bfc0fd;
   height: 60px;
+  padding-left: 20px;
+  padding-right: 20px;
 }
 
 div.name-bar {
@@ -184,6 +187,19 @@ div.app-body-container {
       background-color: #e7e7f8;
       display: flex;
       justify-content: space-between;
+      align-items: center;
+
+      .form-group {
+        margin: 0;
+        width: fit-content;
+        height: fit-content;
+        min-width: 0;
+        min-height: 0;
+        > * {
+          min-height: 0;
+          margin: 0;
+        }
+      }
 
       .text-link {
         font-family: inherit !important;
@@ -193,7 +209,7 @@ div.app-body-container {
     }
 
     div.content {
-      background-color: #f0f0fa;
+      background-color: #ffffff;
       flex: 1 1 auto;
       height: 100px;
 
@@ -237,7 +253,6 @@ div.app-body-container {
 }
 
 div.input {
-  padding-top: 10px;
   background-color: #e0e0f6;
   flex: 0 1 auto;
 }

@@ -1,9 +1,9 @@
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
 
 import requests
 from pathlib import Path
-from .utils import Config
+from ..utils import Config
 from utils import Config as config_base
 from rich import print
 
@@ -64,7 +64,7 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     return available_llms, available_embeddings
 
 # ---------------------------------------------------------------------------
-def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> AzureChatOpenAI | OpenAIEmbeddings:
+def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> ChatOpenAI | OpenAIEmbeddings:
     """
     Initializes either an OpenAI Chat LLM object based on the LLM name and temperature
     or an OpenAI embedding model
@@ -77,16 +77,15 @@ def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> Azu
 
     if not is_embedding:
     
-        return AzureChatOpenAI(
+        return ChatOpenAI(
             model=model_name,
-            azure_endpoint=Config.env_config.get('AI_BASE_URL'),
+            base_url=Config.env_config.get('AI_BASE_URL'),
             api_key=Config.env_config.get('AI_API_KEY'),
             temperature=temperature,
             max_tokens=None,
             timeout=None,
             max_retries=2,
             seed=1000,
-            api_version='2024-02-01',
             http_client=client
         )
     
@@ -94,5 +93,7 @@ def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> Azu
         model=model_name, 
         base_url=Config.env_config['AI_BASE_URL'], 
         api_key=Config.env_config['AI_API_KEY'],
-        http_client=client
+        request_timeout=None,
+        max_retries=2,
+        http_client=client,
     )
