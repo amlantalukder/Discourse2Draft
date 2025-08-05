@@ -19,7 +19,7 @@ from datetime import datetime
 from rich import print
 
 @module
-def mod_main(input, output, session, config_app, reload_main_view_flag, reload_generated_docs_view_flag, settings_changed_flag):
+def mod_main(input, output, session, config_app, reload_main_view_flag, reload_generated_docs_view_flag, settings_changed_flag, ui_id):
     
     file_change_flag = reactive.value(True)
     show_outline = reactive.value(True)
@@ -76,7 +76,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                         _ = reload_content_view_flag(), settings_changed_flag()
                                         return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
                                                 ui.span('(Can be changed in the settings panel in the top-right corner)')]
-                                with ui.div(class_='col'):
+                                with ui.div(class_='col text-end'):
                                     @render.express
                                     @print_func_name
                                     def renderManageOutline():
@@ -111,17 +111,34 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
                                 @render.express
                                 def renderDownloadOption():
+                                    attached_files, file_info = applyGetVectorDBFiles()
                                     _ = reload_content_view_flag()
                                     outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
                                     if not outline_file_path.exists(): return
-                                    with ui.tooltip(placement="right"):
-                                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                        @print_func_name
-                                        async def renderDownloadDoc():
-                                            content = getDocContent(file_id=config_app.generated_files_id)
-                                            if content is None: return
-                                            yield content
-                                        "Download"
+                                    content, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
+                                    if content is None: return
+                                    if bibs:
+                                        with ui.tooltip(placement="right"):
+                                            with ui.div():
+                                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                                    ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                                    with ui.div(class_='d-flex flex-column gap-2'):
+                                                        @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
+                                                        @print_func_name
+                                                        async def renderDownloadDoc():
+                                                            yield content
+                                                        @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
+                                                        @print_func_name
+                                                        async def renderDownloadBib():
+                                                            yield bibs
+                                            "Download"
+                                    else:
+                                        with ui.tooltip(placement="right"):
+                                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                            @print_func_name
+                                            async def renderDownloadDoc():
+                                                yield content
+                                            "Download"
                                 
                     with ui.div(class_='content-container'):
                         with ui.div(class_='content-header'):
@@ -137,7 +154,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                 @render.express
                                 @print_func_name
                                 def renderRAGAndRefInfo():
-                                    files = applyGetVectorDBFiles()
+                                    files, _ = applyGetVectorDBFiles()
                                     
                                     if not files: return
                     
@@ -311,7 +328,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         # Reuse deleted literature type collections
         records = selectFromDB(table_name='vector_db_collections',
                                 field_names=['generated_files_id', 'type'], 
-                                field_values=[[config_app.generated_files_id], ['literature']],
+                                field_values=[[config_app.generated_files_id], [vector_db_collections_type.LITERATURE.value]],
                                 order_by_field_names=['update_date'],
                                 order_by_types=['DESC'],
                                 limit=1)
@@ -361,14 +378,18 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
     @print_func_name
     def applyGetVectorDBFiles():
 
-        files = []
+        files, file_info = [], {}
 
         if config_app.vector_db_collections_id is not None:
-            files += getVectorDBFiles(config_app.vector_db_collections_id)
+            refs, uploaded_file_info = getVectorDBFiles(config_app.vector_db_collections_id)
+            files += refs
+            file_info |= uploaded_file_info
         if config_app.vector_db_collections_id_lit_search is not None:
-            files += getVectorDBFiles(config_app.vector_db_collections_id_lit_search)
+            refs, literature_info = getVectorDBFiles(config_app.vector_db_collections_id_lit_search)
+            files += refs
+            file_info |= literature_info
 
-        return files
+        return files, file_info
     
     @reactive.effect
     @reactive.event(input.btn_delete_rag)
@@ -426,7 +447,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         ui.update_text(id='text_file_name', value=config_app.file_name)
         ui.update_text_area(id='text_outline', value=raw_outline)
 
-        attached_references = applyGetVectorDBFiles()
+        attached_references, _ = applyGetVectorDBFiles()
         references.set([])
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
@@ -508,7 +529,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
         
         resetContentPara(d_outline, section_list, paragraph_index)
 
-        attached_references = applyGetVectorDBFiles()
+        attached_references, _ = applyGetVectorDBFiles()
         references.set([])
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
@@ -799,7 +820,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
 
         references.set([])
 
-        attached_references = applyGetVectorDBFiles()
+        attached_references, _ = applyGetVectorDBFiles()
         await stream.stream(generateResponse(d_outline, 
                                              outline_file_path,
                                              attached_references=attached_references), 
@@ -851,6 +872,10 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
             config_app.is_writing = False
 
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
+
+            loop = asyncio.get_event_loop()
+            loop.create_task(session.send_custom_message('reload_content', {'id_main': ui_id}))
+
         else:
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))
 

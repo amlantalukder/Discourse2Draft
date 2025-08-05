@@ -441,3 +441,11 @@ div.shiny-image-output {
   width: 100% !important;
   height: inherit !important;
 }
+
+div.text-container {
+  display: flex;
+  flex-direction: column;
+  height: 80vh;
+  overflow-y: auto;
+  padding: 20px;
+}

@@ -6,6 +6,7 @@ from pathlib import Path
 from src.frontend.main import mod_main
 from src.frontend.authentication_modules.authentication import mod_authentication
 from src.frontend.settings import mod_settings
+from src.frontend.about import mod_about
 from src.frontend.defaults import ConfigApp
 from src.frontend.common import detachDocs, initProfile
 from src.backend.db import selectFromDB, insertIntoDB, updateDB
@@ -17,7 +18,7 @@ ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.min.css", method='link_files')
 ui.include_css(Path(__file__).parent / "www" / "css" / "custom.css", method='link_files')
 
-ui.page_opts(title='', fillable=True, window_title=Config.APP_NAME)
+ui.page_opts(fillable=True, window_title=Config.APP_NAME)
 
 config_app = ConfigApp()
 config_app.session_id = session.id
@@ -59,19 +60,22 @@ with ui.div(class_="app-container"):
             for c in Config.APP_NAME:
                 ui.h4(c, style='color: #144545; margin: 0; text-shadow: 2px 2px 4px rgb(0 0 0 / 34%);')
             ui.span(faicons.icon_svg("pen-nib", width='25px'), class_='d-flex align-items-center')
+            with ui.tooltip():
+                ui.span('(Beta)')
+                "This version is frequently tested and updated with new features for better performance. Some features may still be unstable."
             # with ui.div():
             #     @render.image()
             #     @print_func_name
             #     def icon():
-            #         img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'logo.png'), 
+            #         img: ImgData = {"src": str(Config.DIR_HOME / 'www' / 'assets' / f'logo.png'), 
             #                         "width": "100%"}
             #         return img
         @render.express
         @print_func_name
         def renderFileNameSaveOption():
-            if login_status.get() in ['logged_in', 'guest']:
-                with ui.div(class_='col d-flex justify-content-end'):
-                    with ui.div(class_='d-flex gap-2'):
+            with ui.div(class_='col d-flex justify-content-end'):
+                with ui.div(class_='d-flex gap-2'):
+                    if login_status.get() in ['logged_in', 'guest']:                
                         with ui.tooltip(placement="top"):
                             with ui.div():
                                 with ui.popover(placement='bottom', options={'trigger': 'focus'}):
@@ -81,20 +85,20 @@ with ui.div(class_="app-container"):
                         with ui.tooltip(placement="top"):
                             ui.input_action_button('btn_settings', '', icon=faicons.icon_svg("gear"))
                             "Settings"
-            else:
-                # Without this empty div, there is an empty shin-html-output element,
-                # for which the header does not align center.
-                with ui.div(class_="col"):
-                    ""
+                    with ui.tooltip(placement="top"):
+                        ui.input_action_button('btn_about', '', icon=faicons.icon_svg("question"))
+                        "About"
     @render.express
     @print_func_name
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
-            mod_main(id=getUIID('main'), 
-                        config_app=config_app,
-                        reload_main_view_flag=reload_main_view_flag,
-                        reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
-                        settings_changed_flag=settings_changed_main_view_flag
+            id_mod_main = getUIID('main')
+            mod_main(id=id_mod_main, 
+                    config_app=config_app,
+                    reload_main_view_flag=reload_main_view_flag,
+                    reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
+                    settings_changed_flag=settings_changed_main_view_flag,
+                    ui_id=id_mod_main
             )
         else:
             mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
@@ -150,6 +154,25 @@ def showSettings():
     )
 
     ui.modal_show(m)
+
+@reactive.effect
+@reactive.event(input.btn_about)
+@print_func_name
+def showAbout():
+
+    about_view = mod_about(id=getUIID('about'))
+
+    m = ui.modal(
+        about_view,
+        title="About",
+        easy_close=True,
+        footer=None,
+        size='xl'
+    )
+
+    ui.modal_show(m)
+
+    return 
 
 @print_func_name
 def saveSettingsToDB():

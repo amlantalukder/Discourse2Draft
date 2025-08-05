@@ -27,13 +27,43 @@ def getGeneratedDocItemView(input, output, session,
                         info['file_name']                       
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
                 with ui.div(class_='col-auto d-flex align-items-center'):
-                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                    @print_func_name
-                    async def renderDownloadDoc():
-                        attached_files = applyGetVectorDBFiles()
-                        content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                    @render.express
+                    def renderDownloadOption():
+                        attached_files, file_info = applyGetVectorDBFiles()
+                        _ = reload_content_view_flag()
+                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                        if not outline_file_path.exists(): return
+                        content, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
                         if content is None: return
-                        yield content
+                        if bibs:
+                            with ui.tooltip(placement="right"):
+                                with ui.div():
+                                    with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                        ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                        with ui.div(class_='d-flex flex-column gap-2'):
+                                            @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
+                                            @print_func_name
+                                            async def renderDownloadDoc():
+                                                yield content
+                                            @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
+                                            @print_func_name
+                                            async def renderDownloadBib():
+                                                yield bibs
+                                "Download"
+                        else:
+                            with ui.tooltip(placement="right"):
+                                @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                @print_func_name
+                                async def renderDownloadDoc():
+                                    yield content
+                                "Download"
+                    # @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                    # @print_func_name
+                    # async def renderDownloadDoc():
+                        # attached_files = applyGetVectorDBFiles()
+                        # content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                        # if content is None: return
+                        # yield content
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
         else:
@@ -47,11 +77,11 @@ def getGeneratedDocItemView(input, output, session,
                 with ui.div(class_='app-td col-2'):
                     @render.express
                     def renderAttachedFiles():
-                        files = applyGetVectorDBFiles()
+                        files, _ = applyGetVectorDBFiles()
                         if not files: return
                         with ui.div(class_='border rounded p-2'):
                             with ui.div():
-                                for i, (_, file_name) in enumerate(files):
+                                for i, (_, file_name, _) in enumerate(files):
                                     with ui.div(class_='d-flex gap-1'):
                                         with ui.div(class_='col-2 d-flex align-items-center'):
                                             getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
@@ -86,13 +116,43 @@ def getGeneratedDocItemView(input, output, session,
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
-                        @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                        @print_func_name
-                        async def renderDownloadDoc():
-                            attached_files = applyGetVectorDBFiles()
-                            content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                        @render.express
+                        def renderDownloadOption():
+                            attached_files, file_info = applyGetVectorDBFiles()
+                            _ = reload_content_view_flag()
+                            outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                            if not outline_file_path.exists(): return
+                            content, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
                             if content is None: return
-                            yield content
+                            if bibs:
+                                with ui.tooltip(placement="right"):
+                                    with ui.div():
+                                        with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                            ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                            with ui.div(class_='d-flex flex-column gap-2'):
+                                                @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
+                                                @print_func_name
+                                                async def renderDownloadDoc():
+                                                    yield content
+                                                @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
+                                                @print_func_name
+                                                async def renderDownloadBib():
+                                                    yield bibs
+                                    "Download"
+                            else:
+                                with ui.tooltip(placement="right"):
+                                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                                    @print_func_name
+                                    async def renderDownloadDoc():
+                                        yield content
+                                    "Download"
+                        # @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
+                        # @print_func_name
+                        # async def renderDownloadDoc():
+                            # attached_files, _ = applyGetVectorDBFiles()
+                            # content = getDocContent(file_id=info['id'], attached_files=attached_files)
+                            # if content is None: return
+                            # yield content
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))

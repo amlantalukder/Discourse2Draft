@@ -49,7 +49,7 @@ def getFileTypeIcon(input, output, session, file_type):
     @render.image()
     @print_func_name
     def icon():
-        img: ImgData = {"src": str(Config.DIR_HOME / 'assets' / f'{file_type}_icon.png'), 
+        img: ImgData = {"src": str(Config.DIR_HOME / 'www' / 'assets' / f'{file_type}_icon.png'), 
                         "width": "100%"}
         return img
     
@@ -98,7 +98,9 @@ def loadFilesToVectorDBCollection(collection_name: str, file_paths: list[tuple[P
 @print_func_name
 def getVectorDBFiles(vector_db_collections_id):
 
-    uploaded_files_info, literature_info = [], []
+    if vector_db_collections_id is None: return [], {}
+
+    uploaded_files_info, literature_info, file_info = [], [], {}
 
     vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
                                                 field_names=['id', 'status'], 
@@ -124,6 +126,11 @@ def getVectorDBFiles(vector_db_collections_id):
         
         uploaded_files_info = list(uploaded_files_records[['id', 'file_name', 'type']].values)
 
+        uploaded_files_records['id'] = uploaded_files_records['id'].map(str)
+        uploaded_files_records['title'] = uploaded_files_records['file_name']
+
+        file_info |= uploaded_files_records[['id', 'title']].set_index('id').T.to_dict()
+
     
     literature_id_list = list(vector_db_collection_files_records['literature_id'].dropna().values)
 
@@ -139,7 +146,10 @@ def getVectorDBFiles(vector_db_collections_id):
         
         literature_info = list(literature_records[['id', 'reference', 'type']].values)
 
-    return uploaded_files_info + literature_info
+        literature_records['doi'] = literature_records['id']
+        file_info |= literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
+
+    return uploaded_files_info + literature_info, file_info
 
 @print_func_name
 def detachDocs(generated_files_id, vector_db_collections_id):
@@ -216,29 +226,76 @@ def getGeneratedDocuments(email, session_id):
 
 
 @print_func_name
-def getDocContent(file_id, attached_files=[]):
+def getDocContent(file_id, attached_files=[], file_info={}):
 
     @print_func_name
     def processCitation(content):
 
-        d_files = {str(k): v for k, v in attached_files}
+        # d_files = {str(k): v for k, v, _ in attached_files}
+        # used_files_info = {}
 
-        refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
+        # refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
 
+        # d_ref = {}
+        # ref_list = []
+        # for ref in refs:
+        #     if ref not in d_files: continue
+        #     try:
+        #         d_ref[ref] = ref_list.index(d_files[ref]) + 1
+        #     except ValueError:
+        #         ref_list.append(d_files[ref])
+        #         d_ref[ref] = len(ref_list)
+        
+        # for ref, ref_index in d_ref.items():
+        #     content = content.replace(f'CITE({ref})', f'{ref_index}')
+        #     used_files_info[ref] = file_info[ref] 
+
+        # return content, used_files_info
+    
+        attached_references = {str(k): v for k, v, _ in attached_files}
+        
+        ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
+    
+        refs_seen = set()
         d_ref = {}
         ref_list = []
-        for ref in refs:
-            if ref not in d_files: continue
-            try:
-                d_ref[ref] = ref_list.index(d_files[ref]) + 1
-            except ValueError:
-                ref_list.append(d_files[ref])
-                d_ref[ref] = len(ref_list)
+        used_files_info = {}
+        for refs, _ in ref_groups:
+            if refs in refs_seen: continue
+            refs_seen.add(refs)
+            for ref in refs.split(','):
+                ref = ref.strip()
+                if ref not in attached_references: continue
+                if ref in d_ref: continue
+                try:
+                    d_ref[ref] = ref_list.index(attached_references[ref]) + 1
+                except ValueError:
+                    ref_list.append(attached_references[ref])
+                    d_ref[ref] = len(ref_list)
+                    used_files_info[ref] = file_info[ref]
         
-        for ref, ref_index in d_ref.items():
-            content = content.replace(f'CITE({ref})', f'{ref_index}')
+            ref_links = sorted([str(d_ref[ref.strip()]) for ref in refs.split(',') if ref in d_ref])
+            content = content.replace(f'[CITE({refs})]', f'[{', '.join(ref_links)}]')
+    
+        return content, used_files_info
+    
+    @print_func_name
+    def getBibFormat(file_info):
 
-        return content
+        bib_text = ''
+        for k, v in file_info.items():
+            bib_ele = []
+            for k1, v1 in v.items():
+                if k1 == 'authors':
+                    authors = [f'{author['first_name']} {author['last_name']}' for author in v1]
+                    bib_ele.append(f'author = "{', '.join(authors)}"')
+                elif k1 == 'pages':
+                    bib_ele.append(f'{k1} = "{v1.replace('-', '--')}"')
+                else:
+                    bib_ele.append(f'{k1} = "{v1}"')
+            bib_text += f'@article{{{k},\n\t{',\n\t'.join(bib_ele)}\n}}\n\n'
+
+        return bib_text
 
     @print_func_name
     def extractContentFromOutline(d, raw_outline=[], counter=1):
@@ -258,7 +315,11 @@ def getDocContent(file_id, attached_files=[]):
         d_outline = json.load(fp)
 
     content = '\n'.join(extractContentFromOutline(d_outline))
-    if attached_files: content = processCitation(content)
+    if attached_files: 
+        content, used_files_info = processCitation(content)
+        bibs = getBibFormat(used_files_info)
+    else:
+        bibs = ''
 
-    return content
+    return content, bibs
     
