@@ -454,27 +454,26 @@ div.text-container {
 }
 div.text-container h1 {
   font-size: 1.5em !important;
-  margin-top: 20px;
 }
 div.text-container h2 {
   font-size: 1.25em !important;
-  margin-top: 15px;
 }
 div.text-container h3 {
   font-size: 1.15em !important;
-  margin-top: 12px;
 }
 div.text-container h4 {
   font-size: 1.1em !important;
-  margin-top: 10px;
 }
 div.text-container h5 {
   font-size: 1.05em !important;
-  margin-top: 8px;
 }
 div.text-container h6 {
   font-size: 1em !important;
-  margin-top: 5px;
+}
+
+div.toc-container {
+  padding: 10px;
+  background-color: #f2f2f2;
 }
 
 div.fig-container {

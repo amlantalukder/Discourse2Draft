@@ -42,10 +42,11 @@ def mod_about(input, output, session):
     with ui.hold() as content:
         with ui.layout_sidebar():
             with ui.sidebar():
-                @render.ui
-                @print_func_name
-                def renderSections():
-                    return extractOutlineSections()
+                with ui.div(class_='border rounded toc-container'):
+                    @render.ui
+                    @print_func_name
+                    def renderSections():
+                        return extractOutlineSections()
                     
             with ui.div(class_='text-container'):
                 @render.express
