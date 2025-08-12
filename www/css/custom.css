@@ -344,6 +344,9 @@ div.outline-creator-container div.outline-creator div.outline-creator-controls {
   gap: 10px;
   padding: 20px;
 }
+div.outline-creator-container div.outline-creator div.outline-creator-controls .form-group {
+  margin: 0;
+}
 div.outline-creator-container div.outline-creator div.outline-creator-content {
   display: flex;
   flex-direction: column;
@@ -447,5 +450,33 @@ div.text-container {
   flex-direction: column;
   height: 80vh;
   overflow-y: auto;
+  padding: 20px;
+}
+div.text-container h1 {
+  font-size: 1.5em !important;
+  margin-top: 20px;
+}
+div.text-container h2 {
+  font-size: 1.25em !important;
+  margin-top: 15px;
+}
+div.text-container h3 {
+  font-size: 1.15em !important;
+  margin-top: 12px;
+}
+div.text-container h4 {
+  font-size: 1.1em !important;
+  margin-top: 10px;
+}
+div.text-container h5 {
+  font-size: 1.05em !important;
+  margin-top: 8px;
+}
+div.text-container h6 {
+  font-size: 1em !important;
+  margin-top: 5px;
+}
+
+div.fig-container {
   padding: 20px;
 }

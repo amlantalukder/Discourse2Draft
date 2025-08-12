@@ -17,6 +17,7 @@ import textwrap
 import re
 from datetime import datetime
 from rich import print
+import io
 
 @module
 def mod_main(input, output, session, config_app, reload_main_view_flag, reload_generated_docs_view_flag, settings_changed_flag, ui_id):
@@ -109,36 +110,37 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                     ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
                                     "Writing Speed"
 
-                                @render.express
-                                def renderDownloadOption():
-                                    attached_files, file_info = applyGetVectorDBFiles()
-                                    _ = reload_content_view_flag()
-                                    outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
-                                    if not outline_file_path.exists(): return
-                                    content, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
-                                    if content is None: return
-                                    if bibs:
-                                        with ui.tooltip(placement="right"):
-                                            with ui.div():
-                                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                                    ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
-                                                    with ui.div(class_='d-flex flex-column gap-2'):
-                                                        @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
-                                                        @print_func_name
-                                                        async def renderDownloadDoc():
-                                                            yield content
+                                with ui.tooltip(placement="right"):
+                                    with ui.div():
+                                        with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                            ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                            with ui.div(class_='d-flex flex-column gap-2'):
+                                                @render.express
+                                                def renderDownloadOption():
+                                                    attached_files, file_info = applyGetVectorDBFiles()
+                                                    _ = reload_content_view_flag()
+                                                    outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+                                                    if not outline_file_path.exists(): return
+                                                    content, content_docx, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
+                                                    if content is None: return
+                                                    @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
+                                                    @print_func_name
+                                                    async def renderDownloadContentMD():
+                                                        yield content
+                                                    @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
+                                                    @print_func_name
+                                                    async def renderDownloadContentDocx():
+                                                        docx_buffer = io.BytesIO()
+                                                        content_docx.save(docx_buffer)
+                                                        docx_buffer.seek(0)
+
+                                                        yield docx_buffer.read()
+                                                    if bibs:
                                                         @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
                                                         @print_func_name
                                                         async def renderDownloadBib():
                                                             yield bibs
-                                            "Download"
-                                    else:
-                                        with ui.tooltip(placement="right"):
-                                            @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                            @print_func_name
-                                            async def renderDownloadDoc():
-                                                yield content
-                                            "Download"
+                                    "Download"
                                 
                     with ui.div(class_='content-container'):
                         with ui.div(class_='content-header'):
@@ -379,7 +381,6 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
     def applyGetVectorDBFiles():
 
         files, file_info = [], {}
-
         if config_app.vector_db_collections_id is not None:
             refs, uploaded_file_info = getVectorDBFiles(config_app.vector_db_collections_id)
             files += refs

@@ -138,7 +138,7 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
     selected_docs_changed_flag = reactive.value(True)
     select_all_docs = reactive.value(False)
 
-    ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".csv", ".docx", ".pdf"], multiple=True)
+    ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".docx", ".pdf"], multiple=True)
 
     with ui.div(class_='side-bar-docs-container'):
         

@@ -13,6 +13,7 @@ from ..backend.ai.tools.search_pubmed import formatAPA
 from datetime import datetime
 import json
 import re
+from docx import Document
 
 @print_func_name
 def initProfile(config_app):
@@ -100,19 +101,17 @@ def getVectorDBFiles(vector_db_collections_id):
 
     if vector_db_collections_id is None: return [], {}
 
-    uploaded_files_info, literature_info, file_info = [], [], {}
-
     vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
                                                 field_names=['id', 'status'], 
                                                 field_values=[[int(vector_db_collections_id)], [vector_db_collections_status.ACTIVE.value]])
     
-    if vector_db_collection_records.empty: return []
+    if vector_db_collection_records.empty: return [], {}
     
     vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
                                                 field_names=['vector_db_collections_id'], 
                                                 field_values=[[int(vector_db_collections_id)]])
     
-    if vector_db_collection_files_records.empty: return []
+    if vector_db_collection_files_records.empty: return [], {}
 
     uploaded_files_id_list = list(map(int, vector_db_collection_files_records['uploaded_files_id'].dropna().values))
 
@@ -129,9 +128,10 @@ def getVectorDBFiles(vector_db_collections_id):
         uploaded_files_records['id'] = uploaded_files_records['id'].map(str)
         uploaded_files_records['title'] = uploaded_files_records['file_name']
 
-        file_info |= uploaded_files_records[['id', 'title']].set_index('id').T.to_dict()
+        file_info = uploaded_files_records[['id', 'title']].set_index('id').T.to_dict()
 
-    
+        return uploaded_files_info, file_info 
+
     literature_id_list = list(vector_db_collection_files_records['literature_id'].dropna().values)
 
     if literature_id_list:
@@ -147,9 +147,11 @@ def getVectorDBFiles(vector_db_collections_id):
         literature_info = list(literature_records[['id', 'reference', 'type']].values)
 
         literature_records['doi'] = literature_records['id']
-        file_info |= literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
+        file_info = literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
 
-    return uploaded_files_info + literature_info, file_info
+        return literature_info, file_info
+    
+    return [], {}
 
 @print_func_name
 def detachDocs(generated_files_id, vector_db_collections_id):
@@ -229,37 +231,11 @@ def getGeneratedDocuments(email, session_id):
 def getDocContent(file_id, attached_files=[], file_info={}):
 
     @print_func_name
-    def processCitation(content):
-
-        # d_files = {str(k): v for k, v, _ in attached_files}
-        # used_files_info = {}
-
-        # refs = re.findall(r'\[CITE\((\d+?)\)\]', content)
-
-        # d_ref = {}
-        # ref_list = []
-        # for ref in refs:
-        #     if ref not in d_files: continue
-        #     try:
-        #         d_ref[ref] = ref_list.index(d_files[ref]) + 1
-        #     except ValueError:
-        #         ref_list.append(d_files[ref])
-        #         d_ref[ref] = len(ref_list)
-        
-        # for ref, ref_index in d_ref.items():
-        #     content = content.replace(f'CITE({ref})', f'{ref_index}')
-        #     used_files_info[ref] = file_info[ref] 
-
-        # return content, used_files_info
-    
-        attached_references = {str(k): v for k, v, _ in attached_files}
+    def processCitation(content, ref_list=[], used_files_info={}):
         
         ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
-    
         refs_seen = set()
         d_ref = {}
-        ref_list = []
-        used_files_info = {}
         for refs, _ in ref_groups:
             if refs in refs_seen: continue
             refs_seen.add(refs)
@@ -274,10 +250,29 @@ def getDocContent(file_id, attached_files=[], file_info={}):
                     d_ref[ref] = len(ref_list)
                     used_files_info[ref] = file_info[ref]
         
-            ref_links = sorted([str(d_ref[ref.strip()]) for ref in refs.split(',') if ref in d_ref])
-            content = content.replace(f'[CITE({refs})]', f'[{', '.join(ref_links)}]')
+            if d_ref:
+                ref_links = sorted([str(d_ref[ref.strip()]) for ref in refs.split(',') if ref in d_ref])
+                content = content.replace(f'[CITE({refs})]', f'[{', '.join(ref_links)}]')
     
-        return content, used_files_info
+        return content, ref_list, used_files_info
+
+    @print_func_name
+    def extractContentFromOutline(d, content_md=[], content_docx=Document(), ref_list=[], used_files_info={}, level=1):
+
+        if not isinstance(d, dict):
+            for k, v in d:
+                content, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
+                content_md.append(content)
+                content_docx.add_paragraph(content)
+        else:
+            for k in d:
+                if k != 'content':
+                    content_docx.add_heading(k, level=1)
+                    content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md + [f'{'#' * level} {k}'], content_docx, ref_list, used_files_info, level+1)
+                else:
+                    content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md, content_docx, ref_list, used_files_info, level+1)
+
+        return content_md, content_docx, ref_list, used_files_info
     
     @print_func_name
     def getBibFormat(file_info):
@@ -297,29 +292,18 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         return bib_text
 
-    @print_func_name
-    def extractContentFromOutline(d, raw_outline=[], counter=1):
-
-        if not isinstance(d, dict):
-            for k, v in d:
-                raw_outline.append(v)
-        else:
-            for k in d:
-                raw_outline = extractContentFromOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
-
-        return raw_outline
-
     outline_file_path = Config.DIR_DATA / f'outline_{file_id}.json'
 
     with open(outline_file_path) as fp:
         d_outline = json.load(fp)
 
-    content = '\n'.join(extractContentFromOutline(d_outline))
-    if attached_files: 
-        content, used_files_info = processCitation(content)
+    attached_references = {str(k): v for k, v, _ in attached_files}
+    content_md, content_docx, _, used_files_info= extractContentFromOutline(d_outline)
+    content_md = '\n'.join(content_md)
+    if attached_files:
         bibs = getBibFormat(used_files_info)
     else:
         bibs = ''
 
-    return content, bibs
+    return content_md, content_docx, bibs
     

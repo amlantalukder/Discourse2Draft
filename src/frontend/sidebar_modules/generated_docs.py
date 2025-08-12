@@ -9,6 +9,7 @@ from ...backend.db import updateDB, \
 from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
 from ...backend.ai.architecture import Architecture
 from datetime import datetime
+import io
 
 @module
 def getGeneratedDocItemView(input, output, session, 
@@ -27,43 +28,37 @@ def getGeneratedDocItemView(input, output, session,
                         info['file_name']                       
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'), class_='date')
                 with ui.div(class_='col-auto d-flex align-items-center'):
-                    @render.express
-                    def renderDownloadOption():
-                        attached_files, file_info = applyGetVectorDBFiles()
-                        _ = reload_content_view_flag()
-                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
-                        if not outline_file_path.exists(): return
-                        content, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
-                        if content is None: return
-                        if bibs:
-                            with ui.tooltip(placement="right"):
-                                with ui.div():
-                                    with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                        ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
-                                        with ui.div(class_='d-flex flex-column gap-2'):
-                                            @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
-                                            @print_func_name
-                                            async def renderDownloadDoc():
-                                                yield content
+                    with ui.tooltip(placement="right"):
+                        with ui.div():
+                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                with ui.div(class_='d-flex flex-column gap-2'):
+                                    @render.express
+                                    def renderDownloadOption():
+                                        attached_files, file_info = applyGetVectorDBFiles()
+                                        _ = reload_content_view_flag()
+                                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                                        if not outline_file_path.exists(): return
+                                        content, content_docx, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
+                                        if content is None: return
+                                        @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
+                                        @print_func_name
+                                        async def renderDownloadContentMD():
+                                            yield content
+                                        @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
+                                        @print_func_name
+                                        async def renderDownloadContentDocx():
+                                            docx_buffer = io.BytesIO()
+                                            content_docx.save(docx_buffer)
+                                            docx_buffer.seek(0)
+
+                                            yield docx_buffer.read()
+                                        if bibs:
                                             @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
                                             @print_func_name
                                             async def renderDownloadBib():
                                                 yield bibs
-                                "Download"
-                        else:
-                            with ui.tooltip(placement="right"):
-                                @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                @print_func_name
-                                async def renderDownloadDoc():
-                                    yield content
-                                "Download"
-                    # @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                    # @print_func_name
-                    # async def renderDownloadDoc():
-                        # attached_files = applyGetVectorDBFiles()
-                        # content = getDocContent(file_id=info['id'], attached_files=attached_files)
-                        # if content is None: return
-                        # yield content
+                        "Download"
                 with ui.div(class_='col-auto d-flex align-items-center'):
                     ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
         else:
@@ -115,44 +110,38 @@ def getGeneratedDocItemView(input, output, session,
                 with ui.div(class_='app-td col-1'):
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
                 with ui.div(class_='app-td col-1 justify-content-center'):
-                    with ui.div():
-                        @render.express
-                        def renderDownloadOption():
-                            attached_files, file_info = applyGetVectorDBFiles()
-                            _ = reload_content_view_flag()
-                            outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
-                            if not outline_file_path.exists(): return
-                            content, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
-                            if content is None: return
-                            if bibs:
-                                with ui.tooltip(placement="right"):
-                                    with ui.div():
-                                        with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                            ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
-                                            with ui.div(class_='d-flex flex-column gap-2'):
-                                                @render.download(label=ui.div('Content', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='manuscript.md')
-                                                @print_func_name
-                                                async def renderDownloadDoc():
-                                                    yield content
-                                                @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
-                                                @print_func_name
-                                                async def renderDownloadBib():
-                                                    yield bibs
-                                    "Download"
-                            else:
-                                with ui.tooltip(placement="right"):
-                                    @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                                    @print_func_name
-                                    async def renderDownloadDoc():
-                                        yield content
-                                    "Download"
-                        # @render.download(label=faicons.icon_svg("download"), filename='manuscript.md')
-                        # @print_func_name
-                        # async def renderDownloadDoc():
-                            # attached_files, _ = applyGetVectorDBFiles()
-                            # content = getDocContent(file_id=info['id'], attached_files=attached_files)
-                            # if content is None: return
-                            # yield content
+                    with ui.tooltip(placement="right"):
+                        with ui.div():
+                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                with ui.div(class_='d-flex flex-column gap-2'):
+                                    @render.express
+                                    def renderDownloadOption():
+                                        attached_files, file_info = applyGetVectorDBFiles()
+                                        _ = reload_content_view_flag()
+                                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                                        if not outline_file_path.exists(): return
+                                        content, content_docx, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
+                                        if content is None: return
+                                        @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
+                                        @print_func_name
+                                        async def renderDownloadContentMD():
+                                            yield content
+                                        @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
+                                        @print_func_name
+                                        async def renderDownloadContentDocx():
+                                            docx_buffer = io.BytesIO()
+                                            content_docx.save(docx_buffer)
+                                            docx_buffer.seek(0)
+
+                                            yield docx_buffer.read()
+                                        if bibs:
+                                            @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
+                                            @print_func_name
+                                            async def renderDownloadBib():
+                                                yield bibs
+                        "Download"
+
                 with ui.div(class_='app-td col-1 justify-content-center'):
                     with ui.div():
                         ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
@@ -160,7 +149,17 @@ def getGeneratedDocItemView(input, output, session,
     @reactive.calc
     @print_func_name
     def applyGetVectorDBFiles():
-        return getVectorDBFiles(info['vector_db_collections_id_uploaded_files'])
+        files, file_info = [], {}
+        if info['vector_db_collections_id_uploaded_files'] is not None:
+            refs, uploaded_file_info = getVectorDBFiles(info['vector_db_collections_id_uploaded_files'])
+            files += refs
+            file_info |= uploaded_file_info
+        if info['vector_db_collections_id_literature'] is not None:
+            refs, literature_info = getVectorDBFiles(info['vector_db_collections_id_literature'])
+            files += refs
+            file_info |= literature_info
+
+        return files, file_info
 
     @reactive.effect
     @reactive.event(input.btn_show, ignore_init=True)

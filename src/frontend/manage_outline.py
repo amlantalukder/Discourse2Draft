@@ -1,5 +1,6 @@
 from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module
+from shiny.types import FileInfo
 from utils import print_func_name, getUIID
 from ..backend.ai.llms import extractAvailableLLMs
 from ..backend.ai.architecture import ArchitectureOutline
@@ -115,7 +116,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                 @print_func_name
                 def renderText():
                     if show_text.get():
-                        ui.input_text_area('texttext', '', resize='vertical')
+                        ui.input_text_area('text_text', '', resize='vertical')
                     elif text == '[Reserved for AI content]':
                         ui.p(text, class_='reserved-for-ai')
                     else:
@@ -277,7 +278,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
         def edit():
             show_text.set(True)
             is_edit_mode.set(True)
-            ui.update_text_area(id='texttext', value=re.sub('^#+ ', '', text))
+            ui.update_text_area(id='text_text', value=re.sub('^#+ ', '', text))
 
         @reactive.effect
         @reactive.event(input.btn_undo)
@@ -290,7 +291,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
         @reactive.event(input.btn_save)
         @print_func_name
         def save():
-            text_new = input.texttext().strip()
+            text_new = input.text_text().strip()
             if text_new == '': return
 
             action = {'type': 'edit', 'text_new': text_new}
@@ -398,6 +399,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     show_create_outline_view = reactive.value(not show_init_view)
     outline_from_outline_manager = reactive.value('')
     outline_content = reactive.value('Outline will appear here')
+    topic_desc = ''
     
     with ui.div(class_='outline-creator-container'):
         @render.express
@@ -418,18 +420,49 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
                                 ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
                                 ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
                             ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
+                    with ui.div(): 
+                        ui.input_radio_buttons('radio_topic_selection', label='', choices=['Write topic', 'Upload topic'], inline=True, selected='Write topic')
                     with ui.div(class_='d-flex gap-4 align-items-end'):
-                        with ui.div(class_='col'):
-                            ui.input_text_area('text_topic', 'Topic', placeholder='Write a topic', rows=4, width='100%', resize='vertical')
-                        with ui.div(class_='col-auto pb-4'):
-                            ui.input_task_button('btn_create_outline', 'Create outline')
+                        @render.express
+                        def renderTopicInputType():
+                            topic_sel_type = input.radio_topic_selection()
+                            if topic_sel_type == 'Write topic':
+                                with ui.div(class_='col'):
+                                    ui.input_text_area('text_topic', 'Topic', placeholder='Write a topic [with an optional primer]', rows=4, width='100%', resize='vertical')
+                                with ui.div(class_='col-auto'):
+                                    ui.input_task_button('btn_create_outline', 'Create outline')
+                            else:
+                                with ui.div(class_='d-flex gap-4 align-items-end'):
+                                    ui.input_file("btn_upload_topic", "Choose a document (in text format) on a topic", accept=[".txt"])
+                                with ui.div(class_='col-auto pb-3'):
+                                    ui.input_task_button('btn_create_outline', 'Create outline')
+                        
                 with ui.div(class_='outline-creator-content'):
                     @render.express
                     @print_func_name
                     def renderOutline():
                         outline_content.get()
                                 
+    @reactive.effect
+    @reactive.event(input.btn_upload_topic)
+    @print_func_name
+    def uploadTopic():
+        global topic_desc
 
+        files: list[FileInfo] | None = input.btn_upload_topic()
+
+        topic_desc = ''
+        for file in files:
+            with open(file['datapath'], 'r') as fp:
+                topic_desc += fp.read() + '\n\n'
+
+    @reactive.effect
+    @reactive.event(input.text_topic)
+    @print_func_name
+    def writeTopic():
+        global topic_desc
+        topic_desc = input.text_topic()
+    
     @reactive.effect
     @reactive.event(input.btn_use_custom_outline)
     @print_func_name
@@ -455,10 +488,11 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @reactive.event(input.btn_create_outline)
     @print_func_name
     def createOutline():
-
-        topic = input.text_topic().strip()
-        if not topic: 
-            ui.notification_show('Please provide a topic', type='error')
+        if not topic_desc:
+            if input.radio_topic_selection() == 'Write topic':
+                ui.notification_show('Please provide a topic', type='error')
+            else:
+                ui.notification_show('Please provide a topic document', type='error')
             return
         
         llm = input.select_llm()
@@ -467,7 +501,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
         agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
 
-        generateOutline(agent, topic)
+        generateOutline(agent, topic_desc)
 
     @reactive.effect
     @print_func_name

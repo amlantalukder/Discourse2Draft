@@ -30,7 +30,6 @@ def read_in_chunks(file_object, chunk_size=1024):
         yield data
 
 def getUIID(prefix):
-
     return f'{prefix}_{str(uuid.uuid4()).replace('-', '_')}'
 
 def print_func_name(func):
