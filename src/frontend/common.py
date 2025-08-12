@@ -267,7 +267,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
         else:
             for k in d:
                 if k != 'content':
-                    content_docx.add_heading(k, level=1)
+                    content_docx.add_heading(k, level=level)
                     content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md + [f'{'#' * level} {k}'], content_docx, ref_list, used_files_info, level+1)
                 else:
                     content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md, content_docx, ref_list, used_files_info, level+1)
