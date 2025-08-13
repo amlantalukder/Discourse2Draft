@@ -770,7 +770,7 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
             content = response['content']
-            attached_references = response['references']
+            attached_references = response.get('references', {})
 
             print(content)
 
