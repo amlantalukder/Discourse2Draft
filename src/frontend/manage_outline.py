@@ -399,7 +399,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     show_create_outline_view = reactive.value(not show_init_view)
     outline_from_outline_manager = reactive.value('')
     outline_content = reactive.value('Outline will appear here')
-    topic_desc = ''
+    topic_desc = reactive.value('')
     
     with ui.div(class_='outline-creator-container'):
         @render.express
@@ -447,21 +447,20 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @reactive.event(input.btn_upload_topic)
     @print_func_name
     def uploadTopic():
-        global topic_desc
 
         files: list[FileInfo] | None = input.btn_upload_topic()
-
-        topic_desc = ''
+        text = ''
         for file in files:
             with open(file['datapath'], 'r') as fp:
-                topic_desc += fp.read() + '\n\n'
+                text += fp.read() + '\n\n'
+
+        topic_desc.set(text)
 
     @reactive.effect
     @reactive.event(input.text_topic)
     @print_func_name
     def writeTopic():
-        global topic_desc
-        topic_desc = input.text_topic()
+        topic_desc.set(input.text_topic())
     
     @reactive.effect
     @reactive.event(input.btn_use_custom_outline)
@@ -488,7 +487,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @reactive.event(input.btn_create_outline)
     @print_func_name
     def createOutline():
-        if not topic_desc:
+        if not topic_desc.get():
             if input.radio_topic_selection() == 'Write topic':
                 ui.notification_show('Please provide a topic', type='error')
             else:
@@ -501,7 +500,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
         agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
 
-        generateOutline(agent, topic_desc)
+        generateOutline(agent, topic_desc.get())
 
     @reactive.effect
     @print_func_name
