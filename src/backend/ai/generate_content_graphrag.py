@@ -82,8 +82,8 @@ class GenerateContentGraphRAG:
     <Adding text from context>
     - You can get the RAG Context calling the tool with any query. If the tool response is not enough, you can call the tool multiple times.
     - The RAG context from the tool is provided within file_id tag. In your writing, take context from the RAG Context whenever possible. 
-    - At the end of your writing from the context, cite the RAG context with the file_id by within "[" and "]" in the following format: \[CITE(file_id)\].
-    - If the context of a line is taken from the RAG context of multiple file_id's, you can cite all the file_ids in a comma separated string within "[" and "]" in the following format: \[CITE(file_id1, file_id2)\].
+    - At the end of your writing from the context, cite the RAG context with the file_id by within "[" and "]" in the following format: [CITE(file_id)].
+    - If the context of a line is taken from the RAG context of multiple file_id's, you can cite all the file_ids in a comma separated string within "[" and "]" in the following format: [CITE(file_id1, file_id2)].
     - Do not put the citation after texts if the written texts are not from the RAG context.
     - If the written texts from RAG context is divided into multiple paragraphs, put citation at the end of each of the paragraphs.
     </Adding text from context>

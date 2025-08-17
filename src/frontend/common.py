@@ -14,6 +14,7 @@ from datetime import datetime
 import json
 import re
 from docx import Document
+import textwrap
 
 @print_func_name
 def initProfile(config_app):
@@ -99,17 +100,17 @@ def loadFilesToVectorDBCollection(collection_name: str, file_paths: list[tuple[P
 @print_func_name
 def getVectorDBFiles(vector_db_collections_id):
 
-    if vector_db_collections_id is None: return [], {}
+    if not vector_db_collections_id: return [], {}
 
     vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
                                                 field_names=['id', 'status'], 
-                                                field_values=[[int(vector_db_collections_id)], [vector_db_collections_status.ACTIVE.value]])
+                                                field_values=[[vector_db_collections_id], [vector_db_collections_status.ACTIVE.value]])
     
     if vector_db_collection_records.empty: return [], {}
     
     vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
                                                 field_names=['vector_db_collections_id'], 
-                                                field_values=[[int(vector_db_collections_id)]])
+                                                field_values=[[vector_db_collections_id]])
     
     if vector_db_collection_files_records.empty: return [], {}
 
@@ -222,16 +223,20 @@ def getGeneratedDocuments(email, session_id):
     
     records_pivot = pd.DataFrame([list(k) + v for k, v in records_pivot.items()], columns = cols + ['vector_db_collections_id_uploaded_files', 'vector_db_collections_id_literature'])
 
-    records_pivot = records_pivot.replace({float('nan'): None})
+    int_ = lambda x: 0 if pd.isna(x) else int(x)
+
+    for col in ['vector_db_collections_id_uploaded_files', 'vector_db_collections_id_literature']:
+        records_pivot[col] = records_pivot[col].apply(int_).astype('object')
 
     return records_pivot
-
 
 @print_func_name
 def getDocContent(file_id, attached_files=[], file_info={}):
 
     @print_func_name
     def processCitation(content, ref_list=[], used_files_info={}):
+
+        content_tex = content
         
         ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
         refs_seen = set()
@@ -253,26 +258,72 @@ def getDocContent(file_id, attached_files=[], file_info={}):
             if d_ref:
                 ref_links = sorted([str(d_ref[ref.strip()]) for ref in refs.split(',') if ref in d_ref])
                 content = content.replace(f'[CITE({refs})]', f'[{', '.join(ref_links)}]')
+                content_tex = content_tex.replace(f'[CITE({refs})]', f'\\cite{{{refs}}}')
     
-        return content, ref_list, used_files_info
+        return content, content_tex, ref_list, used_files_info
 
     @print_func_name
-    def extractContentFromOutline(d, content_md=[], content_docx=Document(), ref_list=[], used_files_info={}, level=1):
+    def extractContentFromOutline(d, content_md=[], content_docx=Document(), content_tex=[], ref_list=[], used_files_info={}, level=1):
+
+        def latexLevels(level, header):
+
+            match level:
+                case 1:
+                    return f'\\title{{{header}}}'
+                case 2:
+                    return f'\\section{{{header}}}'
+                case 3:
+                    return f'\\subsection{{{header}}}'
+                case 4:
+                    return f'\\subsubsection{{{header}}}'
+                case 5:
+                    return f'\\paragraph{{\\textbf{{{header}}}}}'
+                case 6:
+                    return f'\\paragraph{{\\textit{{{header}}}}}'
 
         if not isinstance(d, dict):
-            for k, v in d:
-                content, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
-                content_md.append(content)
-                content_docx.add_paragraph(content)
+            for i, (k, v) in enumerate(d):
+                if k != 'ref':
+                    content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
+                    content_md.append(content_text)
+                    content_docx.add_paragraph(content_text)
+                    content_tex.append(content_tex_text)
+                else:
+                    content_md.append(f'[{i+1}]: {v}')
+                    content_docx.add_paragraph(f'[{i+1}]. {v}')
         else:
             for k in d:
                 if k != 'content':
                     content_docx.add_heading(k, level=level)
-                    content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md + [f'{'#' * level} {k}'], content_docx, ref_list, used_files_info, level+1)
+                    content_md, content_docx, content_tex, ref_list, used_files_info = extractContentFromOutline(d[k], 
+                                                                                                                 content_md + [f'{'#' * level} {k}'], 
+                                                                                                                 content_docx, 
+                                                                                                                 content_tex + ([latexLevels(level, k)] if k != 'References' else []), 
+                                                                                                                 ref_list, used_files_info, level+1)
                 else:
-                    content_md, content_docx, ref_list, used_files_info = extractContentFromOutline(d[k], content_md, content_docx, ref_list, used_files_info, level+1)
+                    content_md, content_docx, content_tex, ref_list, used_files_info = extractContentFromOutline(d[k], 
+                                                                                                                 content_md, 
+                                                                                                                 content_docx, 
+                                                                                                                 content_tex, 
+                                                                                                                 ref_list, used_files_info, level+1)
 
-        return content_md, content_docx, ref_list, used_files_info
+        return content_md, content_docx, content_tex, ref_list, used_files_info
+    
+    @print_func_name
+    def convertToLatex(content):
+        def formatLatex(text):
+
+            """Escapes special characters in a string for LaTeX compatibility."""
+            latex_special_chars = {
+                '&': r'\&', '%': r'\%', '$': r'\$', '#': r'\#', '_': r'\_', '<': r'$<$', '>': r'$>$'
+            }
+            for char, replacement in latex_special_chars.items():
+                text = text.replace(char, replacement)
+
+            return text
+
+        if not len(content): return ''
+        return f"\\documentclass{{article}}\n\n{formatLatex(content[0])}\n\n\\begin{{document}}\n\n\\maketitle\n\n{formatLatex('\n'.join(content[1:]))}\n\n\\bibliographystyle{{plain}}\n\n\\bibliography{{bibliography}}\n\n\\end{{document}}"
     
     @print_func_name
     def getBibFormat(file_info):
@@ -298,12 +349,14 @@ def getDocContent(file_id, attached_files=[], file_info={}):
         d_outline = json.load(fp)
 
     attached_references = {str(k): v for k, v, _ in attached_files}
-    content_md, content_docx, _, used_files_info= extractContentFromOutline(d_outline)
+    content_md, content_docx, content_tex, _, used_files_info= extractContentFromOutline(d_outline)
     content_md = '\n'.join(content_md)
+    content_tex = convertToLatex(content_tex)
+    
     if attached_files:
         bibs = getBibFormat(used_files_info)
     else:
         bibs = ''
 
-    return content_md, content_docx, bibs
+    return content_md, content_docx, content_tex, bibs
     

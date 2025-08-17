@@ -40,7 +40,7 @@ function getDOMHierarchy(element) {
     return hierarchy;
 }
 
-Shiny.addCustomMessageHandler("reload_content", ({ id_main }) => {
+Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
 
     targetDiv = document.getElementById('content');
     console.log(targetDiv);
@@ -97,7 +97,7 @@ Shiny.addCustomMessageHandler("reload_content", ({ id_main }) => {
             }
 
             event.preventDefault(); // Prevent default browser menu
-            let menu = document.getElementById(`${id_main}-ctx_menu`);
+            let menu = document.getElementById(`${ui_id}-ctx_menu`);
 
             let ancestor_props = document.getElementsByClassName('app-container')[0].getBoundingClientRect();
             let container_props = targetDiv.getBoundingClientRect();
@@ -113,11 +113,11 @@ Shiny.addCustomMessageHandler("reload_content", ({ id_main }) => {
             menu.style.left = `${left}px`;
             menu.style.top = `${top}px`;
 
-            Shiny.setInputValue(`${id_main}-selected_para_hierarchy`, hierarchy);
+            Shiny.setInputValue(`${ui_id}-selected_para_hierarchy`, hierarchy);
         });
 
         $(document).bind("click", function (event) {
-            document.getElementById(`${id_main}-ctx_menu`).style.display = "none";
+            document.getElementById(`${ui_id}-ctx_menu`).style.display = "none";
 
             if (current_element) {
                 current_element.classList.remove('highlight-with-border');

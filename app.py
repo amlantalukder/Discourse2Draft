@@ -92,13 +92,11 @@ with ui.div(class_="app-container"):
     @print_func_name
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
-            id_mod_main = getUIID('main')
-            mod_main(id=id_mod_main, 
+            mod_main(id=getUIID('main'), 
                     config_app=config_app,
                     reload_main_view_flag=reload_main_view_flag,
                     reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
                     settings_changed_flag=settings_changed_main_view_flag,
-                    ui_id=id_mod_main
             )
         else:
             mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
@@ -211,6 +209,10 @@ def changeSettings():
     if config_app.generated_files_id and config_app.vector_db_collections_id:
         detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
         config_app.vector_db_collections_id = None
+
+    if config_app.generated_files_id and config_app.vector_db_collections_id_lit_search:
+        detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id_lit_search)
+        config_app.vector_db_collections_id_lit_search = None
 
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
     settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())

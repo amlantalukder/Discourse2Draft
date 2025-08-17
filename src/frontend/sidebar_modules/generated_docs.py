@@ -5,6 +5,7 @@ from utils import Config, getUIID, print_func_name
 from ...backend.db import updateDB, \
                 generated_files_status, \
                 generated_files_ai_architecture, \
+                vector_db_collections_status, \
                 Config as db_config
 from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
 from ...backend.ai.architecture import Architecture
@@ -39,12 +40,13 @@ def getGeneratedDocItemView(input, output, session,
                                         _ = reload_content_view_flag()
                                         outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
                                         if not outline_file_path.exists(): return
-                                        content, content_docx, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
-                                        if content is None: return
+                                        content_md, content_docx, content_tex, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
+                                        
                                         @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
                                         @print_func_name
                                         async def renderDownloadContentMD():
-                                            yield content
+                                            yield content_md
+
                                         @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
                                         @print_func_name
                                         async def renderDownloadContentDocx():
@@ -53,6 +55,12 @@ def getGeneratedDocItemView(input, output, session,
                                             docx_buffer.seek(0)
 
                                             yield docx_buffer.read()
+
+                                        @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.tex')
+                                        @print_func_name
+                                        async def renderDownloadContentTex():
+                                            yield content_tex
+                                                
                                         if bibs:
                                             @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
                                             @print_func_name
@@ -121,12 +129,13 @@ def getGeneratedDocItemView(input, output, session,
                                         _ = reload_content_view_flag()
                                         outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
                                         if not outline_file_path.exists(): return
-                                        content, content_docx, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
-                                        if content is None: return
+                                        content_md, content_docx, content_tex, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
+
                                         @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
                                         @print_func_name
                                         async def renderDownloadContentMD():
-                                            yield content
+                                            yield content_md
+
                                         @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
                                         @print_func_name
                                         async def renderDownloadContentDocx():
@@ -135,6 +144,12 @@ def getGeneratedDocItemView(input, output, session,
                                             docx_buffer.seek(0)
 
                                             yield docx_buffer.read()
+
+                                        @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.tex')
+                                        @print_func_name
+                                        async def renderDownloadContentTex():
+                                            yield content_tex
+                                                
                                         if bibs:
                                             @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
                                             @print_func_name
@@ -150,11 +165,11 @@ def getGeneratedDocItemView(input, output, session,
     @print_func_name
     def applyGetVectorDBFiles():
         files, file_info = [], {}
-        if info['vector_db_collections_id_uploaded_files'] is not None:
+        if info['vector_db_collections_id_uploaded_files']:
             refs, uploaded_file_info = getVectorDBFiles(info['vector_db_collections_id_uploaded_files'])
             files += refs
             file_info |= uploaded_file_info
-        if info['vector_db_collections_id_literature'] is not None:
+        if info['vector_db_collections_id_literature']:
             refs, literature_info = getVectorDBFiles(info['vector_db_collections_id_literature'])
             files += refs
             file_info |= literature_info
@@ -169,12 +184,12 @@ def getGeneratedDocItemView(input, output, session,
         # If invoked from the generated files detailed view
         ui.modal_remove()
 
-        int_ = lambda x: x if x is None else int(x)
+        int_or_none = lambda x: None if not x else x
         
         config_app.generated_files_id = info['id']
         config_app.file_name = info['file_name']
-        config_app.vector_db_collections_id = int_(info['vector_db_collections_id_uploaded_files'])
-        config_app.vector_db_collections_id_lit_search = int_(info['vector_db_collections_id_literature'])
+        config_app.vector_db_collections_id = int_or_none(info['vector_db_collections_id_uploaded_files'])
+        config_app.vector_db_collections_id_lit_search = int_or_none(info['vector_db_collections_id_literature'])
         config_app.llm = info['llm']
         config_app.temperature = info['temperature']
         config_app.instructions = info['instructions']
@@ -193,10 +208,10 @@ def getGeneratedDocItemView(input, output, session,
                 vector_db_collection_name, vector_db_collection_name_lit_search = '', ''
                 
                 if config_app.vector_db_collections_id:
-                    vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{int(config_app.vector_db_collections_id)}'
+                    vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id}'
                 
                 if config_app.vector_db_collections_id_lit_search:
-                    vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{int(config_app.vector_db_collections_id_lit_search)}'
+                    vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id_lit_search}'
 
                 config_app.agent = Architecture(model_name=config_app.llm, 
                                                 temperature=config_app.temperature, 
@@ -211,11 +226,27 @@ def getGeneratedDocItemView(input, output, session,
     @reactive.event(input.btn_delete, ignore_init=True)
     @print_func_name
     def deleteFile():
+
+        if info['vector_db_collections_id_uploaded_files']:
+            updateDB('vector_db_collections', 
+                update_fields=['status', 'update_date'], 
+                update_values=[vector_db_collections_status.DELETED.value, datetime.now()], 
+                select_fields=['id'], 
+                select_values=[[info['vector_db_collections_id_uploaded_files']]])
+            
+        if info['vector_db_collections_id_literature']:
+            updateDB('vector_db_collections', 
+                update_fields=['status', 'update_date'], 
+                update_values=[vector_db_collections_status.DELETED.value, datetime.now()], 
+                select_fields=['id'], 
+                select_values=[[info['vector_db_collections_id_literature']]])
+
         updateDB('generated_files', 
                 update_fields=['status', 'update_date'], 
                 update_values=[generated_files_status.DELETED.value, datetime.now()], 
                 select_fields=['id'], 
                 select_values=[[info['id']]])
+        
         if reload_generated_docs_detailed_view_flag:
             reload_generated_docs_detailed_view_flag.set(not reload_generated_docs_detailed_view_flag.get())
         reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())

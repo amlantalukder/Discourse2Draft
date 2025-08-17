@@ -414,6 +414,8 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
             
             with ui.div(class_='outline-creator'):
                 with ui.div(class_='outline-creator-controls'):
+                    with ui.div():
+                        ui.input_action_button(id='btn_back', label='Back')
                     with ui.accordion(open=False, multiple=False):
                         with ui.accordion_panel('AI settings'):
                             with ui.div(class_='row justify-content-between'):
@@ -442,6 +444,24 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
                     @print_func_name
                     def renderOutline():
                         outline_content.get()
+
+    @reactive.effect
+    @reactive.event(input.btn_show_create_outline_ai)
+    @print_func_name
+    def showCreateOutlineView():
+        show_create_outline_view.set(True)
+
+    @reactive.effect
+    @reactive.event(input.btn_use_custom_outline)
+    @print_func_name
+    def useCustomOutline():
+        outline_creator_options.set({'show': False, 'show_init_view': False})
+
+    @reactive.effect
+    @reactive.event(input.btn_back)
+    @print_func_name
+    def backToInitView():
+        show_create_outline_view.set(False)
                                 
     @reactive.effect
     @reactive.event(input.btn_upload_topic)
@@ -461,18 +481,6 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @print_func_name
     def writeTopic():
         topic_desc.set(input.text_topic())
-    
-    @reactive.effect
-    @reactive.event(input.btn_use_custom_outline)
-    @print_func_name
-    def useCustomOutline():
-        outline_creator_options.set({'show': False, 'show_init_view': False})
-
-    @reactive.effect
-    @reactive.event(input.btn_show_create_outline_ai)
-    @print_func_name
-    def showCreateOutlineView():
-        show_create_outline_view.set(True)
 
     @ui.bind_task_button(button_id="btn_create_outline")
     @reactive.extended_task
