@@ -26,7 +26,7 @@ def mod_contents(input, output, session, config_app,
                  reload_rag_and_ref_flag, 
                  reload_generated_docs_view_flag, 
                  file_change_flag,
-                 settings_changed_flag, ui_id):
+                 settings_changed_flag):
 
     show_outline = reactive.value(True)
     references = reactive.value([])
@@ -166,6 +166,8 @@ def mod_contents(input, output, session, config_app,
                                         "De-attach documents"
                             
             with ui.div(class_='content outline'):
+                with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
+                    ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
                 with ui.div(id='content'):
                     stream.ui(width='100%')
                 @render.express
@@ -756,7 +758,7 @@ def mod_contents(input, output, session, config_app,
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
             
             loop = asyncio.get_event_loop()
-            loop.create_task(session.send_custom_message('reload_content', {'ui_id': ui_id}))
+            loop.create_task(session.send_custom_message('reload_content', {'ui_id': 'main-contents'}))
 
         else:
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))

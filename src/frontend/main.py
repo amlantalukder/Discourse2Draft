@@ -24,8 +24,6 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                               })
 
     with ui.div(class_='app-body-container'):
-        with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
-            ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
         with ui.layout_sidebar():
             with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
                 @render.express
@@ -41,7 +39,6 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                 @render.express
                 @print_func_name
                 def renderView():
-                    content_view = loadViews()
                     options = outline_creator_options.get()
                     if options['show']:
                         mod_ai_outline_creator(getUIID('ai_outline_creator'), 
@@ -49,22 +46,20 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                         saved_outline=outline_from_outline_manager, 
                                         show_init_view=options['show_init_view'])
                     else:
-                        content_view
+                        loadContentView()
                         
 
     @reactive.calc
     @print_func_name
-    def loadViews():
-        id_contents = getUIID('contents')
-        return mod_contents(id_contents, 
-                                     config_app, 
-                                     outline_from_outline_manager, 
-                                     reload_content_view_flag, 
-                                     reload_rag_and_ref_flag, 
-                                     reload_generated_docs_view_flag, 
-                                     file_change_flag, 
-                                     settings_changed_flag, 
-                                     id_contents)
+    def loadContentView():
+        return mod_contents('contents', 
+                            config_app, 
+                            outline_from_outline_manager, 
+                            reload_content_view_flag, 
+                            reload_rag_and_ref_flag, 
+                            reload_generated_docs_view_flag, 
+                            file_change_flag, 
+                            settings_changed_flag)
 
     @reactive.effect
     @reactive.event(input.btn_new_file)

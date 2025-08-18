@@ -45,26 +45,6 @@ Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
     targetDiv = document.getElementById('content');
     console.log(targetDiv);
 
-    // let data = '';
-    // logSelection = () => {
-    //     if (window.getSelection) {
-    //         selection = window.getSelection();
-    //     } else if (document.selection) {
-    //         selection = document.selection.createRange();
-    //     }
-    //     if (selection) {
-    //         data = selection.toString()
-    //     }
-    // }
-
-    // targetDiv.addEventListener('selectstart', () => {
-    //     document.addEventListener('selectionchange', logSelection)
-    // })
-
-    // targetDiv.addEventListener("mouseup", () => {
-    //     document.removeEventListener("selectionchange", logSelection);
-    // })
-
     if (targetDiv) {
 
         targetDiv.addEventListener('mouseover', (event) => {
@@ -99,7 +79,7 @@ Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
             event.preventDefault(); // Prevent default browser menu
             let menu = document.getElementById(`${ui_id}-ctx_menu`);
 
-            let ancestor_props = document.getElementsByClassName('app-container')[0].getBoundingClientRect();
+            let ancestor_props = document.getElementsByClassName('app-body-container')[0].getBoundingClientRect();
             let container_props = targetDiv.getBoundingClientRect();
 
             let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
@@ -124,7 +104,6 @@ Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
             }
         });
     }
-
 
 });
 
