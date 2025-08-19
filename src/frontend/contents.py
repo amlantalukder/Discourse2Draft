@@ -67,7 +67,9 @@ def mod_contents(input, output, session, config_app,
                                 with ui.div(class_='d-flex flex-column gap-2'):
                                     ui.input_action_button('btn_open_outline_manager', 'Manage outline in outline manager')
                                     ui.input_action_button('btn_open_outline_creator', 'Create outline with AI')
-                ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+                @render.express
+                def renderOutline():
+                    ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%', value=outline_from_outline_manager.get())
             with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                 with ui.div(class_=class_name_controls):
                     @render.express
@@ -451,11 +453,12 @@ def mod_contents(input, output, session, config_app,
 
         ui.update_text_area('text_outline', value=example)
 
-    @reactive.effect
-    @reactive.event(outline_from_outline_manager, ignore_init=True)
-    @print_func_name
-    def saveOutlineFromOutlineManager():
-        ui.update_text('text_outline', value=outline_from_outline_manager.get())
+    # @reactive.effect
+    # @reactive.event(outline_from_outline_manager)
+    # @print_func_name
+    # def saveOutlineFromOutlineManager():
+    #     breakpoint()
+    #     ui.update_text('text_outline', value=outline_from_outline_manager.get())
 
     @print_func_name
     def saveOutline(regenerate=False):

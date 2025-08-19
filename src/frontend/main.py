@@ -18,6 +18,8 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
     reload_rag_and_ref_flag = reactive.value(True)
     file_change_flag = reactive.value(False)
 
+    reload_uploaded_docs_view_flag = reactive.value(True)
+
     outline_from_outline_manager = reactive.value('')
     outline_creator_options = reactive.value({'show': False,
                                               'show_init_view': True
@@ -33,33 +35,39 @@ def mod_main(input, output, session, config_app, reload_main_view_flag, reload_g
                                 config_app=config_app, 
                                 reload_rag_and_ref_flag=reload_rag_and_ref_flag, 
                                 reload_content_view_flag=reload_content_view_flag, 
-                                reload_generated_docs_view_flag=reload_generated_docs_view_flag)
+                                reload_generated_docs_view_flag=reload_generated_docs_view_flag,
+                                reload_uploaded_docs_view_flag=reload_uploaded_docs_view_flag)
 
             with ui.div(class_='app-body'):
                 @render.express
                 @print_func_name
                 def renderView():
+                    content_view, outline_creator_view = loadViews()
                     options = outline_creator_options.get()
                     if options['show']:
-                        mod_ai_outline_creator(getUIID('ai_outline_creator'), 
-                                        outline_creator_options, 
-                                        saved_outline=outline_from_outline_manager, 
-                                        show_init_view=options['show_init_view'])
+                        outline_creator_view
                     else:
-                        loadContentView()
+                        content_view
                         
 
     @reactive.calc
     @print_func_name
-    def loadContentView():
-        return mod_contents('contents', 
-                            config_app, 
-                            outline_from_outline_manager, 
-                            reload_content_view_flag, 
-                            reload_rag_and_ref_flag, 
-                            reload_generated_docs_view_flag, 
-                            file_change_flag, 
-                            settings_changed_flag)
+    def loadViews():
+        content_view = mod_contents('contents', 
+                         config_app, 
+                         outline_from_outline_manager, 
+                         reload_content_view_flag, 
+                         reload_rag_and_ref_flag, 
+                         reload_generated_docs_view_flag, 
+                         file_change_flag, 
+                         settings_changed_flag)
+        outline_creator_view = mod_ai_outline_creator('ai_outline_creator', 
+                                                    outline_creator_options, 
+                                                    saved_outline=outline_from_outline_manager,
+                                                    config_app=config_app,
+                                                    reload_uploaded_docs_view_flag=reload_uploaded_docs_view_flag)
+        
+        return content_view, outline_creator_view
 
     @reactive.effect
     @reactive.event(input.btn_new_file)

@@ -3,11 +3,12 @@ from shiny.types import ImgData
 from utils import Config, print_func_name
 from pathlib import Path
 import pandas as pd
-from ..backend.db import selectFromDB, updateDB, \
+from ..backend.db import selectFromDB, updateDB, insertIntoDB, \
                 vector_db_collections_status, \
                 vector_db_collections_type, \
                 generated_files_status, \
-                generated_files_ai_architecture
+                generated_files_ai_architecture, \
+                uploaded_files_status
 from ..backend.vectordb import ChromaDB, deleteCollection, getLoader
 from ..backend.ai.tools.search_pubmed import formatAPA
 from datetime import datetime
@@ -359,4 +360,43 @@ def getDocContent(file_id, attached_files=[], file_info={}):
         bibs = ''
 
     return content_md, content_docx, content_tex, bibs
+
+def uploadFiles(files, email='', session_id=''):
+
+    for file in files:
+
+        current_time = datetime.now()
+        
+        if email != '':
+            records = selectFromDB(table_name='uploaded_files', 
+                            field_names=['email', 'file_name', 'status'],
+                            field_values=[[email], [file['name']], [uploaded_files_status.UPLOADED.value]])
+        else:
+            records = selectFromDB(table_name='uploaded_files', 
+                            field_names=['session', 'file_name', 'status'],
+                            field_values=[[session_id], [file['name']], [uploaded_files_status.UPLOADED.value]])
+        
+        if records.empty:
+
+            ids = insertIntoDB(table_name='uploaded_files', 
+                        field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
+                        field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
+            uploaded_file_id = ids[0]
+            
+        else:
+            updateDB(table_name='uploaded_files', 
+                    update_fields=['status', 'update_date'], 
+                    update_values=[uploaded_files_status.UPLOADED.value, current_time], 
+                    select_fields=['id'], 
+                    select_values=[list(map(int, records.id.values))])
+            uploaded_file_id = records.iloc[0].id
+
+        # ids = insertIntoDB(table_name='uploaded_files', 
+        #                    field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
+        #                    field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
+        # uploaded_file_id = ids[0]
+            
+        with open(Config.DIR_DATA / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
+            with open(file['datapath'], 'rb') as fp_r:
+                fp.write(fp_r.read())
     

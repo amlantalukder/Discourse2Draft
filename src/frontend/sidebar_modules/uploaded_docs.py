@@ -2,7 +2,7 @@ from shiny import reactive
 from shiny.express import ui, module, render, expressify
 from shiny.types import FileInfo
 import faicons
-from ..common import getFileType, getFileTypeIcon, loadFilesToVectorDBCollection
+from ..common import getFileType, getFileTypeIcon, loadFilesToVectorDBCollection, uploadFiles
 from ...backend.db import selectFromDB, insertIntoDB, updateDB, \
                 uploaded_files_status, \
                 vector_db_collections_type, \
@@ -132,9 +132,8 @@ def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelec
 
 
 @module
-def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_ref_flag, showGeneratedDocsDetailedView):
+def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_ref_flag, showGeneratedDocsDetailedView, reload_view_flag):
 
-    reload_view_flag = reactive.value(True)
     selected_docs_changed_flag = reactive.value(True)
     select_all_docs = reactive.value(False)
 
@@ -188,43 +187,13 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
     @reactive.effect
     @reactive.event(input.btn_upload_docs)
     @print_func_name
-    def uploadedDocs():
+    def uploadDocs():
 
         files: list[FileInfo] | None = input.btn_upload_docs()
         
         if files is None: return
 
-        for file in files:
-
-            current_time = datetime.now()
-            
-            if config_app.email != '':
-                records = selectFromDB(table_name='uploaded_files', 
-                                field_names=['email', 'file_name', 'status'],
-                                field_values=[[config_app.email], [file['name']], [uploaded_files_status.UPLOADED.value]])
-            else:
-                records = selectFromDB(table_name='uploaded_files', 
-                                field_names=['session', 'file_name', 'status'],
-                                field_values=[[config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value]])
-            
-            if records.empty:
-
-                ids = insertIntoDB(table_name='uploaded_files', 
-                            field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
-                            field_values=[[config_app.email], [config_app.session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
-                uploaded_file_id = ids[0]
-                
-            else:
-                updateDB(table_name='uploaded_files', 
-                        update_fields=['status', 'update_date'], 
-                        update_values=[uploaded_files_status.UPLOADED.value, current_time], 
-                        select_fields=['id'], 
-                        select_values=[list(map(int, records.id.values))])
-                uploaded_file_id = records.iloc[0].id
-                
-            with open(Config.DIR_DATA / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
-                with open(file['datapath'], 'rb') as fp_r:
-                    fp.write(fp_r.read())
+        uploadFiles(files)
 
         reload_view_flag.set(not reload_view_flag.get())
 

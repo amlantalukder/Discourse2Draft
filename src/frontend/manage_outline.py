@@ -2,6 +2,7 @@ from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module
 from shiny.types import FileInfo
 from utils import print_func_name, getUIID
+from .common import uploadFiles
 from ..backend.ai.llms import extractAvailableLLMs
 from ..backend.ai.architecture import ArchitectureOutline
 import faicons
@@ -394,56 +395,63 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
     return content
 
 @module
-def mod_ai_outline_creator(input, output, session, outline_creator_options, saved_outline, show_init_view=True):
+def mod_ai_outline_creator(input, output, session, outline_creator_options, saved_outline, reload_uploaded_docs_view_flag, config_app):
 
-    show_create_outline_view = reactive.value(not show_init_view)
-    outline_from_outline_manager = reactive.value('')
+    show_create_outline_view = reactive.value(not outline_creator_options.get()['show_init_view'])
     outline_content = reactive.value('Outline will appear here')
+    topic_name = reactive.value('')
     topic_desc = reactive.value('')
     
-    with ui.div(class_='outline-creator-container'):
-        @render.express
-        @print_func_name
-        def renderView():
-            if not show_create_outline_view.get():
-                with ui.div(class_='outline-creator-init-view'):
-                    ui.input_action_button('btn_show_create_outline_ai', 'Create outline with AI')
-                    ui.span('OR')
-                    ui.input_action_button('btn_use_custom_outline', 'Use custom outline')
-                    return
-            
-            with ui.div(class_='outline-creator'):
-                with ui.div(class_='outline-creator-controls'):
-                    with ui.div():
-                        ui.input_action_button(id='btn_back', label='Back')
-                    with ui.accordion(open=False, multiple=False):
-                        with ui.accordion_panel('AI settings'):
-                            with ui.div(class_='row justify-content-between'):
-                                ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
-                                ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
-                            ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
-                    with ui.div(): 
-                        ui.input_radio_buttons('radio_topic_selection', label='', choices=['Write topic', 'Upload topic'], inline=True, selected='Write topic')
-                    with ui.div(class_='d-flex gap-4 align-items-end'):
+    with ui.hold() as content:
+        with ui.div(class_='outline-creator-container'):
+            @render.express
+            @print_func_name
+            def renderView():
+                if not show_create_outline_view.get():
+                    with ui.div(class_='outline-creator-init-view'):
+                        ui.input_action_button('btn_show_create_outline_ai', 'Create outline with AI')
+                        ui.span('OR')
+                        ui.input_action_button('btn_use_custom_outline', 'Use custom outline')
+                        return
+                
+                with ui.div(class_='outline-creator'):
+                    with ui.div(class_='outline-creator-controls'):
+                        with ui.div():
+                            ui.input_action_button(id='btn_back', label='Back')
+                        with ui.accordion(open=False, multiple=False):
+                            with ui.accordion_panel('AI settings'):
+                                with ui.div(class_='row justify-content-between'):
+                                    ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
+                                    ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
+                                ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
+                        with ui.div():
+                            ui.input_text(id='text_topic', label='Topic')
+
                         @render.express
-                        def renderTopicInputType():
-                            topic_sel_type = input.radio_topic_selection()
-                            if topic_sel_type == 'Write topic':
-                                with ui.div(class_='col'):
-                                    ui.input_text_area('text_topic', 'Topic', placeholder='Write a topic [with an optional primer]', rows=4, width='100%', resize='vertical')
-                                with ui.div(class_='col-auto'):
-                                    ui.input_task_button('btn_create_outline', 'Create outline')
-                            else:
-                                with ui.div(class_='d-flex gap-4 align-items-end'):
-                                    ui.input_file("btn_upload_topic", "Choose a document (in text format) on a topic", accept=[".txt"])
-                                with ui.div(class_='col-auto pb-3'):
-                                    ui.input_task_button('btn_create_outline', 'Create outline')
-                        
-                with ui.div(class_='outline-creator-content'):
-                    @render.express
-                    @print_func_name
-                    def renderOutline():
-                        outline_content.get()
+                        def renderTopicDesc():
+                            if not input.text_topic(): return
+                            with ui.div(): 
+                                ui.input_radio_buttons('radio_topic_selection', label='', choices={'Write topic': 'Write more about this topic (Optional)', 'Upload topic': 'Upload documents about this topic (Optional)'}, inline=True, selected='Write topic')
+                            with ui.div(class_='d-flex gap-4 align-items-end'):
+                                @render.express
+                                def renderTopicInputType():
+                                    topic_sel_type = input.radio_topic_selection()
+                                    if topic_sel_type == 'Write topic':
+                                        with ui.div(class_='col'):
+                                            ui.input_text_area('text_topic_desc', 'Topic primer', placeholder='Add a primer about this topic', rows=4, width='100%', resize='vertical')
+                                        with ui.div(class_='col-auto'):
+                                            ui.input_task_button('btn_create_outline', 'Create outline')
+                                    else:
+                                        with ui.div(class_='d-flex gap-4 align-items-end'):
+                                            ui.input_file("btn_upload_topic_desc", "Choose a document (in text format) on this topic", accept=[".txt"])
+                                        with ui.div(class_='col-auto pb-3'):
+                                            ui.input_task_button('btn_create_outline', 'Create outline')
+                            
+                    with ui.div(class_='outline-creator-content'):
+                        @render.express
+                        @print_func_name
+                        def renderOutline():
+                            outline_content.get()
 
     @reactive.effect
     @reactive.event(input.btn_show_create_outline_ai)
@@ -462,13 +470,25 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @print_func_name
     def backToInitView():
         show_create_outline_view.set(False)
+
+    @reactive.effect
+    @reactive.event(input.text_topic)
+    @print_func_name
+    def writeTopicName():
+        topic_name.set(input.text_topic())
+
+    @reactive.effect
+    @reactive.event(input.text_topic_desc)
+    @print_func_name
+    def writeTopicDesc():
+        topic_desc.set(input.text_topic_desc())
                                 
     @reactive.effect
-    @reactive.event(input.btn_upload_topic)
+    @reactive.event(input.btn_upload_topic_desc)
     @print_func_name
-    def uploadTopic():
+    def uploadTopicDesc():
 
-        files: list[FileInfo] | None = input.btn_upload_topic()
+        files: list[FileInfo] | None = input.btn_upload_topic_desc()
         text = ''
         for file in files:
             with open(file['datapath'], 'r') as fp:
@@ -476,11 +496,9 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
         topic_desc.set(text)
 
-    @reactive.effect
-    @reactive.event(input.text_topic)
-    @print_func_name
-    def writeTopic():
-        topic_desc.set(input.text_topic())
+        uploadFiles(files, email=config_app.email, session_id=config_app.session_id)
+
+        reload_uploaded_docs_view_flag.set(not reload_uploaded_docs_view_flag.get())
 
     @ui.bind_task_button(button_id="btn_create_outline")
     @reactive.extended_task
@@ -495,11 +513,8 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @reactive.event(input.btn_create_outline)
     @print_func_name
     def createOutline():
-        if not topic_desc.get():
-            if input.radio_topic_selection() == 'Write topic':
-                ui.notification_show('Please provide a topic', type='error')
-            else:
-                ui.notification_show('Please provide a topic document', type='error')
+        if not topic_name.get():
+            ui.notification_show('Please provide a topic', type='error')
             return
         
         llm = input.select_llm()
@@ -508,7 +523,17 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
 
         agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
 
-        generateOutline(agent, topic_desc.get())
+        if not topic_desc.get():
+            return generateOutline(agent, topic_name.get())
+
+        generateOutline(agent, f'''\
+                        <Topic name>
+                        {topic_name.get()}
+                        </Topic name>
+                        
+                        <Topic description>
+                        {topic_desc.get()}
+                        </Topic description>''')
 
     @reactive.effect
     @print_func_name
@@ -522,7 +547,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
             case 'success':
                 response = generateOutline.result()
                 content = core_ui.div(
-                        mod_outline_manager(getUIID('outline_manager'), outline=response, saved_outline=outline_from_outline_manager, close_fn=clearContent),
+                        mod_outline_manager(getUIID('outline_manager'), outline=response, saved_outline=saved_outline, close_fn=clearContent),
                         class_='border rounded flex-rest'
                     )
                 outline_content.set(content)
@@ -532,8 +557,9 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
         outline_content.set('Outline will appear here')
 
     @reactive.effect
-    @reactive.event(outline_from_outline_manager, ignore_init=True)
+    @reactive.event(saved_outline, ignore_init=True)
     @print_func_name
     def saveOutlineForContentGeneration():
-        saved_outline.set(outline_from_outline_manager.get())
         outline_creator_options.set({'show': False, 'show_init_view': False})
+
+    return content
