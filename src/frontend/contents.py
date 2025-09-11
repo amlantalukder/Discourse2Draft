@@ -8,9 +8,8 @@ from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
                 generated_files_ai_architecture, \
                 vector_db_collections_type, \
                 vector_db_collections_status
-from .manage_outline import processOutline, getRawOutline, getOutlineHierarchyList, mod_outline_manager, mod_ai_outline_creator
-from .sidebar_modules.sidebar import mod_sidebar
-from .common import initProfile, getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection
+from .manage_outline import resetOutline, processOutline, getRawOutline, mod_outline_manager, mod_ai_outline_creator
+from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection, getLiteraturesFromDB
 import asyncio
 import json
 import textwrap
@@ -20,17 +19,19 @@ from rich import print
 import io
 
 @module
-def mod_contents(input, output, session, config_app, 
-                 outline_from_outline_manager,
-                 reload_content_view_flag, 
-                 reload_rag_and_ref_flag, 
-                 reload_generated_docs_view_flag, 
-                 file_change_flag,
-                 settings_changed_flag):
+def mod_contents(input, output, session, 
+                 config_app,
+                 reload_view_flag,
+                 reload_attached_files_view_flag,
+                 reload_generated_docs_view_flag,
+                 reload_uploaded_docs_view_flag,
+                 ui_id):
 
     show_outline = reactive.value(True)
     references = reactive.value([])
 
+    outline_from_outline_manager = reactive.value('')
+    
     stream = ui.MarkdownStream("stream")
 
     with ui.hold() as content:
@@ -51,25 +52,16 @@ def mod_contents(input, output, session, config_app,
                         @render.ui
                         @print_func_name
                         def renderLLMandTemp():
-                            _ = reload_content_view_flag(), settings_changed_flag()
                             return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
                                     ui.span('(Can be changed in the settings panel in the top-right corner)')]
                     with ui.div(class_='col text-end'):
                         @render.express
                         @print_func_name
                         def renderManageOutline():
-                            if not input.text_outline().strip():
-                                ui.input_action_button('btn_open_outline_creator', 'Create outline with AI')
-                                return
-        
-                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                ui.input_action_button('btn_manage_outline', 'Manage outline')
-                                with ui.div(class_='d-flex flex-column gap-2'):
-                                    ui.input_action_button('btn_open_outline_manager', 'Manage outline in outline manager')
-                                    ui.input_action_button('btn_open_outline_creator', 'Create outline with AI')
-                @render.express
-                def renderOutline():
-                    ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%', value=outline_from_outline_manager.get())
+                            btn_label = ('Create' if not input.text_outline().strip() else 'Manage') + ' outline with AI'
+                            ui.input_action_button('btn_open_outline_manager', btn_label)
+                            
+                ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
             with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                 with ui.div(class_=class_name_controls):
                     @render.express
@@ -89,8 +81,9 @@ def mod_contents(input, output, session, config_app,
                         ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
                         "Writing Speed"
                     @render.express
-                    def showDownloadOptions():
-                        _ = reload_content_view_flag()
+                    @print_func_name
+                    def renderDownloadButton():
+                        _ = reload_view_flag.get()
                         if not config_app.file_name: return
                         with ui.tooltip(placement="right"):
                             with ui.div():
@@ -98,9 +91,9 @@ def mod_contents(input, output, session, config_app,
                                     ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
                                     with ui.div(class_='d-flex flex-column gap-2'):
                                         @render.express
-                                        def renderDownloadOption():
+                                        @print_func_name
+                                        def renderDownloadOptions():
                                             attached_files, file_info = applyGetVectorDBFiles()
-                                            _ = reload_content_view_flag()
                                             outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
                                             if not outline_file_path.exists(): return
                                             content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
@@ -145,10 +138,9 @@ def mod_contents(input, output, session, config_app,
                     @render.express
                     @print_func_name
                     def renderRAGAndRefInfo():
-                        files, _ = applyGetVectorDBFiles()
-                        
+                        files, _ = getAttachedFiles()
                         if not files: return
-        
+                    
                         with ui.popover(placement='bottom', options={'trigger': 'focus'}):
                             ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
                             with ui.div(class_='d-flex flex-column gap-2'):
@@ -188,29 +180,137 @@ def mod_contents(input, output, session, config_app,
                                     ui.span(f'{i+1}. {ref}')
 
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
+    
+    @reactive.effect
+    @reactive.event(input.btn_new_file, ignore_init=True)
+    @print_func_name
+    def showNewFile():
+        config_app.setContentDefaults()
+        reload_view_flag.set(not reload_view_flag.get())
 
+    @reactive.effect
+    @reactive.event(input.btn_save_file_name)
+    @print_func_name
+    def saveFileName():
+        file_name = input.text_file_name()
+
+        if config_app.file_name == file_name: return
+
+        valid_file_statuses = list({e.value for e in generated_files_status} - {generated_files_status.DELETED.value})
+        if config_app.email != '':
+            records = selectFromDB('generated_files', 
+                                field_names=['email', 'file_name', 'status'], 
+                                field_values=[[config_app.email], [file_name], valid_file_statuses])
+        else:
+            records = selectFromDB('generated_files', 
+                                field_names=['session', 'file_name', 'status'], 
+                                field_values=[[config_app.session], [file_name], valid_file_statuses])
+        
+        if not records.empty:
+            ui.notification_show('File name already exists.', type='error')
+            return 
+        
+        current_time = datetime.now()
+
+        if config_app.generated_files_id:
+            
+            updateDB(table_name='generated_files',
+                    update_fields=['file_name', 'update_date'],
+                    update_values=[file_name, current_time],
+                    select_fields=['id'],
+                    select_values=[[config_app.generated_files_id]])
+            
+            config_app.file_name = file_name
+
+        else:
+            ids = insertIntoDB(table_name='generated_files', 
+                        field_names=['email', 'session', 'settings_id', 'ai_architecture', 'file_name', 'status', 'create_date', 'update_date'], 
+                        field_values=[[config_app.email], [config_app.session_id], [config_app.settings_id], [generated_files_ai_architecture.BASE.value], [file_name], 
+                                    'created', [current_time], [current_time]])
+            
+            config_app.generated_files_id = ids[0]
+            config_app.file_name = file_name
+
+            outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
+
+            with open(outline_file_path, 'w') as fp:
+                json.dump({}, fp)
+
+        reload_view_flag.set(not reload_view_flag.get())
+        reload_generated_docs_view_flag.set(not reload_generated_docs_view_flag.get())
+        
+        ui.notification_show('File name saved.', type='message')
+
+    @reactive.effect
+    @reactive.event(input.btn_open_outline_manager)
+    @print_func_name
+    def openOutlineManager():
+        outline = input.text_outline().strip()
+        if outline == '':
+            outline_manager_view = mod_ai_outline_creator(getUIID('ai_outline_creator'),
+                                                          saved_outline=outline_from_outline_manager,
+                                                          config_app=config_app,
+                                                          reload_uploaded_docs_view_flag=reload_uploaded_docs_view_flag,
+                                                          close_fn=ui.modal_remove)
+        else:
+
+            outline_manager_view = mod_outline_manager(getUIID('outline_manager'), 
+                                                       outline=outline, 
+                                                       saved_outline=outline_from_outline_manager,
+                                                       close_fn=ui.modal_remove)
+
+        m = ui.modal(
+            outline_manager_view,
+            title="",
+            easy_close=False,
+            footer=None,
+            size='xl',
+            style='height: 90vh'
+        )
+
+        ui.modal_show(m)
+
+    @reactive.effect
+    @reactive.event(outline_from_outline_manager, ignore_init=True)
+    @print_func_name
+    def setOutlineFromOutlineManager():
+        ui.update_text_area(id='text_outline', value=outline_from_outline_manager.get())
+        
     @print_func_name
     def setContent(content):
         loop = asyncio.get_event_loop()
         loop.create_task(stream._send_content_message(content, "replace", []))
-
+        
     @reactive.effect
-    @reactive.event(settings_changed_flag)
+    @reactive.event(input.btn_show_hide_outline)
     @print_func_name
-    def initContentView():
-        # Reset content
-        setContent('')
-        references.set([])
-        config_app.vector_db_collections_id = None
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+    def showOrHideOutline():
+        show_outline.set(not show_outline.get())
 
-    @reactive.effect
-    @reactive.event(reload_content_view_flag, ignore_init=True)
-    @print_func_name
-    def reloadContentView():
-    
-        file_change_flag.set(not file_change_flag.get())
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+        if not config_app.file_name: return
+        
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+
+        # Read outline
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+
+        raw_outline = '\n'.join(getRawOutline(d_outline))
+        ui.update_text_area(id='text_outline', value=raw_outline)
+
+    def clearContent():
+
+        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+
+        d_outline = resetOutline(d_outline)
+
+        with open(outline_file_path, mode='w') as fp:
+            json.dump(d_outline, fp)
+
+        reload_view_flag.set(not reload_view_flag.get())
 
     @reactive.effect
     @reactive.event(input.switch_show_lit_research, ignore_init=True)
@@ -221,39 +321,25 @@ def mod_contents(input, output, session, config_app,
             ui.notification_show("Please create a new file or select an existing file.", type="error")
             return
         
+        clearContent()
+        
         if not input.switch_show_lit_research():
-            if config_app.vector_db_collections_id_lit_search:
-                detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id_lit_search)
-                config_app.vector_db_collections_id_lit_search = None
+            detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id_lit_search)
+            config_app.vector_db_collections_id_lit_search = None
+            config_app.setAgent()
             return
         
         if config_app.vector_db_collections_id_lit_search: return
 
         current_time = datetime.now()
 
-        # Reuse deleted literature type collections
-        records = selectFromDB(table_name='vector_db_collections',
-                                field_names=['generated_files_id', 'type'], 
-                                field_values=[[config_app.generated_files_id], [vector_db_collections_type.LITERATURE.value]],
-                                order_by_field_names=['update_date'],
-                                order_by_types=['DESC'],
-                                limit=1)
-        
-        if not records.empty:
-            vector_db_collections_id = records['id'].iloc[0]
-            updateDB(table_name='vector_db_collections', 
-                    update_fields=['status', 'update_date'], 
-                    update_values=[vector_db_collections_status.ACTIVE.value, current_time], 
-                    select_fields=['id'], 
-                    select_values=[[vector_db_collections_id]])
-        else:
-            ids = insertIntoDB(table_name='vector_db_collections', 
+        ids = insertIntoDB(table_name='vector_db_collections', 
                         field_names=['email', 'session', 'generated_files_id', 'type', 'status', 'create_date', 'update_date'],
                         field_values=[[config_app.email], [config_app.session_id], [config_app.generated_files_id],
                                     [vector_db_collections_type.LITERATURE.value], 
                                     [vector_db_collections_status.ACTIVE.value], 
                                     [current_time], [current_time]])
-            vector_db_collections_id = ids[0]
+        vector_db_collections_id = int(ids[0])
         
         vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
         createVectorDBCollection(collection_name=vector_db_collection_name_lit_search)
@@ -266,54 +352,60 @@ def mod_contents(input, output, session, config_app,
                 select_fields=['id'], 
                 select_values=[[config_app.generated_files_id]])
 
-        if config_app.vector_db_collections_id:
-            vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id}'
-        else:
-            vector_db_collection_name = ''
-
         config_app.vector_db_collections_id_lit_search = vector_db_collections_id
-        config_app.agent = Architecture(model_name=config_app.llm, 
-                                        temperature=config_app.temperature, 
-                                        instructions=config_app.instructions, 
-                                        type=ai_architecture,
-                                        collection_name= vector_db_collection_name,
-                                        collection_name_lit_search=vector_db_collection_name_lit_search).agent
-
+        config_app.setAgent()
+        
     @reactive.calc
-    @reactive.event(reload_rag_and_ref_flag)
-    @print_func_name
-    def applyGetVectorDBFiles():
-
+    @reactive.event(reload_view_flag, reload_attached_files_view_flag)
+    def getAttachedFiles():
         files, file_info = [], {}
         if config_app.vector_db_collections_id is not None:
             refs, uploaded_file_info = getVectorDBFiles(config_app.vector_db_collections_id)
             files += refs
             file_info |= uploaded_file_info
+
+        return files, file_info
+    
+    @reactive.calc
+    @reactive.event(reload_view_flag, reload_attached_files_view_flag)
+    def getAttachedLiterature():
+        files, file_info = [], {}
         if config_app.vector_db_collections_id_lit_search is not None:
             refs, literature_info = getVectorDBFiles(config_app.vector_db_collections_id_lit_search)
             files += refs
             file_info |= literature_info
 
         return files, file_info
+
+    @reactive.calc
+    @reactive.event(reload_view_flag, reload_attached_files_view_flag)
+    @print_func_name
+    def applyGetVectorDBFiles():
+
+        files_attached, file_info_attached = getAttachedFiles()
+        files_lit, file_info_lit = getAttachedLiterature()
+        
+        return files_attached + files_lit, file_info_attached | file_info_lit
     
     @reactive.effect
     @reactive.event(input.btn_delete_rag)
     @print_func_name
     def applyDetachDocs():
 
+        clearContent()
         detachDocs(config_app.generated_files_id, config_app.vector_db_collections_id)
         config_app.vector_db_collections_id = None
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
-        
-    @reactive.effect
-    @reactive.event(file_change_flag)
+        config_app.setAgent()
+        reload_attached_files_view_flag.set(not reload_attached_files_view_flag.get())
+
+    @reactive.effect()
+    @reactive.event(reload_view_flag)
     @print_func_name
     def showContent():
-        
         if not config_app.file_name: 
             # Reset file name, outline and content
             ui.update_checkbox(id='chk_use_example', value=False)
-            ui.update_text(id='text_file_name', value='')
+            ui.update_text(id='text_file_name', value=config_app.outline)
             ui.update_text_area(id='text_outline', value='')
             setContent('')
             references.set([])
@@ -342,24 +434,81 @@ def mod_contents(input, output, session, config_app,
                                                         write_n_contents=0, 
                                                         attached_references=attached_references), 
                                         clear=True))
-        
+
     @reactive.effect
-    @reactive.event(input.btn_show_hide_outline)
+    @reactive.event(input.chk_use_example, ignore_init=True)
     @print_func_name
-    def showOrHideOutline():
-        show_outline.set(not show_outline.get())
-
-        if not config_app.file_name: return
+    def useExample():
         
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        example = textwrap.dedent('''\
+        # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
+        ## I. Introduction
+        <content>
+        ### A. Historical Perspective and Evolution of Understanding
+        <content>
+        ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
+        #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
+        <content>
+        #### 2. Economic Impact
+        <content>
+        ### C. Classification of HDP (Overview based on major international guidelines - e.g., ACOG, ISSHP, WHO)
+        #### 1. Chronic Hypertension (Pre-existing)
+        <content>
+        #### 2. Gestational Hypertension
+        <content>
+        #### 3. Preeclampsia
+        <content>''')
+        
+        if not input.chk_use_example(): example = ''
 
-        # Read outline
-        with open(outline_file_path) as fp:
-            d_outline = json.load(fp)
+        ui.update_text_area('text_outline', value=example)
 
-        raw_outline = '\n'.join(getRawOutline(d_outline))
-        ui.update_text_area(id='text_outline', value=raw_outline)
+    @print_func_name
+    def saveOutline(regenerate=False):
 
+        records = selectFromDB('generated_files', 
+                            field_names=['id', 'file_name'], 
+                            field_values=[[config_app.generated_files_id], [config_app.file_name]])
+        
+        if not (records.empty or regenerate): return True
+
+        outline = input.text_outline().strip()
+        if outline == '': return False
+
+        # outline ='''
+        # # Title: Neuroinflammation and Cognitive Function: Interplay of Causes, Mechanisms, and Pathological Outcomes
+        # ##  Abstract
+        # Neuroinflammation—once considered a secondary epiphenomenon of central nervous system (CNS) injury—is now recognized as an active, multifaceted driver of cognitive dysfunction across a broad spectrum of neurological and psychiatric disorders.
+        # ## I. Introduction
+        # continue writing
+        # ### A. Defining Neuroinflammation: Beyond a simple response – complex cellular and molecular interactions <content>
+        # ### B. Defining Cognitive Function: Key domains affected (memory, attention, executive function, processing speed) 
+        # continue writing
+        # <content>
+        # continue writing
+        # ### C. Historical Perspective vs. Current Understanding: Evolution of the concept of brain immunity and inflammation 
+        # continue writing.
+        # <content>
+        # continue writing..
+        # <content>
+        # continue writing...
+        # '''
+    
+        d_outline = processOutline(outline)
+
+        with open(f'data/outline_{config_app.generated_files_id}.json', 'w') as fp:
+            json.dump(d_outline, fp)
+
+        current_time = datetime.now()
+        
+        updateDB('generated_files', 
+                    update_fields=['status', 'create_date', 'update_date'], 
+                    update_values=[generated_files_status.CREATED.value, current_time, current_time], 
+                    select_fields=['id'], 
+                    select_values=[[config_app.generated_files_id]])
+
+        return True
+    
     @print_func_name
     def resetContentPara(d_outline, section_list, paragraph_index):
         '''
@@ -425,89 +574,8 @@ def mod_contents(input, output, session, config_app,
                                                         attached_references=attached_references), 
                                         clear=True))
 
-    @reactive.effect
-    @reactive.event(input.chk_use_example, ignore_init=True)
     @print_func_name
-    def useExample():
-        
-        example = textwrap.dedent('''\
-        # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
-        ## I. Introduction
-        <content>
-        ### A. Historical Perspective and Evolution of Understanding
-        <content>
-        ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
-        #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
-        <content>
-        #### 2. Economic Impact
-        <content>
-        ### C. Classification of HDP (Overview based on major international guidelines - e.g., ACOG, ISSHP, WHO)
-        #### 1. Chronic Hypertension (Pre-existing)
-        <content>
-        #### 2. Gestational Hypertension
-        <content>
-        #### 3. Preeclampsia
-        <content>''')
-        
-        if not input.chk_use_example(): example = ''
-
-        ui.update_text_area('text_outline', value=example)
-
-    # @reactive.effect
-    # @reactive.event(outline_from_outline_manager)
-    # @print_func_name
-    # def saveOutlineFromOutlineManager():
-    #     breakpoint()
-    #     ui.update_text('text_outline', value=outline_from_outline_manager.get())
-
-    @print_func_name
-    def saveOutline(regenerate=False):
-
-        records = selectFromDB('generated_files', 
-                            field_names=['id', 'file_name'], 
-                            field_values=[[config_app.generated_files_id], [config_app.file_name]])
-        
-        if not (records.empty or regenerate): return True
-
-        outline = input.text_outline().strip()
-        if outline == '': return False
-
-        # outline ='''
-        # # Title: Neuroinflammation and Cognitive Function: Interplay of Causes, Mechanisms, and Pathological Outcomes
-        # ##  Abstract
-        # Neuroinflammation—once considered a secondary epiphenomenon of central nervous system (CNS) injury—is now recognized as an active, multifaceted driver of cognitive dysfunction across a broad spectrum of neurological and psychiatric disorders.
-        # ## I. Introduction
-        # continue writing
-        # ### A. Defining Neuroinflammation: Beyond a simple response – complex cellular and molecular interactions <content>
-        # ### B. Defining Cognitive Function: Key domains affected (memory, attention, executive function, processing speed) 
-        # continue writing
-        # <content>
-        # continue writing
-        # ### C. Historical Perspective vs. Current Understanding: Evolution of the concept of brain immunity and inflammation 
-        # continue writing.
-        # <content>
-        # continue writing..
-        # <content>
-        # continue writing...
-        # '''
-    
-        d_outline = processOutline(outline)
-
-        with open(f'data/outline_{config_app.generated_files_id}.json', 'w') as fp:
-            json.dump(d_outline, fp)
-
-        current_time = datetime.now()
-        
-        updateDB('generated_files', 
-                    update_fields=['status', 'create_date', 'update_date'], 
-                    update_values=[generated_files_status.CREATED.value, current_time, current_time], 
-                    select_fields=['id'], 
-                    select_values=[[config_app.generated_files_id]])
-
-        return True
-
-    @print_func_name
-    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_references=[]):
+    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_references=[], attached_files_reload_flag_val=True):
 
         @print_func_name
         def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
@@ -586,31 +654,58 @@ def mod_contents(input, output, session, config_app,
         def insertReferences(d_outline, ref_list):
 
             top_level_key = list(d_outline.keys())[0]
-            d_outline[top_level_key]['References'] = [('ref', f'{v}') for v in enumerate(ref_list)]
+            d_outline[top_level_key]['References'] = [('ref', v) for v in enumerate(ref_list)]
+
+        @print_func_name
+        def getSanitizedReferences(references_ai, attached_references, attached_files_reload_flag_val):
+
+            lit_ids = []
+            for ref_id, _ in references_ai.items():
+                if ref_id not in attached_references:
+                    lit_ids.append(ref_id)
+
+            if lit_ids: 
+                refs, _ = getLiteraturesFromDB(lit_ids)
+                attached_references |= {str(k): v for k, v, _ in refs}
+                reload_attached_files_view_flag.set(attached_files_reload_flag_val)
+
+            return attached_references, attached_files_reload_flag_val
 
         @print_func_name
         def processCitation(content, ref_list, attached_references):
 
-            ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
+            ref_groups = re.findall(r'\[CITE\((.+?)\)\]', content)
     
             refs_seen = set()
             d_ref = {}
-            for refs, _ in ref_groups:
+            for refs in ref_groups:
+                refs = re.sub(r'\),\ *CITE\(', ', ', refs)
                 if refs in refs_seen: continue
                 refs_seen.add(refs)
+                ref_links = []
                 for ref in refs.split(','):
                     ref = ref.strip()
-                    if ref not in attached_references: continue
-                    if ref in d_ref: continue
+                    if ref not in attached_references: 
+                        print(f'{ref} not found in reference list, skipping...')
+                        continue
+                    if ref in d_ref:
+                        ref_links.append(d_ref[ref])
+                        continue
                     try:
                         d_ref[ref] = ref_list.index(attached_references[ref]) + 1
                     except ValueError:
                         ref_list.append(attached_references[ref])
                         d_ref[ref] = len(ref_list)
-            
-                ref_links = sorted([d_ref[ref.strip()] for ref in refs.split(',') if ref in d_ref])
-                content = content.replace(f'[CITE({refs})]', f'[{', '.join([f'<a href="#:~:text=References">{ref_cite}</a>' for ref_cite in ref_links])}]')
-        
+                    
+                    ref_links.append(d_ref[ref])
+                
+                ref_links = sorted(ref_links)
+                if len(ref_links) > 2 and len(ref_links) == (ref_links[-1]-ref_links[0]+1):
+                    new_citation = f'[<a href="#:~:text=References">{ref_links[0]}-{ref_links[-1]}</a>]'
+                else:
+                    new_citation = f'[{', '.join([f'<a href="#:~:text=References">{ref_cite}</a>' for ref_cite in sorted(ref_links)])}]'
+                content = content.replace(f'[CITE({refs})]', new_citation)
+
             return content, ref_list
         
         @print_func_name
@@ -639,11 +734,11 @@ def mod_contents(input, output, session, config_app,
                 content_pre_new = content_pre[len_last_content_pre + 1:]
 
             content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
+            
             if attached_references:
                 content_pre_new, ref_list = processCitation(content_pre_new, ref_list, attached_references)
                 references.set(ref_list.copy())
             await reactive.flush()
-
             len_last_content_pre = len(content_pre)
 
             yield content_pre_new
@@ -657,11 +752,14 @@ def mod_contents(input, output, session, config_app,
             response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
             
             content = response['content']
-            attached_references = response.get('references', {})
+            attached_references_ai = response.get('references', {})
 
-            print(content)
+            print(content, attached_references_ai)
+
+            attached_references, attached_files_reload_flag_val = getSanitizedReferences(attached_references_ai, attached_references, not attached_files_reload_flag_val)
 
             insertContent(d_outline, current_section_list, content)
+
             if attached_references:
                 response_with_citations, ref_list = processCitation(content, ref_list, attached_references)
                 references.set(ref_list.copy())
@@ -710,7 +808,8 @@ def mod_contents(input, output, session, config_app,
         attached_references, _ = applyGetVectorDBFiles()
         await stream.stream(generateResponse(d_outline, 
                                              outline_file_path,
-                                             attached_references=attached_references), 
+                                             attached_references=attached_references,
+                                             attached_files_reload_flag_val=reload_attached_files_view_flag.get()), 
                             clear=True)
 
         config_app.is_writing = True
@@ -729,7 +828,12 @@ def mod_contents(input, output, session, config_app,
     @reactive.effect
     @reactive.event(input.btn_regenerate)
     @print_func_name
-    async def startFromBeginning():
+    async def startFromScratch():
+        
+        if config_app.is_writing:
+            ui.notification_show('Writing is in progress. Please click "Pause" button first.', type='message')
+            return
+        
         await generate(regenerate=True)
 
     @reactive.effect
@@ -761,7 +865,7 @@ def mod_contents(input, output, session, config_app,
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
             
             loop = asyncio.get_event_loop()
-            loop.create_task(session.send_custom_message('reload_content', {'ui_id': 'main-contents'}))
+            loop.create_task(session.send_custom_message('reload_content', {'ui_id': ui_id}))
 
         else:
             ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))

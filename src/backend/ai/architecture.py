@@ -14,8 +14,10 @@ from .generate_outline import GenerateOutline
 from .add_literature import AddLiterature
 from typing import Literal
 from rich import print
+from utils import print_func_name
 
 # -----------------------------------------------------------------------
+@print_func_name
 def check_if_summary_needed(
         state: State,
     ) -> Literal['Summarize', 'Generate Content']:
@@ -24,6 +26,7 @@ def check_if_summary_needed(
         return 'Generate Content'
 
 # -----------------------------------------------------------------------
+@print_func_name
 def check_if_summary_needed_rag(
         state: State,
     ) -> Literal['Summarize', 'Analyze Content Header']:
@@ -31,12 +34,14 @@ def check_if_summary_needed_rag(
             return 'Summarize'
         return 'Analyze Content Header'
 
+@print_func_name
 def wait(state):
     return {'steps': ['Wait']}
 
 # -----------------------------------------------------------------------
 class Architecture:
 
+    @print_func_name
     def __init__(self, model_name, temperature, instructions, type='base', collection_name='', collection_name_lit_search=''):
         llm = getAIModel(model_name=model_name, temperature=temperature)
 
@@ -52,6 +57,7 @@ class Architecture:
             case _:
                 self.createBaseAgent(llm, instructions)
 
+    @print_func_name
     def createBaseAgent(self, llm, instructions):
 
         # Define a new graph
@@ -71,6 +77,7 @@ class Architecture:
         memory = MemorySaver()
         self.agent = workflow.compile(checkpointer=memory)
 
+    @print_func_name
     def createRAGAgent(self, llm, instructions, collection_name='', collection_name_lit_search=''):
 
         # Define a new graph
@@ -109,7 +116,7 @@ class Architecture:
         memory = MemorySaver()
         self.agent = workflow.compile(checkpointer=memory)
 
-
+    @print_func_name
     def createGraphRAGAgent(self, llm, instructions, collection_name):
 
         # Define a new graph
@@ -136,12 +143,14 @@ class Architecture:
 # -----------------------------------------------------------------------
 class ArchitectureOutline:
      
+    @print_func_name
     def __init__(self, model_name, temperature, instructions):
 
         llm = getAIModel(model_name=model_name, temperature=temperature)
         
         self.createOutlineAgent(llm, instructions)
 
+    @print_func_name
     def createOutlineAgent(self, llm, instructions):
 
         # Define a new graph

@@ -132,7 +132,7 @@ def getUploadedDocItemView(input, output, session, doc, is_selected, changeSelec
 
 
 @module
-def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_ref_flag, showGeneratedDocsDetailedView, reload_view_flag):
+def mod_uploaded_docs_view(input, output, session, config_app, reload_content_attached_files_view_flag, showGeneratedDocsDetailedView, reload_view_flag):
 
     selected_docs_changed_flag = reactive.value(True)
     select_all_docs = reactive.value(False)
@@ -193,7 +193,7 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
         
         if files is None: return
 
-        uploadFiles(files)
+        uploadFiles(files, email=config_app.email, session_id=config_app.session_id)
 
         reload_view_flag.set(not reload_view_flag.get())
 
@@ -286,10 +286,6 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_rag_and_re
                 select_values=[[config_app.generated_files_id]])
 
         config_app.vector_db_collections_id = vector_db_collections_id
-        config_app.agent = Architecture(model_name=config_app.llm, 
-                                        temperature=config_app.temperature, 
-                                        instructions=config_app.instructions, 
-                                        type=ai_architecture, 
-                                        collection_name=vector_db_collection_name).agent
+        config_app.setAgent()
 
-        reload_rag_and_ref_flag.set(not reload_rag_and_ref_flag.get())
+        reload_content_attached_files_view_flag.set(not reload_content_attached_files_view_flag.get())

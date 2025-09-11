@@ -8,22 +8,26 @@ from ..db import selectFromDB, insertIntoDB
 from datetime import datetime
 import asyncio
 import nest_asyncio
+from utils import print_func_name
 
 nest_asyncio.apply()
 
 class AddLiterature:
 
     @traceable
+    @print_func_name
     def addLiteratureToVectorDBCollection(self, literature_list: list[dict]):
 
         docs = [Document(page_content=lit['content'].strip(), metadata={'app_file_id': lit['ref_doi'], 'app_file_name': lit['ref']}) for lit in literature_list]
         self.db.add(docs=docs)
     
+    @print_func_name
     def __init__(self, collection_name: str):
         self.db = ChromaDB()
         self.collection_name = collection_name
         self.db.get(collection_name=collection_name)
     
+    @print_func_name
     def addLiterature(self, ref_id, ref):
 
         current_time = datetime.now()
@@ -52,15 +56,20 @@ class AddLiterature:
                     field_names=['vector_db_collections_id', 'literature_id', 'create_date', 'update_date'],
                     field_values=[[vector_db_collections_id], [ref_id], [current_time], [current_time]])
 
+    @print_func_name
     async def gatherLiterature(self, queries):
 
         literature_list_all = []
         for query in queries:
-            literature_list = await search_pubmed_article_async(query=query, max_results=1, api_key=Config.env_config['NCBI_API_KEY'])
+            literature_list = await search_pubmed_article_async(query=query, 
+                                                                max_results=Config.NUM_MAX_LITERATURE, 
+                                                                content_size=Config.MAX_CONTENT_SIZE_PER_LITERATURE, 
+                                                                api_key=Config.env_config['NCBI_API_KEY'])
             literature_list_all += literature_list
         return literature_list_all
         
     @traceable
+    @print_func_name
     def __call__(self, state: State):
         '''Adds literature to vector database'''
 
@@ -69,7 +78,7 @@ class AddLiterature:
         refs_in_db = set()
         literature_list_filtered = []
         for lit in literature_list:
-            ref = lit['ref']
+            ref = lit['ref']    
             ref_doi = ref['doi']
             if ref_doi not in refs_in_db:
                 literature_list_filtered.append({'ref_doi': ref_doi, 'ref': formatAPA(ref), 'content': lit['content'].strip()})

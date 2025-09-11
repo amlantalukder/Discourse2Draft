@@ -1,4 +1,5 @@
-from shiny.express import render, module
+from shiny import reactive
+from shiny.express import render, module, ui
 from shiny.types import ImgData
 from utils import Config, print_func_name
 from pathlib import Path
@@ -16,6 +17,25 @@ import json
 import re
 from docx import Document
 import textwrap
+
+@module
+def confirmBox(input, output, session, text, action_btn_name, cancel_btn_name):
+
+    agree = False
+
+    with ui.hold() as content:
+        with ui.div():
+            text
+        with ui.div():
+            ui.input_action_button(id='btn_action', label=action_btn_name)
+            ui.input_action_button(id='btn_cancel', label=cancel_btn_name)
+    
+    @reactive.effect
+    @reactive.event(input.action_btn_name)
+    def action():
+        agree = True
+
+    return content, agree
 
 @print_func_name
 def initProfile(config_app):
@@ -138,39 +158,48 @@ def getVectorDBFiles(vector_db_collections_id):
 
     if literature_id_list:
     
-        literature_records = selectFromDB(table_name='literature',
-                                        field_names=['id'],
-                                        field_values=[literature_id_list])
-        
-        literature_records['authors'] = literature_records['authors'].map(lambda authors: json.loads(authors.replace("'first_name': '", '"first_name": "').replace("'first_name'", '"first_name"').replace("'last_name': '", '"last_name": "').replace("'last_name'", '"last_name"').replace("'}", '"}').replace("',", '",')))
-        literature_records['reference'] = literature_records.apply(lambda x: formatAPA(dict(x[['authors', 'title', 'year', 'journal', 'volume', 'issue', 'pages', 'doi', 'pmid']])), axis=1)
-        literature_records['type'] = vector_db_collections_type.LITERATURE.value
-        
-        literature_info = list(literature_records[['id', 'reference', 'type']].values)
-
-        literature_records['doi'] = literature_records['id']
-        file_info = literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
-
-        return literature_info, file_info
+        return getLiteraturesFromDB(literature_id_list)
     
     return [], {}
+
+@print_func_name
+def getLiteraturesFromDB(literature_id_list):
+
+    literature_records = selectFromDB(table_name='literature',
+                                    field_names=['id'],
+                                    field_values=[literature_id_list])
+    
+    literature_records['authors'] = literature_records['authors'].map(eval)
+    literature_records['reference'] = literature_records.apply(lambda x: formatAPA(dict(x[['authors', 'title', 'year', 'journal', 'volume', 'issue', 'pages', 'doi', 'pmid']])), axis=1)
+    literature_records['type'] = vector_db_collections_type.LITERATURE.value
+    
+    literature_info = list(literature_records[['id', 'reference', 'type']].values)
+
+    literature_records['doi'] = literature_records['id']
+    file_info = literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
+
+    return literature_info, file_info
 
 @print_func_name
 def detachDocs(generated_files_id, vector_db_collections_id):
 
     current_time = datetime.now()
-
-    updateDB(table_name='generated_files', 
-            update_fields=['ai_architecture', 'update_date'], 
-            update_values=[generated_files_ai_architecture.BASE.value, current_time], 
-            select_fields=['id'], 
-            select_values=[[generated_files_id]])
     
     updateDB(table_name='vector_db_collections', 
                 update_fields=['status', 'update_date'],
                 update_values=[vector_db_collections_status.DELETED.value, current_time],
                 select_fields=['id'], 
                 select_values=[[vector_db_collections_id]]) 
+    
+    records = selectFromDB(table_name='vector_db_collections',
+                                field_names=['generated_files_id', 'status'], 
+                                field_values=[[generated_files_id], [vector_db_collections_status.ACTIVE.value]])
+    if records.empty:
+        updateDB(table_name='generated_files', 
+                update_fields=['ai_architecture', 'update_date'], 
+                update_values=[generated_files_ai_architecture.BASE.value, current_time], 
+                select_fields=['id'], 
+                select_values=[[generated_files_id]])
 
     vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
     deleteCollection(vector_db_collection_name)
@@ -239,27 +268,41 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         content_tex = content
         
-        ref_groups = re.findall(r'\[CITE\((.+?(,\ ?.+?)*)\)\]', content)
+        ref_groups = re.findall(r'\[CITE\((.+?)\)\]', content)
+    
         refs_seen = set()
         d_ref = {}
-        for refs, _ in ref_groups:
+        for refs in ref_groups:
+            refs = re.sub(r'\),\ *CITE\(', ', ', refs)
             if refs in refs_seen: continue
             refs_seen.add(refs)
+            ref_links = []
             for ref in refs.split(','):
                 ref = ref.strip()
-                if ref not in attached_references: continue
-                if ref in d_ref: continue
+                if ref not in attached_references: 
+                    breakpoint()
+                    print(f'{ref} not found in reference list, skipping...')
+                    continue
+                if ref in d_ref:
+                    ref_links.append(d_ref[ref])
+                    continue
                 try:
                     d_ref[ref] = ref_list.index(attached_references[ref]) + 1
                 except ValueError:
                     ref_list.append(attached_references[ref])
                     d_ref[ref] = len(ref_list)
                     used_files_info[ref] = file_info[ref]
+
+                ref_links.append(d_ref[ref])
         
-            if d_ref:
-                ref_links = sorted([str(d_ref[ref.strip()]) for ref in refs.split(',') if ref in d_ref])
-                content = content.replace(f'[CITE({refs})]', f'[{', '.join(ref_links)}]')
-                content_tex = content_tex.replace(f'[CITE({refs})]', f'\\cite{{{refs}}}')
+            ref_links = sorted(ref_links)
+            if len(ref_links) > 2 and len(ref_links) == (ref_links[-1]-ref_links[0]+1):
+                new_citation = f'[{ref_links[0]}-{ref_links[-1]}]'
+            else:
+                new_citation = f'[{', '.join(map(str, ref_links))}]'
+            
+            content = content.replace(f'[CITE({refs})]', new_citation)
+            content_tex = content_tex.replace(f'[CITE({refs})]', f'\\cite{{{refs}}}')
     
         return content, content_tex, ref_list, used_files_info
 
@@ -283,15 +326,15 @@ def getDocContent(file_id, attached_files=[], file_info={}):
                     return f'\\paragraph{{\\textit{{{header}}}}}'
 
         if not isinstance(d, dict):
-            for i, (k, v) in enumerate(d):
+            for k, v in d:
                 if k != 'ref':
                     content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
                     content_md.append(content_text)
                     content_docx.add_paragraph(content_text)
                     content_tex.append(content_tex_text)
                 else:
-                    content_md.append(f'[{i+1}]: {v}')
-                    content_docx.add_paragraph(f'[{i+1}]. {v}')
+                    content_md.append(f'[{v[0]+1}]: {v[1]}')
+                    content_docx.add_paragraph(f'[{v[0]+1}]. {v[1]}')
         else:
             for k in d:
                 if k != 'content':
@@ -381,7 +424,7 @@ def uploadFiles(files, email='', session_id=''):
             ids = insertIntoDB(table_name='uploaded_files', 
                         field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
                         field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
-            uploaded_file_id = ids[0]
+            uploaded_file_id = int(ids[0])
             
         else:
             updateDB(table_name='uploaded_files', 
@@ -389,7 +432,7 @@ def uploadFiles(files, email='', session_id=''):
                     update_values=[uploaded_files_status.UPLOADED.value, current_time], 
                     select_fields=['id'], 
                     select_values=[list(map(int, records.id.values))])
-            uploaded_file_id = records.iloc[0].id
+            uploaded_file_id = int(records.iloc[0].id)
 
         # ids = insertIntoDB(table_name='uploaded_files', 
         #                    field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 

@@ -7,8 +7,8 @@ from utils import getUIID, print_func_name
 @module
 def mod_sidebar(input, output, session, 
                 config_app, 
-                reload_rag_and_ref_flag, 
-                reload_content_view_flag, 
+                reload_content_view_flag,
+                reload_content_attached_files_view_flag, 
                 reload_generated_docs_view_flag, 
                 reload_uploaded_docs_view_flag):
 
@@ -35,7 +35,7 @@ def mod_sidebar(input, output, session,
                     def renderUploadedDocs():
                         mod_uploaded_docs_view(id=getUIID('uploaded_docs'), 
                                         config_app=config_app, 
-                                        reload_rag_and_ref_flag=reload_rag_and_ref_flag,
+                                        reload_content_attached_files_view_flag=reload_content_attached_files_view_flag,
                                         reload_view_flag = reload_uploaded_docs_view_flag,
                                         showGeneratedDocsDetailedView=showGeneratedDocsDetailedView)
         

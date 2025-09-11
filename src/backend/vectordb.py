@@ -69,6 +69,7 @@ class ChromaDB:
             document_chunks = list(shredder.transform_documents(docs))
 
         # Index chunks
+        print(f'Adding {len(document_chunks)} chunks to vectordb ...')
         _ = self.vector_store.add_documents(documents=document_chunks)
 
     def invoke(self, query: str):

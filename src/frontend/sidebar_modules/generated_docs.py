@@ -77,11 +77,13 @@ def getGeneratedDocItemView(input, output, session,
                         info['file_name']
                 with ui.div(class_='app-td col-2'):
                     ui.span(db_config.generated_files_status_desc[info['status']])
-                with ui.div(class_='app-td col-2'):
+                with ui.div(class_='app-td col-3', style='max-height:200px; overflow-x:hidden; overflow-y:auto'):
                     @render.express
                     def renderAttachedFiles():
-                        files, _ = applyGetVectorDBFiles()
-                        if not files: return
+                        files, _ = getAttachedFiles()
+                        refs, _ = getAttachedLiterature()
+                        
+                        if not files and not refs: return
                         with ui.div(class_='border rounded p-2'):
                             with ui.div():
                                 for i, (_, file_name, _) in enumerate(files):
@@ -92,12 +94,21 @@ def getGeneratedDocItemView(input, output, session,
                                             with ui.tooltip():
                                                 ui.span(file_name, class_='cut-text')
                                                 file_name
+                                if len(refs):
+                                    ref_text = f'{len(refs)} literatures'
+                                    with ui.div(class_='d-flex gap-1'):
+                                        with ui.div(class_='col-2 d-flex align-items-center'):
+                                            getFileTypeIcon(f'icon_{len(files)}', file_type=getFileType(ref_text))
+                                        with ui.div(class_='col d-flex align-items-center'):
+                                            with ui.tooltip():
+                                                ui.span(ref_text, class_='cut-text')
+                                                ref_text
                             with ui.div(class_='text-end'):
                                 with ui.tooltip():
                                     ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
                                     "De-attach documents"
 
-                with ui.div(class_='app-td col-2'):
+                with ui.div(class_='app-td col-3'):
                     with ui.div(class_='d-flex flex-column'):
                         with ui.div(class_='d-flex gap-1'):
                             ui.strong('LLM:')
@@ -114,10 +125,8 @@ def getGeneratedDocItemView(input, output, session,
                                     with ui.div(class_='popover-instructions'):
                                         ui.markdown(info['instructions'])
                 with ui.div(class_='app-td col-1'):
-                    ui.span(info['create_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                with ui.div(class_='app-td col-1'):
                     ui.span(info['update_date'].strftime('%Y-%m-%d %H:%M:%S'))
-                with ui.div(class_='app-td col-1 justify-content-center'):
+                with ui.div(class_='app-td col-1 justify-content-center gap-2 flex-wrap'):
                     with ui.tooltip(placement="right"):
                         with ui.div():
                             with ui.popover(placement='bottom', options={'trigger': 'focus'}):
@@ -156,25 +165,40 @@ def getGeneratedDocItemView(input, output, session,
                                             async def renderDownloadBib():
                                                 yield bibs
                         "Download"
-
-                with ui.div(class_='app-td col-1 justify-content-center'):
-                    with ui.div():
-                        ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
+                    
+                    with ui.tooltip(placement="right"):
+                        with ui.div():
+                            ui.input_action_button(f'btn_delete', '', icon=faicons.icon_svg('trash'))
+                        "Delete file"
 
     @reactive.calc
-    @print_func_name
-    def applyGetVectorDBFiles():
+    def getAttachedFiles():
         files, file_info = [], {}
         if info['vector_db_collections_id_uploaded_files']:
             refs, uploaded_file_info = getVectorDBFiles(info['vector_db_collections_id_uploaded_files'])
             files += refs
             file_info |= uploaded_file_info
+
+        return files, file_info
+    
+    @reactive.calc
+    def getAttachedLiterature():
+        files, file_info = [], {}
         if info['vector_db_collections_id_literature']:
             refs, literature_info = getVectorDBFiles(info['vector_db_collections_id_literature'])
             files += refs
             file_info |= literature_info
 
         return files, file_info
+
+    @reactive.calc
+    @print_func_name
+    def applyGetVectorDBFiles():
+
+        files_attached, file_info_attached = getAttachedFiles()
+        files_lit, file_info_lit = getAttachedLiterature()
+        
+        return files_attached + files_lit, file_info_attached | file_info_lit
 
     @reactive.effect
     @reactive.event(input.btn_show, ignore_init=True)
@@ -193,32 +217,7 @@ def getGeneratedDocItemView(input, output, session,
         config_app.llm = info['llm']
         config_app.temperature = info['temperature']
         config_app.instructions = info['instructions']
-        
-        match info['ai_architecture']:
-
-            case generated_files_ai_architecture.BASE.value:
-
-                config_app.agent = Architecture(model_name=config_app.llm, 
-                                                temperature=config_app.temperature, 
-                                                instructions=config_app.instructions, 
-                                                type=generated_files_ai_architecture.BASE.value).agent
-            
-            case generated_files_ai_architecture.RAG.value:
-
-                vector_db_collection_name, vector_db_collection_name_lit_search = '', ''
-                
-                if config_app.vector_db_collections_id:
-                    vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id}'
-                
-                if config_app.vector_db_collections_id_lit_search:
-                    vector_db_collection_name_lit_search = f'{Config.APP_NAME_AS_PREFIX}_collection_{config_app.vector_db_collections_id_lit_search}'
-
-                config_app.agent = Architecture(model_name=config_app.llm, 
-                                                temperature=config_app.temperature, 
-                                                instructions=config_app.instructions, 
-                                                type=generated_files_ai_architecture.RAG.value, 
-                                                collection_name=vector_db_collection_name,
-                                                collection_name_lit_search=vector_db_collection_name_lit_search).agent
+        config_app.setAgent()
 
         reload_content_view_flag.set(not reload_content_view_flag.get())
 
@@ -286,16 +285,12 @@ def mod_generated_docs_detailed_view(input, output, session, config_app, reload_
                                 ui.strong('Document')
                             with ui.div(class_='app-th col-2'):
                                 ui.strong('Status')
-                            with ui.div(class_='app-th col-2'):
+                            with ui.div(class_='app-th col-3'):
                                 ui.strong('Attached documents')
-                            with ui.div(class_='app-th col-2'):
+                            with ui.div(class_='app-th col-3'):
                                 ui.strong('Settings')
                             with ui.div(class_='app-th col-1'):
-                                ui.strong('Create date')
-                            with ui.div(class_='app-th col-1'):
-                                ui.strong('Update date')
-                            with ui.div(class_='app-th col-1 justify-content-center'):
-                                ""
+                                ui.strong('Last modified')
                             with ui.div(class_='app-th col-1 justify-content-center'):
                                 ""
                     with ui.div(class_='app-tbody'):

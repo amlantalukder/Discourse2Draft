@@ -70,8 +70,7 @@ def print_func_name(func):
             else:
                 print(f"Calling {func.__module__}.{func_name}")
         return await func(*args, **kwargs)
-    
+
     if inspect.iscoroutinefunction(func):
         return async_wrapper
-    
     return wrapper

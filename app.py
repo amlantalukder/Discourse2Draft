@@ -24,8 +24,6 @@ config_app = ConfigApp()
 config_app.session_id = session.id
 login_status = reactive.value("logged_out")
 reload_main_view_flag = reactive.value(True)
-reload_generated_docs_view_flag=reactive.value(True)
-settings_changed_main_view_flag = reactive.value(True)
 reload_settings_view_flag = reactive.value(True)
 current_file_name = reactive.value('')
 
@@ -102,9 +100,7 @@ with ui.div(class_="app-container"):
 def loadMainView():
     return mod_main(id='main', 
                 config_app=config_app,
-                reload_main_view_flag=reload_main_view_flag,
-                reload_generated_docs_view_flag=reload_generated_docs_view_flag, 
-                settings_changed_flag=settings_changed_main_view_flag
+                reload_view_flag=reload_main_view_flag
         )
 
 @reactive.calc
@@ -125,7 +121,7 @@ def changeLoginStatus(status):
     login_status.set(status)
     initProfile(config_app)
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
-    settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())
+    reload_main_view_flag.set(not reload_main_view_flag.get())
     
 @print_func_name
 def logOut():
@@ -136,7 +132,7 @@ def logOut():
     config_app.setDefaults()
     config_app.session_id = session.id
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
-    settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())
+    reload_main_view_flag.set(not reload_main_view_flag.get())
 
     login_status.set('logged_out')
 
@@ -223,4 +219,4 @@ def changeSettings():
         config_app.vector_db_collections_id_lit_search = None
 
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
-    settings_changed_main_view_flag.set(not settings_changed_main_view_flag.get())
+    reload_main_view_flag.set(not reload_main_view_flag.get())

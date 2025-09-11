@@ -9,6 +9,21 @@ import faicons
 import re
 
 @print_func_name
+def resetOutline(d):
+    
+    for k, v in d.items():
+        if k == 'References': 
+            continue
+        if k != 'content':
+            d[k] = resetOutline(v.copy())
+        else:
+            for i, [content_type, _] in enumerate(d['content']):
+                if content_type == 'content_ai':
+                    d['content'][i][1] = ''
+
+    return d
+
+@print_func_name
 def insertOutline(d, outline_items):
 
     if len(outline_items) == 1:
@@ -29,19 +44,18 @@ def processOutline(outline):
     chunks_leading_to_content = outline.split('<content>')
     for i, x in enumerate(chunks_leading_to_content):
         x = x.strip()
-        if not x: continue
-        text = ''
+        if not x.strip(): continue
+        lines = []
         for line_x in x.split('\n'):
-    
+            
             line_x = line_x.strip()
-            if not line_x: continue
             if not line_x.startswith('#'):
-                text += line_x
+                lines.append(line_x)
                 continue
 
-            if text: 
-                d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
-                text = ''
+            if lines: 
+                d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', '\n'.join(lines).strip()]])
+                lines = []
             
             hashes = line_x.split()[0]
             header = ' '.join(line_x.split()[1:])
@@ -51,7 +65,7 @@ def processOutline(outline):
                 return False
             
             if len(hashes) > len(outline_items) + 1:
-                ui.notification_show(f"Expected no more than {len(outline_items) + 1} '#'s before {text}", type="error")
+                ui.notification_show(f"Expected no more than {len(outline_items) + 1} '#'s before {'\n'.join(lines)}", type="error")
                 return False
             
             if len(hashes) <= len(outline_items):
@@ -59,8 +73,8 @@ def processOutline(outline):
 
             outline_items.append(header)
             
-        if text: 
-            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', text]])
+        if lines: 
+            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', '\n'.join(lines).strip()]])
             
         if i < len(chunks_leading_to_content)-1:
             d_outline = insertOutline(d_outline.copy(), outline_items + [['content_ai', '']])
@@ -103,7 +117,7 @@ def getRawOutline(d, raw_outline=[], counter=1):
     return raw_outline                                         
 
 @module
-def mod_outline_manager(input, output, session, outline, saved_outline, close_fn):
+def mod_outline_manager(input, output, session, outline, saved_outline, close_fn=None):
 
     @module
     def mod_outline_tools(input, output, session, id_suffix, text, show_insert_above=True, show_insert_within=True, show_remove=True):
@@ -313,9 +327,14 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                     with ui.tooltip():
                         ui.input_action_button('btn_save', '', icon=faicons.icon_svg("floppy-disk"))
                         'Save changes'
-                    with ui.tooltip():
-                        ui.input_action_button('btn_close', '', icon=faicons.icon_svg("xmark"))
-                        'Close'
+                    @render.express
+                    @print_func_name
+                    def renderCloseButton():
+                        if not close_fn: return
+
+                        with ui.tooltip():
+                            ui.input_action_button('btn_close', '', icon=faicons.icon_svg("xmark"))
+                            'Close'
             with ui.div(class_='outline-manager outline'):
                 @render.ui
                 @print_func_name
@@ -390,86 +409,60 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
     @print_func_name
     def save():
         saved_outline.set('\n'.join(getRawOutline(d_outline.get())))
-        ui.modal_remove()
+        if close_fn: close_fn()
                         
     return content
 
 @module
-def mod_ai_outline_creator(input, output, session, outline_creator_options, saved_outline, reload_uploaded_docs_view_flag, config_app):
+def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploaded_docs_view_flag, config_app, close_fn):
 
-    show_create_outline_view = reactive.value(not outline_creator_options.get()['show_init_view'])
     outline_content = reactive.value('Outline will appear here')
     topic_name = reactive.value('')
     topic_desc = reactive.value('')
     
     with ui.hold() as content:
         with ui.div(class_='outline-creator-container'):
-            @render.express
-            @print_func_name
-            def renderView():
-                if not show_create_outline_view.get():
-                    with ui.div(class_='outline-creator-init-view'):
-                        ui.input_action_button('btn_show_create_outline_ai', 'Create outline with AI')
-                        ui.span('OR')
-                        ui.input_action_button('btn_use_custom_outline', 'Use custom outline')
-                        return
-                
-                with ui.div(class_='outline-creator'):
-                    with ui.div(class_='outline-creator-controls'):
-                        with ui.div():
-                            ui.input_action_button(id='btn_back', label='Back')
-                        with ui.accordion(open=False, multiple=False):
-                            with ui.accordion_panel('AI settings'):
-                                with ui.div(class_='row justify-content-between'):
-                                    ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
-                                    ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
-                                ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
-                        with ui.div():
-                            ui.input_text(id='text_topic', label='Topic')
+            with ui.div(class_='d-flex justify-content-between p-3'):
+                ui.h4('Outline Creator')
+                with ui.tooltip():
+                    ui.input_action_button('btn_close', '', icon=faicons.icon_svg("xmark"))
+                    'Close'    
+            with ui.div(class_='outline-creator'):
+                with ui.div(class_='outline-creator-controls'):
+                    with ui.accordion(open=False, multiple=False):
+                        with ui.accordion_panel('AI settings'):
+                            with ui.div(class_='row justify-content-between'):
+                                ui.input_selectize('select_llm', 'LLM', choices=extractAvailableLLMs())
+                                ui.input_slider('slide_temp', 'Temperature', min=0, max=1, step=0.1, value=0)
+                            ui.input_text_area('text_instructions', 'Instructions', value='Create a outline for literature writing on the given topic', rows=8, width='100%', resize='vertical')
+                    with ui.div():
+                        ui.input_text(id='text_topic', label='Topic')
 
-                        @render.express
-                        def renderTopicDesc():
-                            if not input.text_topic(): return
-                            with ui.div(): 
-                                ui.input_radio_buttons('radio_topic_selection', label='', choices={'Write topic': 'Write more about this topic (Optional)', 'Upload topic': 'Upload documents about this topic (Optional)'}, inline=True, selected='Write topic')
-                            with ui.div(class_='d-flex gap-4 align-items-end'):
-                                @render.express
-                                def renderTopicInputType():
-                                    topic_sel_type = input.radio_topic_selection()
-                                    if topic_sel_type == 'Write topic':
-                                        with ui.div(class_='col'):
-                                            ui.input_text_area('text_topic_desc', 'Topic primer', placeholder='Add a primer about this topic', rows=4, width='100%', resize='vertical')
-                                        with ui.div(class_='col-auto'):
-                                            ui.input_task_button('btn_create_outline', 'Create outline')
-                                    else:
-                                        with ui.div(class_='d-flex gap-4 align-items-end'):
-                                            ui.input_file("btn_upload_topic_desc", "Choose a document (in text format) on this topic", accept=[".txt"])
-                                        with ui.div(class_='col-auto pb-3'):
-                                            ui.input_task_button('btn_create_outline', 'Create outline')
-                            
-                    with ui.div(class_='outline-creator-content'):
-                        @render.express
-                        @print_func_name
-                        def renderOutline():
-                            outline_content.get()
-
-    @reactive.effect
-    @reactive.event(input.btn_show_create_outline_ai)
-    @print_func_name
-    def showCreateOutlineView():
-        show_create_outline_view.set(True)
-
-    @reactive.effect
-    @reactive.event(input.btn_use_custom_outline)
-    @print_func_name
-    def useCustomOutline():
-        outline_creator_options.set({'show': False, 'show_init_view': False})
-
-    @reactive.effect
-    @reactive.event(input.btn_back)
-    @print_func_name
-    def backToInitView():
-        show_create_outline_view.set(False)
+                    @render.express
+                    def renderTopicDesc():
+                        if not input.text_topic(): return
+                        with ui.div(): 
+                            ui.input_radio_buttons('radio_topic_selection', label='', choices={'Write topic': 'Write more about this topic (Optional)', 'Upload topic': 'Upload documents about this topic (Optional)'}, inline=True, selected='Write topic')
+                        with ui.div(class_='d-flex gap-4 align-items-end'):
+                            @render.express
+                            def renderTopicInputType():
+                                topic_sel_type = input.radio_topic_selection()
+                                if topic_sel_type == 'Write topic':
+                                    with ui.div(class_='col'):
+                                        ui.input_text_area('text_topic_desc', 'Topic primer', placeholder='Add a primer about this topic', rows=4, width='100%', resize='vertical')
+                                    with ui.div(class_='col-auto'):
+                                        ui.input_task_button('btn_create_outline', 'Create outline')
+                                else:
+                                    with ui.div(class_='d-flex gap-4 align-items-end'):
+                                        ui.input_file("btn_upload_topic_desc", "Choose a document (in text format) on this topic", accept=[".txt"])
+                                    with ui.div(class_='col-auto pb-3'):
+                                        ui.input_task_button('btn_create_outline', 'Create outline')
+                        
+                with ui.div(class_='outline-creator-content'):
+                    @render.express
+                    @print_func_name
+                    def renderOutline():
+                        outline_content.get()
 
     @reactive.effect
     @reactive.event(input.text_topic)
@@ -547,7 +540,7 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
             case 'success':
                 response = generateOutline.result()
                 content = core_ui.div(
-                        mod_outline_manager(getUIID('outline_manager'), outline=response, saved_outline=saved_outline, close_fn=clearContent),
+                        mod_outline_manager(getUIID('outline_manager'), outline=response, saved_outline=saved_outline),
                         class_='border rounded flex-rest'
                     )
                 outline_content.set(content)
@@ -555,11 +548,12 @@ def mod_ai_outline_creator(input, output, session, outline_creator_options, save
     @print_func_name
     def clearContent():
         outline_content.set('Outline will appear here')
+        close_fn()
 
     @reactive.effect
-    @reactive.event(saved_outline, ignore_init=True)
+    @reactive.event(input.btn_close)
     @print_func_name
-    def saveOutlineForContentGeneration():
-        outline_creator_options.set({'show': False, 'show_init_view': False})
+    def close():
+        close_fn()
 
     return content

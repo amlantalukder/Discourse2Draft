@@ -33,7 +33,7 @@ def mod_settings(input, output, session, callback_fn, config_app, reload_flag):
         config_app.llm = input.select_llm()
         config_app.temperature = input.slide_temp()
         config_app.instructions = input.text_instructions()
-        config_app.agent = Architecture(model_name=config_app.llm, temperature=float(config_app.temperature), instructions=config_app.instructions).agent
+        config_app.setAgent()
 
         callback_fn()
 
