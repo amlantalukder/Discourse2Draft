@@ -36,9 +36,6 @@ class generated_files_ai_architecture(Enum):
     BASE = 'base'
     RAG = 'rag'
     GRAPH_RAG = 'graphrag'
-    #'rag+ref', 'rag+pretraining', 'rag+pretraining+ref', 
-    #'graphrag', 'graphrag+ref', 'graphrag+pretraining', 'graphrag+pretraining+ref',
-    #'deepresearch', 'deepresearch+ref']
 
 # -----------------------------------------------------------------------
 class uploaded_files_status(Enum):

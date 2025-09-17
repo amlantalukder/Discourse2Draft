@@ -280,7 +280,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
             for ref in refs.split(','):
                 ref = ref.strip()
                 if ref not in attached_references: 
-                    breakpoint()
+                    #breakpoint()
                     print(f'{ref} not found in reference list, skipping...')
                     continue
                 if ref in d_ref:
@@ -333,7 +333,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
                     content_docx.add_paragraph(content_text)
                     content_tex.append(content_tex_text)
                 else:
-                    content_md.append(f'[{v[0]+1}]: {v[1]}')
+                    content_md.append(f'\n[{v[0]+1}]: {v[1]}')
                     content_docx.add_paragraph(f'[{v[0]+1}]. {v[1]}')
         else:
             for k in d:

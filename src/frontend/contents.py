@@ -98,12 +98,12 @@ def mod_contents(input, output, session,
                                             if not outline_file_path.exists(): return
                                             content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
 
-                                            @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.md')
+                                            @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.md')
                                             @print_func_name
                                             async def renderDownloadContentMD():
                                                 yield content_md
 
-                                            @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.docx')
+                                            @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.docx')
                                             @print_func_name
                                             async def renderDownloadContentDocx():
                                                 docx_buffer = io.BytesIO()
@@ -112,13 +112,13 @@ def mod_contents(input, output, session,
 
                                                 yield docx_buffer.read()
 
-                                            @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='content.tex')
+                                            @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.tex')
                                             @print_func_name
                                             async def renderDownloadContentTex():
                                                 yield content_tex
                                                     
                                             if bibs:
-                                                @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename='bibliography.bib')
+                                                @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.bib')
                                                 @print_func_name
                                                 async def renderDownloadBib():
                                                     yield bibs
@@ -665,6 +665,7 @@ def mod_contents(input, output, session,
                     lit_ids.append(ref_id)
 
             if lit_ids: 
+                breakpoint()
                 refs, _ = getLiteraturesFromDB(lit_ids)
                 attached_references |= {str(k): v for k, v, _ in refs}
                 reload_attached_files_view_flag.set(attached_files_reload_flag_val)

@@ -145,6 +145,7 @@ def search_pubmed_article(query: str,
         else:
             ref['year'] = front['article-meta']['pub-date']['year']
 
+        ref['year'] = parseTextField(ref['year'])
         ref['volume'] = parseTextField(front['article-meta']['volume'])
         ref['issue'] = parseTextField(front['article-meta'].get('issue', '1'))
         
