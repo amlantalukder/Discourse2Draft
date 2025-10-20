@@ -665,7 +665,6 @@ def mod_contents(input, output, session,
                     lit_ids.append(ref_id)
 
             if lit_ids: 
-                breakpoint()
                 refs, _ = getLiteraturesFromDB(lit_ids)
                 attached_references |= {str(k): v for k, v, _ in refs}
                 reload_attached_files_view_flag.set(attached_files_reload_flag_val)

@@ -24,8 +24,11 @@ class ChromaDB:
 
     def create(self, collection_name: str, delete_if_exists: bool = False):
 
-        if delete_if_exists and collection_name in self.client.list_collections():
-            self.client.delete_collection(collection_name)
+        if delete_if_exists:
+            for collection in self.client.list_collections():
+                if collection.name == collection_name:
+                    self.client.delete_collection(collection_name)
+                    break
 
         self.vector_store = Chroma(
             client=self.client,

@@ -18,7 +18,7 @@ class AddLiterature:
     @print_func_name
     def addLiteratureToVectorDBCollection(self, literature_list: list[dict]):
 
-        docs = [Document(page_content=lit['content'].strip(), metadata={'app_file_id': lit['ref_doi'], 'app_file_name': lit['ref']}) for lit in literature_list]
+        docs = [Document(page_content=lit['body'].strip(), metadata={'app_file_id': lit['ref_doi'], 'app_file_name': lit['ref']}) for lit in literature_list]
         self.db.add(docs=docs)
     
     @print_func_name
@@ -81,7 +81,7 @@ class AddLiterature:
             ref = lit['ref']    
             ref_doi = ref['doi']
             if ref_doi not in refs_in_db:
-                literature_list_filtered.append({'ref_doi': ref_doi, 'ref': formatAPA(ref), 'content': lit['content'].strip()})
+                literature_list_filtered.append({'ref_doi': ref_doi, 'ref': formatAPA(ref), 'body': lit['body'].strip()})
                 self.addLiterature(ref_doi, ref)
                 refs_in_db.add(ref_doi)
         

@@ -79,8 +79,12 @@ def search_pubmed_article(query: str,
     def getArticleEutils(pmcid):
 
         def parseText(d_xml, text = []):
+            
+            text = text.copy()
+            
             if isinstance(d_xml, dict):
                 for k in d_xml:
+                    if k not in ['title', 'sec', 'p', '#text']: continue
                     text = parseText(d_xml[k], text=text)
             elif isinstance(d_xml, list):
                 for k in d_xml:
@@ -146,8 +150,8 @@ def search_pubmed_article(query: str,
             ref['year'] = front['article-meta']['pub-date']['year']
 
         ref['year'] = parseTextField(ref['year'])
-        ref['volume'] = parseTextField(front['article-meta']['volume'])
-        ref['issue'] = parseTextField(front['article-meta'].get('issue', '1'))
+        ref['volume'] = parseTextField(front['article-meta'].get('volume', ''))
+        ref['issue'] = parseTextField(front['article-meta'].get('issue', ''))
         
         if 'elocation-id' in front['article-meta']:
             ref['pages'] = front['article-meta']['elocation-id']
@@ -156,11 +160,13 @@ def search_pubmed_article(query: str,
 
         ref['pages'] = parseTextField(ref['pages'])
 
+        abstract = front['article-meta']['abstract']
         body = d['pmc-articleset']['article']['body']
         
-        content = ' '.join(parseText(body))
+        abstract = ' '.join(parseText(abstract))
+        body = ' '.join(parseText(body))
         
-        return ref, content
+        return ref, abstract, body
     
     def searchLiterature(query, retstart=1, retmax=5):
         qstring = f'db=pmc&term={query}&sort=relevance&retstart={retstart}&retmax={retmax}&api_key={api_key}'
@@ -188,14 +194,14 @@ def search_pubmed_article(query: str,
     res = []
     for id in ids:
         try:
-            ref, content = getArticleEutils(pmcid=id)
+            ref, abstract, body = getArticleEutils(pmcid=id)
         except Exception as exp:
             print(f'In getArticleEutils(pmcid={id}):, Line number: {exp.__traceback__.tb_lineno}, Description: {exp}\n\n{traceback.format_exc()}')
             continue
 
-        if content_size is not None: content = content[:content_size]
+        if content_size is not None: body = body[:content_size]
         
-        res.append({"ref": ref, "content": content})
+        res.append({"ref": ref, "abstract": abstract, "body": body})
 
         if len(res) >= max_results: break
 
@@ -219,5 +225,12 @@ def formatAPA(ref):
     
     if len(authors) > 10:
         authors = authors[:5] + ['et al.']
+
+    if ref['volume'] and ref['issue']:
+        vol_issue_pages = f'{ref['volume']}({ref['issue']}), {ref['pages']}'
+    elif ref['volume']:
+        vol_issue_pages = f'{ref['volume']}, {ref['pages']}'
+    else:
+        vol_issue_pages = f'{ref['pages']}'
     
-    return f'{', '.join(authors)} ({ref['year']}). {ref['title']}. {ref['journal']}, {ref['volume']}({ref['issue']}), {ref['pages']}. http://doi.org/{ref['doi']}'
+    return f'{', '.join(authors)} ({ref['year']}). {ref['title']}. {ref['journal']}, {vol_issue_pages}. http://doi.org/{ref['doi']}'

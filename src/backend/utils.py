@@ -13,7 +13,8 @@ class Config:
             'azure-o1': 'o1', 
             'azure-o3-mini': 'o3-mini', 
             'azure-o3': 'o3', 
-            'azure-gpt-4o': 'GPT-4o'
+            'azure-gpt-4o': 'GPT-4o',
+            'azure-gpt-5': 'GPT-5'
         }, 
         'Anthropic': {
             'claude-3-7-sonnet': 'Claude 3.7 sonnet', 
