@@ -185,7 +185,7 @@ def mod_contents(input, output, session,
     @reactive.event(input.btn_new_file, ignore_init=True)
     @print_func_name
     def showNewFile():
-        config_app.setContentDefaults()
+        config_app.resetContentVars()
         reload_view_flag.set(not reload_view_flag.get())
 
     @reactive.effect
@@ -410,6 +410,8 @@ def mod_contents(input, output, session,
             setContent('')
             references.set([])
             return
+        
+        if not config_app.agent: config_app.setAgent()
         
         outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
         

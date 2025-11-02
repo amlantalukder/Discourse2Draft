@@ -1,0 +1,32 @@
+services:
+  discourse2draft:
+    container_name: Discourse2Draft
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: discourse2draft:latest
+    env_file:
+      - example.env
+    environment:
+      - PORT=8011
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8011:8011"
+    volumes:
+      - data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket,os,sys;p=int(os.environ.get('PORT','8011')); s=socket.socket();\ntry: s.connect(('127.0.0.1', p));\nexcept Exception: sys.exit(1)\nelse: sys.exit(0)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  data:

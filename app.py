@@ -129,7 +129,7 @@ def logOut():
     loop = asyncio.get_event_loop()
     loop.create_task(session.send_custom_message('auth_key', {'email': ''}))
 
-    config_app.setDefaults()
+    config_app = ConfigApp()
     config_app.session_id = session.id
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
     reload_main_view_flag.set(not reload_main_view_flag.get())

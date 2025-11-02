@@ -1,31 +1,27 @@
 from ..backend.ai.architecture import Architecture
 from src.backend.db import generated_files_ai_architecture
 from utils import Config
+from dataclasses import dataclass
 
+@dataclass
 class ConfigApp:
 
-    def __init__(self):
-        self.setDefaults()
+    email: str = ''
+    session_id: str = ''
+    settings_id: int | None = None
+    llm: str = ''
+    temperature: float = 0.0
+    instructions: str = ''
+    file_name: str = ''
+    outline: str = ''
+    generated_files_id: int | None = None
+    vector_db_collections_id: int | None = None
+    vector_db_collections_id_lit_search: int | None = None
+    is_writing: bool = False
+    write_faster: bool = False
+    agent: object | None = None
 
-    def setDefaults(self):
-        self.email = ''
-        self.session_id = ''
-
-        self.settings_id = None
-        self.llm = 'azure-o1-mini'
-        self.temperature = 0.
-        self.instructions = ''
-
-        self.file_name = ''
-        self.outline = ''
-        self.generated_files_id = None
-        self.vector_db_collections_id = None
-        self.vector_db_collections_id_lit_search = None
-
-        self.is_writing = False
-        self.write_faster = False
-
-    def setContentDefaults(self):
+    def resetContentVars(self):
 
         self.file_name = ''
         self.outline = ''
@@ -34,7 +30,6 @@ class ConfigApp:
         self.vector_db_collections_id_lit_search = None
         self.is_writing = False
         self.write_faster = False
-
 
     def setAgent(self):
         
