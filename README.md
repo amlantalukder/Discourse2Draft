@@ -58,7 +58,7 @@ PASSWORD=<Database password>
 PORT=<Database port>
 DATABASE=<Database name>
 
-# NCBI (Requried for PubMed access)
+# NCBI (Required for PubMed access)
 NCBI_API_KEY=<NCBI API key>
 ```
 
