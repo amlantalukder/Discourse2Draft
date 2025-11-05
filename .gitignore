@@ -5,6 +5,6 @@
 .vscode
 lib
 data/*
-docs
+docs/temp
 certs
 temp

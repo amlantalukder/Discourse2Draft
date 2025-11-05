@@ -4,5 +4,6 @@ docker-compose*.yml
 .posit
 .vscode
 lib
-docs
+data/*
+docs/temp
 temp

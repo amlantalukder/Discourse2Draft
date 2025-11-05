@@ -52,13 +52,15 @@ def mod_about(input, output, session):
                 @render.express
                 @print_func_name
                 def renderAboutText():
-                    ui.markdown('\n'.join(loadText()))
+                    txt = '\n'.join(loadText())
+                    txt = txt.replace('./www/assets/', '/assets/')
+                    ui.markdown(txt)
 
     @reactive.calc
     @print_func_name
     def loadText():
         about_text = []
-        with open(Config.DIR_DATA / 'about' / 'readme.md') as fp:
+        with open(Config.DIR_HOME / 'docs' / 'README.md') as fp:
             about_text = fp.readlines()
         return about_text
     
