@@ -1,6 +1,8 @@
-# Discourse2Draft: An AI Word Processor for structured Document Generation
+# Discourse2Draft
 
-Given an outline, AI Word Processor can generate the content. It can be useful to write reports, manuscripts or any textual document that has a fixed outline. The outline must be provided as markdown style section headers and subheaders with <content> tags which the AI would be replacing.
+**An AI Word Processor for structured Document Generation**
+
+Given an outline, Discourse2Draft can generate the content. It can be useful to write reports, manuscripts or any textual document that has a fixed outline. The outline must be provided as markdown style section headers and subheaders with <content> tags which the AI would be replacing.
 
 **Example of an outline**
 
