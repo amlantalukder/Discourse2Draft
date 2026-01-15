@@ -9,7 +9,6 @@ from ...backend.db import selectFromDB, insertIntoDB, updateDB, \
                 vector_db_collections_status, \
                 generated_files_status, \
                 generated_files_ai_architecture
-from ...backend.ai.architecture import Architecture
 from pathlib import Path
 from datetime import datetime
 from utils import Config, print_func_name
@@ -269,7 +268,7 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
                                 [current_time] * len(selected_docs), 
                                 [current_time] * len(selected_docs)])
         
-        file_paths = [(Config.DIR_DATA / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}', file_name) for file_id, file_name in selected_docs]
+        file_paths = [(Config.DIR_CONTENTS / 'uploaded_docs' / f'{file_id}{Path(file_name).suffix}', file_name) for file_id, file_name in selected_docs]
         with ui.Progress(min=1, max=len(file_paths)+1) as p:
 
             p.set(message="Processing", detail="This may take a while...")

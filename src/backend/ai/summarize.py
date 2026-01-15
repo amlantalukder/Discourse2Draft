@@ -2,7 +2,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
 from ..utils import Config
-from .common import State
+from .common import StateContentManager, extractLLMResponse
 from .prompts import setPrompt
 
 class SummarizeSchema(BaseModel):
@@ -45,14 +45,11 @@ class Summarize:
         self.summarize_prompt = setPrompt(self.summarize_system_prompt, self.summarize_human_prompt, parser)
         self.summarize_chain = self.summarize_prompt | llm | parser
 
-    def __call__(self, state: State):
+    def __call__(self, state: StateContentManager):
         '''LLM generates summary for a given content'''
 
-        response = self.summarize_chain.invoke(input={'content': state['content_pre']})
-
-        try:
-            response = dict(response)['summary']
-        except:
-            raise Exception(f'Summarize response does not have content, response: {response}')
-        
-        return {'content_pre': response, 'steps': ['Summarize']}
+        return extractLLMResponse(task_name = 'Summarize', 
+                                  chain = self.summarize_chain,
+                                  kargs = {'content': state['content_pre']},
+                                  key_to_find = 'summary',
+                                  value_name = 'content_pre')

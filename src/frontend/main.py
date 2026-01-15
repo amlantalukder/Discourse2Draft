@@ -14,7 +14,7 @@ def mod_main(input, output, session, config_app, reload_view_flag):
 
     with ui.div(class_='app-body-container'):
         with ui.layout_sidebar():
-            with ui.sidebar(id='sidebar_docs', position="left", open='closed' if config_app.email == '' else 'open', bg="#f8f8f8", width=400):
+            with ui.sidebar(id='sidebar_docs', position="left", open='open', bg="#f8f8f8", width=400):
                 @render.express
                 @print_func_name
                 def renderSideBar():

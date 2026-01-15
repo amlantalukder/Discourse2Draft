@@ -4,15 +4,16 @@ from shiny.types import FileInfo
 from utils import print_func_name, getUIID
 from .common import uploadFiles
 from ..backend.ai.llms import extractAvailableLLMs
-from ..backend.ai.architecture import ArchitectureOutline
+from ..backend.ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
 import faicons
 import re
+import logging
 
 @print_func_name
 def resetOutline(d):
     
     for k, v in d.items():
-        if k == 'References': 
+        if k != 'References': 
             continue
         if k != 'content':
             d[k] = resetOutline(v.copy())
@@ -40,6 +41,20 @@ def insertOutline(d, outline_items):
 @print_func_name
 def processOutline(outline):
 
+    def insertUserContentToOutline(d_outline, outline_items, lines):
+        content = '\n'.join(lines).strip()
+        pattern_instructions = r'<Instructions>([\w\W]*?)<\/Instructions>'
+        instructions = re.findall(pattern_instructions, content)
+        instructions = '\n'.join(map(lambda x: x.strip(), instructions))
+        content = re.sub(pattern_instructions, '', content)
+        outline_items_new = outline_items.copy()
+        if instructions:
+            outline_items_new.append(['instructions', instructions])
+        if content:
+            outline_items_new.append(['content_user', content])
+        d_outline = insertOutline(d_outline.copy(), outline_items_new)
+        return d_outline
+    
     d_outline, outline_items = {}, []
     chunks_leading_to_content = outline.split('<content>')
     for i, x in enumerate(chunks_leading_to_content):
@@ -47,14 +62,14 @@ def processOutline(outline):
         if not x.strip(): continue
         lines = []
         for line_x in x.split('\n'):
-            
-            line_x = line_x.strip()
+            line_x = line_x.strip(' ')
+            if line_x == '': continue
             if not line_x.startswith('#'):
                 lines.append(line_x)
                 continue
 
-            if lines: 
-                d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', '\n'.join(lines).strip()]])
+            if lines:
+                d_outline = insertUserContentToOutline(d_outline, outline_items, lines)
                 lines = []
             
             hashes = line_x.split()[0]
@@ -74,7 +89,7 @@ def processOutline(outline):
             outline_items.append(header)
             
         if lines: 
-            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_user', '\n'.join(lines).strip()]])
+            d_outline = insertUserContentToOutline(d_outline, outline_items, lines)
             
         if i < len(chunks_leading_to_content)-1:
             d_outline = insertOutline(d_outline.copy(), outline_items + [['content_ai', '']])
@@ -82,30 +97,40 @@ def processOutline(outline):
     return d_outline
 
 @print_func_name
-def getOutlineHierarchyList(d, outline_hierarchy=[], current_hierarchy=[], counter=1):
+def generateOutlineByAI(topic):
+    '''
+    Use AI to generate outline from a given topic
+    '''
+    agent = OutlineCreatorArchitecture().agent
+    
+    response = agent.invoke({'topic': topic})
+    outline = response['content']
+    
+    return outline
 
-    if not isinstance(d, dict):
-        for k, v in d:
-            if k == 'content_ai':
-                outline_hierarchy.append(current_hierarchy)
-                return outline_hierarchy
-            else:
-                current_hierarchy.append(v)
-    else:
-        for k in d:
-            if k == 'References':
-                continue
-            outline_hierarchy = getOutlineHierarchyList(d[k], outline_hierarchy, current_hierarchy + [f'{'#' * counter} {k}'] if k != 'content' else current_hierarchy, counter+1)
-
-    return outline_hierarchy 
+@print_func_name
+def processOutlineByAI(outline):
+    '''
+    Use AI to process outline into structured format
+    '''
+    agent = OutlineFormatterArchitecture().agent
+    
+    response = agent.invoke({'outline_unstructured': outline})
+    outline_structured = response['content']
+    print(outline_structured)
+    
+    return outline_structured
 
 @print_func_name
 def getRawOutline(d, raw_outline=[], counter=1):
 
     if not isinstance(d, dict):
         for k, v in d:
+            if k == 'content_pre_summary': continue
             if k == 'content_ai':
                 raw_outline.append('<content>')
+            elif k == 'instructions':
+                raw_outline.append(f'<Instructions>\n{v}\n</Instructions>')
             else:
                 raw_outline.append(v)
     else:
@@ -497,7 +522,7 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
     @reactive.extended_task
     @print_func_name
     async def generateOutline(agent, topic):
-        response = await agent.ainvoke({'topic': topic}, {"configurable": {"thread_id": "abc123"}})
+        response = await agent.ainvoke({'topic': topic})
         response = response['content']
         print(response)
         return response
@@ -514,7 +539,7 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
         temperature = input.slide_temp()
         instructions = input.text_instructions()
 
-        agent = ArchitectureOutline(llm, temperature=temperature, instructions=instructions).agent
+        agent = OutlineCreatorArchitecture(llm, temperature=temperature, instructions=instructions).agent
 
         if not topic_desc.get():
             return generateOutline(agent, topic_name.get())
@@ -536,7 +561,7 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
                 outline_content.set("Creating outline...")
             case 'error':
                 outline_content.set("Error in creating outline.")
-                print(generateOutline.result())
+                logging.warning(generateOutline.result())
             case 'success':
                 response = generateOutline.result()
                 content = core_ui.div(

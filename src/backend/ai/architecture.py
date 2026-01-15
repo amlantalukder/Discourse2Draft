@@ -1,6 +1,6 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, StateGraph
-from .common import State, StateOutline
+from .common import StateContentManager, StateOutlineManager
 from .llms import getAIModel
 from .analyze_content_header import AnalyzeContentHeader
 from .gather_context import GatherContext
@@ -10,15 +10,19 @@ from .generate_content import GenerateContent
 from .generate_content_rag import GenerateContentRAG
 from .generate_content_graphrag import GenerateContentGraphRAG
 from .generate_outline import GenerateOutline
+from .format_outline import FormatOutline
 from .add_literature import AddLiterature
+from .detect_abstract_section import DetectAbstractSection
+from .write_abstract import WriteAbstract
+from ..utils import Config
 from typing import Literal
-from rich import print
 from utils import print_func_name
+import logging
 
 # -----------------------------------------------------------------------
 @print_func_name
 def check_if_summary_needed(
-        state: State,
+        state: StateContentManager,
     ) -> Literal['Summarize', 'Generate Content']:
         if len(state.get('content_pre').split()) > 500:
             return 'Summarize'
@@ -27,7 +31,7 @@ def check_if_summary_needed(
 # -----------------------------------------------------------------------
 @print_func_name
 def check_if_summary_needed_rag(
-        state: State,
+        state: StateContentManager,
     ) -> Literal['Summarize', 'Analyze Content Header']:
         if len(state.get('content_pre').split()) > 500:
             return 'Summarize'
@@ -39,117 +43,214 @@ def wait(state):
 
 # -----------------------------------------------------------------------
 class Architecture:
+     
+    @print_func_name
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
+
+        self.llm = getAIModel(model_name=model_name, temperature=temperature)
+        self.instructions = instructions
+
+    def createAgent(self):
+        raise NotImplementedError
+
+# -----------------------------------------------------------------------
+class ContentWriterArchitecture(Architecture):
 
     @print_func_name
-    def __init__(self, model_name, temperature, instructions, type='base', collection_name='', collection_name_lit_search=''):
-        llm = getAIModel(model_name=model_name, temperature=temperature)
+    def __init__(self, 
+                 model_name=Config.env_config['DEFAULT_AI_MODEL'], 
+                 temperature=0, 
+                 instructions='', 
+                 type='base', 
+                 collection_name='', 
+                 collection_name_lit_search=''):
+        
+        super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
 
-        print(f'Using {llm.model_name} with temperature {temperature} in {type} architecture\n')
+        self.type = type
+        self.collection_name = collection_name
+        self.collection_name_lit_search = collection_name_lit_search
 
-        match type:
+        logging.info(f'Using {model_name} with temperature {temperature} in {type} architecture\n')
+
+        self.createAgent()
+
+    @print_func_name
+    def createAgent(self):
+
+        match self.type:
             case 'rag':
-                assert collection_name != '' or collection_name_lit_search != '', f'Either collection_name must be provided, found {collection_name}'
-                self.createRAGAgent(llm, instructions, collection_name=collection_name, collection_name_lit_search=collection_name_lit_search)
+                workflow = self.createRAGWorkflow()
             case 'graphrag':
-                assert collection_name != '', f'collection_name must be provided, found {collection_name}'
-                self.createGraphRAGAgent(llm, instructions, collection_name=collection_name)
+                workflow = self.createGraphRAGWorkflow()
             case _:
-                self.createBaseAgent(llm, instructions)
+                workflow = self.createBaseWorkflow()
+
+        self.agent = workflow.compile()
 
     @print_func_name
-    def createBaseAgent(self, llm, instructions):
+    def createBaseWorkflow(self):
 
         # Define a new graph
-        workflow = StateGraph(state_schema=State)
+        workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize", Summarize(llm=llm))
-        workflow.add_node("Generate Content", GenerateContent(llm=llm, instructions=instructions))
+        workflow.add_node("Summarize", Summarize(llm=self.llm))
+        workflow.add_node("Generate Content", GenerateContent(llm=self.llm, instructions=self.instructions))
 
         workflow.add_conditional_edges(START, check_if_summary_needed)
         workflow.add_edge("Summarize", "Generate Content")
     
-        # Add memory
-        memory = MemorySaver()
-        self.agent = workflow.compile(checkpointer=memory)
+        return workflow
 
     @print_func_name
-    def createRAGAgent(self, llm, instructions, collection_name='', collection_name_lit_search=''):
+    def createRAGWorkflow(self):
 
+        assert self.collection_name != '' or self.collection_name_lit_search != '', f'Either collection_name must be provided, found {self.collection_name}'
+    
         # Define a new graph
-        workflow = StateGraph(state_schema=State)
+        workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize", Summarize(llm=llm))
-        workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=llm))
-        if collection_name:
-            workflow.add_node("Gather Context from Documents", GatherContext(collection_name=collection_name))
-        if collection_name_lit_search:
-            workflow.add_node("Add Literature", AddLiterature(collection_name=collection_name_lit_search))
-            workflow.add_node("Gather Context from Literature", GatherContext(collection_name=collection_name_lit_search))
-        if collection_name and collection_name_lit_search:
+        workflow.add_node("Summarize", Summarize(llm=self.llm))
+        workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
+        if self.collection_name:
+            workflow.add_node("Gather Context from Documents", GatherContext(collection_name=self.collection_name))
+        if self.collection_name_lit_search:
+            workflow.add_node("Add Literature", AddLiterature(collection_name=self.collection_name_lit_search))
+            workflow.add_node("Gather Context from Literature", GatherContext(collection_name=self.collection_name_lit_search))
+        if self.collection_name and self.collection_name_lit_search:
             workflow.add_node("Wait for the Other Branch", wait)
-        workflow.add_node("Generate Content", GenerateContentRAG(llm=llm, instructions=instructions))
+        workflow.add_node("Generate Content", GenerateContentRAG(llm=self.llm, instructions=self.instructions))
 
         workflow.add_conditional_edges(START, check_if_summary_needed_rag)
         workflow.add_edge("Summarize", "Analyze Content Header")
-        if collection_name:
+        if self.collection_name:
             workflow.add_edge("Analyze Content Header", "Gather Context from Documents")
-            if collection_name_lit_search:
+            if self.collection_name_lit_search:
                 workflow.add_edge("Gather Context from Documents", "Wait for the Other Branch")
                 workflow.add_edge("Wait for the Other Branch", "Generate Content")
             else:
                 workflow.add_edge("Gather Context from Documents", "Generate Content")
-        if collection_name_lit_search:
+        if self.collection_name_lit_search:
             workflow.add_edge("Analyze Content Header", "Add Literature")
             workflow.add_edge("Add Literature", "Gather Context from Literature")
             workflow.add_edge("Gather Context from Literature", "Generate Content")
 
-        # Add memory
-        memory = MemorySaver()
-        self.agent = workflow.compile(checkpointer=memory)
+        return workflow
 
     @print_func_name
-    def createGraphRAGAgent(self, llm, instructions, collection_name):
+    def createGraphRAGWorkflow(self):
+
+        assert self.collection_name != '', f'collection_name must be provided, found {self.collection_name}'
 
         # Define a new graph
-        workflow = StateGraph(state_schema=State)
+        workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize", Summarize(llm=llm))
-        workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=llm))
-        workflow.add_node("Gather Context", GatherContextGraph(llm=llm, collection_name=collection_name))
-        workflow.add_node("Generate Content", GenerateContentGraphRAG(llm=llm, instructions=instructions))
+        workflow.add_node("Summarize", Summarize(llm=self.llm))
+        workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
+        workflow.add_node("Gather Context", GatherContextGraph(llm=self.llm, collection_name=self.collection_name))
+        workflow.add_node("Generate Content", GenerateContentGraphRAG(llm=self.llm, instructions=self.instructions))
 
         workflow.add_conditional_edges(START, check_if_summary_needed_rag)
         workflow.add_edge("Summarize", "Analyze Content Header")
         workflow.add_edge("Analyze Content Header", "Gather Context")
         workflow.add_edge("Gather Context", "Generate Content")
 
-        # Add memory
-        memory = MemorySaver()
-        self.agent = workflow.compile(checkpointer=memory)
+        return workflow
 
 # -----------------------------------------------------------------------
-class ArchitectureOutline:
-     
-    @print_func_name
-    def __init__(self, model_name, temperature, instructions):
+class AbstractSectionDetectorArchitecture(Architecture):
 
-        llm = getAIModel(model_name=model_name, temperature=temperature)
+    @print_func_name
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
         
-        self.createOutlineAgent(llm, instructions)
+        super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
+
+        logging.info(f'Using {model_name} with temperature {temperature} in AbstractSectionDetectorArchitecture architecture\n')
+
+        self.createAgent()
 
     @print_func_name
-    def createOutlineAgent(self, llm, instructions):
+    def createAgent(self):
 
         # Define a new graph
-        workflow = StateGraph(state_schema=StateOutline)
+        workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Generate Outline", GenerateOutline(llm=llm, instructions=instructions))
+        workflow.add_node("Detect Abstract Section", DetectAbstractSection(llm=self.llm, instructions=self.instructions))
+        workflow.add_edge(START, "Detect Abstract Section")
+
+        self.agent = workflow.compile()
+
+# -----------------------------------------------------------------------
+class AbstractWriterArchitecture(Architecture):
+
+    @print_func_name
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
+        
+        super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
+
+        logging.info(f'Using {model_name} with temperature {temperature} in AbstractWriterArchitecture architecture\n')
+
+        self.createAgent()
+
+    @print_func_name
+    def createAgent(self):
+
+        # Define a new graph
+        workflow = StateGraph(state_schema=StateContentManager)
+
+        # Define the (single) node in the graph
+        workflow.add_node("Write Abstract", WriteAbstract(llm=self.llm, instructions=self.instructions))
+        workflow.add_edge(START, "Write Abstract")
+
+        self.agent = workflow.compile()
+
+# -----------------------------------------------------------------------
+class OutlineCreatorArchitecture(Architecture):
+
+    @print_func_name
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
+        
+        super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
+
+        logging.info(f'Using {model_name} with temperature {temperature} in OutlineCreatorArchitecture architecture\n')
+
+        self.createAgent()
+
+    @print_func_name
+    def createAgent(self):
+
+        # Define a new graph
+        workflow = StateGraph(state_schema=StateOutlineManager)
+
+        # Define the (single) node in the graph
+        workflow.add_node("Generate Outline", GenerateOutline(llm=self.llm, instructions=self.instructions))
         workflow.add_edge(START, "Generate Outline")
 
-        # Add memory
-        memory = MemorySaver()
-        self.agent = workflow.compile(checkpointer=memory)
+        self.agent = workflow.compile()
+
+# -----------------------------------------------------------------------
+class OutlineFormatterArchitecture(Architecture):
+
+    @print_func_name
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
+        
+        super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
+        logging.info(f'Using {model_name} with temperature {temperature} in OutlineFormatterArchitecture architecture\n')
+
+        self.createAgent()
+
+    @print_func_name
+    def createAgent(self):
+
+        # Define a new graph
+        workflow = StateGraph(state_schema=StateOutlineManager)
+
+        # Define the (single) node in the graph
+        workflow.add_node("Format Outline", FormatOutline(llm=self.llm, instructions=self.instructions))
+        workflow.add_edge(START, "Format Outline")
+
+        self.agent = workflow.compile()

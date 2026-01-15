@@ -1,7 +1,15 @@
-from ..backend.ai.architecture import Architecture
+from ..backend.ai.architecture import (ContentWriterArchitecture,
+                                       AbstractSectionDetectorArchitecture,
+                                       AbstractWriterArchitecture)
 from src.backend.db import generated_files_ai_architecture
 from utils import Config
 from dataclasses import dataclass
+from enum import Enum
+
+class ContentGenerationScope(Enum):
+    DO_NOT_GENERATE = 'Do Not Generate'
+    REGENERATE_PARAGRAPH = 'Regenerate Paragraph'
+    FULL_DRAFT = 'Full Draft'
 
 @dataclass
 class ConfigApp:
@@ -9,7 +17,7 @@ class ConfigApp:
     email: str = ''
     session_id: str = ''
     settings_id: int | None = None
-    llm: str = ''
+    llm: str = 'azure-o1-mini'
     temperature: float = 0.0
     instructions: str = ''
     file_name: str = ''
@@ -18,8 +26,9 @@ class ConfigApp:
     vector_db_collections_id: int | None = None
     vector_db_collections_id_lit_search: int | None = None
     is_writing: bool = False
-    write_faster: bool = False
     agent: object | None = None
+    agent_abstract_detector: object | None = None
+    agent_abstract_writer: object | None = None
 
     def resetContentVars(self):
 
@@ -29,7 +38,6 @@ class ConfigApp:
         self.vector_db_collections_id = None
         self.vector_db_collections_id_lit_search = None
         self.is_writing = False
-        self.write_faster = False
 
     def setAgent(self):
         
@@ -47,10 +55,30 @@ class ConfigApp:
         else:
             vector_db_collection_name_lit_search = ''
         
-        self.agent = Architecture(model_name=self.llm, 
+        self.agent = ContentWriterArchitecture(model_name=self.llm, 
                                         temperature=self.temperature, 
                                         instructions=self.instructions, 
                                         type=ai_architecture,
                                         collection_name= vector_db_collection_name,
                                         collection_name_lit_search=vector_db_collection_name_lit_search).agent
+        
+        self.agent_abstract_detector = AbstractSectionDetectorArchitecture().agent
+        self.agent_abstract_writer = AbstractWriterArchitecture().agent
+        
+    def __repr__(self):
+        return f'''ConfigApp(email={self.email}, 
+            session_id={self.session_id}, 
+            settings_id={self.settings_id}, 
+            llm={self.llm}, 
+            temperature={self.temperature}, 
+            instructions={self.instructions}, 
+            file_name={self.file_name}, 
+            outline={self.outline}, 
+            generated_files_id={self.generated_files_id}, 
+            vector_db_collections_id={self.vector_db_collections_id}, 
+            vector_db_collections_id_lit_search={self.vector_db_collections_id_lit_search}, 
+            is_writing={self.is_writing},
+            agent={self.agent},
+            agent_abstract_detector={self.agent_abstract_detector},
+            agent_abstract_writer={self.agent_abstract_writer})'''
 

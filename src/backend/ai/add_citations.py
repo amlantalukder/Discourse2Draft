@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
-from .common import State
+from .common import StateContentManager
 
 class AddCitations():
 
@@ -44,7 +44,7 @@ class AddCitations():
     def __init__(self, llm):
         self.add_citations_chain = self.add_citations_prompt | llm
 
-    def __call__(self, state: State):
+    def __call__(self, state: StateContentManager):
         '''LLM generates reports from a given outline'''
         response = self.add_citations_chain.invoke(input={'input_paragraph': list(state['response'].values())[0]}).content
         return {'response': response, 'steps': ['Add Citations']}

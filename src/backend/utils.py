@@ -2,6 +2,9 @@
 import dotenv
 from pathlib import Path
 import os
+import logging
+
+print = logging.info
 
 # ---------------------------------------------------------------------------
 class Config:

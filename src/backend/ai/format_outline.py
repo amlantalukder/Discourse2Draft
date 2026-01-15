@@ -7,29 +7,28 @@ from .prompts import setPrompt
 import logging
 
 # ---------------------------------------------------------------------------
-class GenerateOutlineSchema(BaseModel):
+class FormatOutlineSchema(BaseModel):
     '''
-    Returns the outline on the provided topic
+    Returns the formatted outline
     '''
-    content: str = Field(description='Outline on the provided topic')
+    content: str = Field(description='Formatted outline')
 
 # ---------------------------------------------------------------------------
-class GenerateOutline:
+class FormatOutline:
 
-    generate_outline_system_prompt = '''
-    You are an expert in generating outline for content on a given topic.
+    format_outline_system_prompt = '''
+    You are an expert in extracting an structured outline from a given unstructured outline.
 
-    <Instructions>
-    - Read the given topic. 
-    - Generate an outline with section, subsection headers.
-    - Each outline must start with a "Title".
-    - Do not provide "References" section or any other extra sections or sub-sections that may not have content on the topic. 
+    <Instructions> 
+    - Extract an outline with section, subsection headers.
+    - Each outline must start with a which is the top level Title section.
+    - Do not create any extra sections or sub-sections that may not be part of the unstructured outline. 
     - Place "<content>" tag wherever the content should be written.
     </Instructions>
 
     <Output format>
     - The outline must have "<content>" tag in place of actual content.
-    - Generate output in markdown format. Strictly follow the following example.
+    - Generate output following markdown syntax. Do not wrap the output in code backticks. tStrictly follow the following example.
     </Output format>
 
     <Example>
@@ -50,11 +49,11 @@ class GenerateOutline:
     </Example>
     '''
 
-    generate_outline_human_prompt = lambda self, instructions: (f'''
-    <Topic>
-    {{topic}}
-    </Topic>
-                                              
+    format_outline_human_prompt = lambda self, instructions: (f'''
+    <Unformatted Outline>
+    {{outline_unstructured}}
+    </Unformatted Outline>
+                                                              
     <Instructions>
     {instructions}
     
@@ -66,28 +65,29 @@ class GenerateOutline:
 
     def __init__(self, llm, instructions):
 
-        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=GenerateOutlineSchema), 
+        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=FormatOutlineSchema), 
                                              llm=llm,
                                              max_retries=Config.RETRY_COUNTER)
         
-        self.generate_outline_prompt = setPrompt(self.generate_outline_system_prompt, 
-                                                 self.generate_outline_human_prompt(instructions),
+        self.format_outline_prompt = setPrompt(self.format_outline_system_prompt, 
+                                                 self.format_outline_human_prompt(instructions),
                                                  parser)
         
-        self.generate_outline_chain = self.generate_outline_prompt | llm | parser
+        self.format_outline_chain = self.format_outline_prompt | llm | parser
+
 
     def __call__(self, state: StateOutlineManager):
-        '''LLM generates outline from a given topic'''
+        '''LLM generates a structured outline from a given unstructured outline'''
 
         def contentChecker(response):
             if '<content>' not in response['content']:
                 logging.info(f'Response does not have <content> tag, response: {response}')
                 return False
             return True
-
-        return extractLLMResponse(task_name = 'Generate Outline', 
-                                  chain = self.generate_outline_chain,
-                                  kargs = {'topic': state['topic']},
+        
+        return extractLLMResponse(task_name = 'Format Outline', 
+                                  chain = self.format_outline_chain,
+                                  kargs = {'outline_unstructured': state['outline_unstructured']},
                                   key_to_find = 'content',
                                   value_name = 'content',
                                   additionalCheckingFunc=contentChecker)

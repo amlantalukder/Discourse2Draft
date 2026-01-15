@@ -4,8 +4,8 @@ from langchain_openai import OpenAIEmbeddings
 import requests
 from pathlib import Path
 from ..utils import Config
-from utils import Config as config_base
-from rich import print
+from utils import Config as config_base, print_func_name
+import logging
 
 import httpx
 import truststore
@@ -17,6 +17,7 @@ ssl_context = ssl.create_default_context()
 client = httpx.Client(verify=cert_path)
 
 # ---------------------------------------------------------------------------
+@print_func_name
 def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     """
     Extracts a list of available LLM names from LiteLLM proxy
@@ -45,10 +46,10 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
                 available_embeddings = sorted(available_embeddings)
 
         else:
-            print(response.text)
+            logging.info(response.text)
 
     except Exception as error:
-        print('litellm proxy access error:', error)
+        logging.error('litellm proxy access error:', error)
     
     llms_filtered = {}
     if Config.llms_selected:
@@ -64,6 +65,7 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
     return available_llms, available_embeddings
 
 # ---------------------------------------------------------------------------
+@print_func_name
 def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> ChatOpenAI | OpenAIEmbeddings:
     """
     Initializes either an OpenAI Chat LLM object based on the LLM name and temperature

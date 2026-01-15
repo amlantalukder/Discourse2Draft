@@ -13,6 +13,8 @@ from src.backend.db import selectFromDB, insertIntoDB, updateDB
 from datetime import datetime
 from utils import Config, print_func_name, getUIID
 import asyncio
+import logging
+import pandas as pd
 
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='link_files')
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.min.css", method='link_files')
@@ -22,6 +24,8 @@ ui.page_opts(fillable=True, window_title=Config.APP_NAME)
 
 config_app = ConfigApp()
 config_app.session_id = session.id
+logging.info(f'New session: {config_app.session_id}')
+
 login_status = reactive.value("logged_out")
 reload_main_view_flag = reactive.value(True)
 reload_settings_view_flag = reactive.value(True)
@@ -90,18 +94,16 @@ with ui.div(class_="app-container"):
     @print_func_name
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
-            loadMainView()
+            _ = reload_main_view_flag.get()
+            mod_main(id=getUIID('main'), config_app=config_app, reload_view_flag=reload_main_view_flag)
         else:
-            loadAuthView()
+            mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
         
     ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js", method='inline')
 
 @reactive.calc
 def loadMainView():
-    return mod_main(id='main', 
-                config_app=config_app,
-                reload_view_flag=reload_main_view_flag
-        )
+    return mod_main(id='main', config_app=config_app, reload_view_flag=reload_main_view_flag)
 
 @reactive.calc
 def loadAuthView():
@@ -111,6 +113,9 @@ def loadAuthView():
 @reactive.event(input.email)
 @print_func_name
 def loadCachedEmail():
+    '''
+    Loads saved email from local storage upon app start.
+    '''
 
     if not input.email(): return
     config_app.email = input.email()
@@ -125,10 +130,11 @@ def changeLoginStatus(status):
     
 @print_func_name
 def logOut():
+    global config_app
 
     loop = asyncio.get_event_loop()
     loop.create_task(session.send_custom_message('auth_key', {'email': ''}))
-
+    
     config_app = ConfigApp()
     config_app.session_id = session.id
     reload_settings_view_flag.set(not reload_settings_view_flag.get())
@@ -184,18 +190,23 @@ def saveSettingsToDB():
     # ----------------------------------------------------------------------------------------
     # New settings record is created on two occassions,
     # 1. If there is no saved settings for the current session or email i.e. config_app.settings_id is None
-    # 2. If there is a saved settings and it is not attached to any generated file. i.e. records_generated_files is empty
+    # 2. If there is a saved settings but it is attached to a generated file. i.e. records_generated_files is not empty
     # Otherwise update the current settings.
     # ----------------------------------------------------------------------------------------
-    records_generated_files = None
+    records_generated_files = pd.DataFrame()
+    add_new_settings = False
     if config_app.settings_id is not None:
         records_generated_files = selectFromDB(table_name='generated_files', field_names=['settings_id'], field_values=[[config_app.settings_id]])
-    if config_app.settings_id is None or (records_generated_files is not None and not records_generated_files.empty):
-        insertIntoDB(table_name='settings', 
+        if not records_generated_files.empty: add_new_settings = True
+    else:
+        add_new_settings = True
+    
+    if add_new_settings:
+        ids = insertIntoDB(table_name='settings', 
                     field_names=['email', 'session', 'llm', 'temperature', 'instructions', 'create_date', 'update_date'], 
                     field_values=[[config_app.email], [config_app.session_id], [config_app.llm], [config_app.temperature], [config_app.instructions], [current_time], [current_time]])
         
-        initProfile(config_app)
+        config_app.settings_id = ids[0]
 
     else:
         updateDB(table_name='settings',
@@ -204,6 +215,13 @@ def saveSettingsToDB():
                 select_fields=['id'],
                 select_values=[[config_app.settings_id]]
         )
+
+    if records_generated_files.empty:
+        updateDB(table_name='generated_files', 
+                     update_fields=['settings_id', 'update_date'], 
+                     update_values=[config_app.settings_id, current_time], 
+                     select_fields=['id'], 
+                     select_values=[[config_app.generated_files_id]])
 
 @print_func_name
 def changeSettings():

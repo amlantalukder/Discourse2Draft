@@ -16,9 +16,9 @@ def mod_forgot_password(input, output, session, changeView):
                 ui.input_text('textemail', 'Email')
             with ui.div(class_='row justify-content-between'):
                 with ui.div(class_='col-auto'):
-                    ui.input_action_button('btn_show_login', 'Login')
-                with ui.div(class_='col-auto'):
                     ui.input_action_button('btn_send_code', 'Send Code')
+                with ui.div(class_='col-auto'):
+                    ui.input_action_button('btn_show_login', 'Back to Login')
 
     # -----------------------------------------------------------------------
     @reactive.effect

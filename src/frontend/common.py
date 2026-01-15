@@ -17,6 +17,7 @@ import json
 import re
 from docx import Document
 import textwrap
+import logging
 
 @module
 def confirmBox(input, output, session, text, action_btn_name, cancel_btn_name):
@@ -39,6 +40,7 @@ def confirmBox(input, output, session, text, action_btn_name, cancel_btn_name):
 
 @print_func_name
 def initProfile(config_app):
+    
     if config_app.email != '':
         records = selectFromDB('settings', 
                     field_names=['email'],
@@ -222,29 +224,31 @@ def getGeneratedDocuments(email, session_id):
     
     if records.empty: return records
 
-    records_vector_db_collections = selectFromDB(table_name='vector_db_collections',
-                        field_names=['generated_files_id', 'status'],
-                        field_values=[list(map(int, records['id'].unique())), [vector_db_collections_status.ACTIVE.value]])
-
     records_settings = selectFromDB(table_name='settings',
                         field_names=['id'],
                         field_values=[list(map(int, records['settings_id'].unique()))])
-    
-    records = pd.merge(left=records, 
-                        right=records_vector_db_collections[['id', 'generated_files_id', 'type']], 
-                        left_on='id', right_on='generated_files_id', how='left',
-                        suffixes=[None, '_vector_db_collections'])
-    
+
     records = pd.merge(left=records, 
                         right=records_settings[['id', 'llm', 'temperature', 'instructions']], 
                         left_on='settings_id', right_on='id', how='left',
                         suffixes=[None, '_settings'])
+
+    records_vector_db_collections = selectFromDB(table_name='vector_db_collections',
+                        field_names=['generated_files_id', 'status'],
+                        field_values=[list(map(int, records['id'].unique())), [vector_db_collections_status.ACTIVE.value]])
+
+    if not records_vector_db_collections.empty:
+        records = pd.merge(left=records, 
+                            right=records_vector_db_collections[['id', 'generated_files_id', 'type']], 
+                            left_on='id', right_on='generated_files_id', how='left',
+                            suffixes=[None, '_vector_db_collections'])
     
     records_pivot = {}
     cols = list(records.columns[~records.columns.isin(['type', 'id_vector_db_collections', '_sa_instance_state'])])
     for i, row in records.iterrows():
         key = tuple(row[cols])
         records_pivot[key] = records_pivot.get(key, [None, None])
+        if 'type' not in row.index: continue
         if not pd.isna(row['id_vector_db_collections']):
             if row['type'] == 'uploaded_files':
                 records_pivot[key][0] = row['id_vector_db_collections']
@@ -280,8 +284,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
             for ref in refs.split(','):
                 ref = ref.strip()
                 if ref not in attached_references: 
-                    #breakpoint()
-                    print(f'{ref} not found in reference list, skipping...')
+                    logging.warning(f'{ref} not found in reference list, skipping...')
                     continue
                 if ref in d_ref:
                     ref_links.append(d_ref[ref])
@@ -297,9 +300,9 @@ def getDocContent(file_id, attached_files=[], file_info={}):
         
             ref_links = sorted(ref_links)
             if len(ref_links) > 2 and len(ref_links) == (ref_links[-1]-ref_links[0]+1):
-                new_citation = f'[{ref_links[0]}-{ref_links[-1]}]'
+                new_citation = f' [{ref_links[0]}-{ref_links[-1]}]'
             else:
-                new_citation = f'[{', '.join(map(str, ref_links))}]'
+                new_citation = f' [{', '.join(map(str, ref_links))}]'
             
             content = content.replace(f'[CITE({refs})]', new_citation)
             content_tex = content_tex.replace(f'[CITE({refs})]', f'\\cite{{{refs}}}')
@@ -327,14 +330,14 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         if not isinstance(d, dict):
             for k, v in d:
-                if k != 'ref':
+                if k == 'ref':
+                    content_md.append(f'\n[{v[0]+1}]: {v[1]}')
+                    content_docx.add_paragraph(f'[{v[0]+1}]. {v[1]}')
+                elif k in ['content_ai', 'content_user']:
                     content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
                     content_md.append(content_text)
                     content_docx.add_paragraph(content_text)
                     content_tex.append(content_tex_text)
-                else:
-                    content_md.append(f'\n[{v[0]+1}]: {v[1]}')
-                    content_docx.add_paragraph(f'[{v[0]+1}]. {v[1]}')
         else:
             for k in d:
                 if k != 'content':
@@ -387,7 +390,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         return bib_text
 
-    outline_file_path = Config.DIR_DATA / f'outline_{file_id}.json'
+    outline_file_path = Config.DIR_CONTENTS / f'outline_{file_id}.json'
 
     with open(outline_file_path) as fp:
         d_outline = json.load(fp)
@@ -404,6 +407,7 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
     return content_md, content_docx, content_tex, bibs
 
+@print_func_name
 def uploadFiles(files, email='', session_id=''):
 
     for file in files:
@@ -439,7 +443,7 @@ def uploadFiles(files, email='', session_id=''):
         #                    field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
         # uploaded_file_id = ids[0]
             
-        with open(Config.DIR_DATA / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
+        with open(Config.DIR_CONTENTS / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
             with open(file['datapath'], 'rb') as fp_r:
                 fp.write(fp_r.read())
     

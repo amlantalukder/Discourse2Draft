@@ -1,7 +1,7 @@
 from ..vectordb import ChromaDB
 from ..utils import Config
-from .common import State
-from rich import print
+from .common import StateContentManager
+import logging
 
 # ---------------------------------------------------------------------------
 class GatherContext:
@@ -43,7 +43,7 @@ class GatherContext:
                         file_name = d.metadata['app_file_name']
                         d_docs[(file_id, file_name)] = d_docs.get((file_id, file_name), '') + content + '\n\n'
                     except Warning as w:
-                        print(f'Resource retriever formatting: {str(w)}')
+                        logging.info(f'Resource retriever formatting: {str(w)}')
 
                 for (file_id, file_name), content in d_docs.items():
                     docs_str += '\n\n' + f'''\
@@ -61,7 +61,7 @@ class GatherContext:
                 docs = self.db.invoke(kw)
                 if len(docs): self.docs_res[kw] = docs
             except Warning as w:
-                print(f'Resource retriever for keyphrase: {kw}: {str(w)}')
+                logging.info(f'Resource retriever for keyphrase: {kw}: {str(w)}')
 
         return formatContext(self.docs_res)
     
@@ -70,7 +70,7 @@ class GatherContext:
         self.db = ChromaDB()
         self.db.get(collection_name=collection_name)
 
-    def __call__(self, state: State) -> State:
+    def __call__(self, state: StateContentManager) -> StateContentManager:
         '''
         Gather context using keyphrases extracted from user query
         '''

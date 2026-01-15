@@ -4,11 +4,9 @@ import faicons
 from utils import Config, getUIID, print_func_name
 from ...backend.db import updateDB, \
                 generated_files_status, \
-                generated_files_ai_architecture, \
                 vector_db_collections_status, \
                 Config as db_config
 from ..common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getGeneratedDocuments, getDocContent
-from ...backend.ai.architecture import Architecture
 from datetime import datetime
 import io
 
@@ -38,7 +36,7 @@ def getGeneratedDocItemView(input, output, session,
                                     def renderDownloadOption():
                                         attached_files, file_info = applyGetVectorDBFiles()
                                         _ = reload_content_view_flag()
-                                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                                        outline_file_path = Config.DIR_CONTENTS / f'outline_{info['id']}.json'
                                         if not outline_file_path.exists(): return
                                         content_md, content_docx, content_tex, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
                                         
@@ -136,7 +134,7 @@ def getGeneratedDocItemView(input, output, session,
                                     def renderDownloadOption():
                                         attached_files, file_info = applyGetVectorDBFiles()
                                         _ = reload_content_view_flag()
-                                        outline_file_path = Config.DIR_DATA / f'outline_{info['id']}.json'
+                                        outline_file_path = Config.DIR_CONTENTS / f'outline_{info['id']}.json'
                                         if not outline_file_path.exists(): return
                                         content_md, content_docx, content_tex, bibs = getDocContent(file_id=info['id'], attached_files=attached_files, file_info=file_info)
 

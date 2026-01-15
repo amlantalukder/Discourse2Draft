@@ -1,7 +1,7 @@
 from langchain_core.documents.base import Document
 from langsmith import traceable
 from ..utils import Config
-from .common import State
+from .common import StateContentManager
 from .tools.search_pubmed import search_pubmed_article_async, formatAPA
 from ..vectordb import ChromaDB
 from ..db import selectFromDB, insertIntoDB
@@ -70,7 +70,7 @@ class AddLiterature:
         
     @traceable
     @print_func_name
-    def __call__(self, state: State):
+    def __call__(self, state: StateContentManager):
         '''Adds literature to vector database'''
 
         literature_list = asyncio.run(self.gatherLiterature(queries=state['keyphrases']))

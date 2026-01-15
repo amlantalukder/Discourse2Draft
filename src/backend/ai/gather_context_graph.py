@@ -1,12 +1,13 @@
 from ..vectordb import ChromaDB
 from ..utils import Config
-from .common import State
+from .common import StateContentManager
 from rich import print
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.graphs.networkx_graph import NetworkxEntityGraph
 from .llms import getAIModel
 import asyncio
 import nest_asyncio
+import logging
 
 nest_asyncio.apply()
 
@@ -24,7 +25,7 @@ class GatherContextGraph:
                     app_file_id = d.metadata['app_file_id']
                     d_docs_by_file_id[app_file_id] = d_docs_by_file_id.get(app_file_id, []) + [d]
             except Warning as w:
-                print(f'Resource retriever for keyphrase: {kw}: {str(w)}')
+                logging.info(f'Resource retriever for keyphrase: {kw}: {str(w)}')
 
         d_nx_graph = {}
         for app_file_id, docs in d_docs_by_file_id.items():
@@ -48,7 +49,7 @@ class GatherContextGraph:
         #self.llm_transformer = LLMGraphTransformer(llm=llm)
         self.llm_transformer = LLMGraphTransformer(llm=getAIModel(model_name='azure-gpt-4o'))
 
-    def __call__(self, state: State) -> State:
+    def __call__(self, state: StateContentManager) -> StateContentManager:
         '''
         Gather context using keyphrases extracted from user query
         '''

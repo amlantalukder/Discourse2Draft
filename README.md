@@ -7,15 +7,20 @@ Given an outline, Discourse2Draft can generate the content. It can be useful to 
 **Example of an outline**
 
 ```
-# Title:
+# Title: Quantam Computing and its Applications
 ## Introduction
+<Instructions>
+- High-level overview of quantum computing
+- Importance and potential applications
+</Instructions>
 <content>
-### 1. Sub header
+## 1. History of Quantum Computing
+Quantum computing has its roots in the early 1980s when physicist Richard Feynman proposed the idea of a quantum computer that could simulate physical systems more efficiently than classical computers. Over the years, significant milestones have been achieved, including the development of quantum algorithms like Shor's algorithm for factoring large numbers and Grover's algorithm for database searching.
 <content>
-### 2. Sub header
+## 2. Quantum Information Processing
+### Quantum Bits (Qubits)
 <content>
-## Next sub section header
-### 1. Sub header
+### Unary Operators
 <content>
 ```
 

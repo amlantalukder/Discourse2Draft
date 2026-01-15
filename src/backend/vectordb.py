@@ -2,6 +2,7 @@ from chromadb import HttpClient
 from langchain_chroma import Chroma
 from .ai.llms import getAIModel
 from .utils import Config
+from utils import print_func_name
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_graph_retriever.transformers import ShreddingTransformer
 from langchain_graph_retriever.adapters.chroma import ChromaAdapter
@@ -12,6 +13,8 @@ from langchain_community.document_loaders import CSVLoader, JSONLoader, PyPDFLoa
 from langchain_unstructured import UnstructuredLoader
 from pathlib import Path
 import truststore
+import logging
+
 truststore.inject_into_ssl()
 
 class ChromaDB:
@@ -72,12 +75,13 @@ class ChromaDB:
             document_chunks = list(shredder.transform_documents(docs))
 
         # Index chunks
-        print(f'Adding {len(document_chunks)} chunks to vectordb ...')
+        logging.info(f'Adding {len(document_chunks)} chunks to vectordb ...')
         _ = self.vector_store.add_documents(documents=document_chunks)
 
     def invoke(self, query: str):
         return self.retriever.invoke(query)
 
+@print_func_name
 def getLoader(file_path: Path):
 
     assert file_path.suffix in [".csv", ".json", ".pdf", ".epub", ".doc", ".docx", ".txt", ".xlsm"], \
@@ -95,6 +99,7 @@ def getLoader(file_path: Path):
 
     return loader.lazy_load()
 
+@print_func_name
 def deleteCollection(collection_name: str):
 
     client = ChromaDB().client

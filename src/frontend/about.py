@@ -2,8 +2,7 @@ from shiny import reactive
 from shiny.express import ui, module, render
 import faicons
 from utils import print_func_name, Config, getUIID
-from ..backend.ai.llms import extractAvailableLLMs
-from ..backend.ai.architecture import Architecture
+import logging
 
 @module
 def tocLink(input, output, session, header, children, level):
@@ -110,11 +109,11 @@ def mod_about(input, output, session):
                 outline_items = []
             
             if hashes != '#' * len(hashes):
-                print(f'Invalid header: {line_x}')
+                logging.warning(f'Invalid header: {line_x}')
                 break
             
             if len(hashes) > len(outline_items) + 1:
-                print(f'Invalid number of "#"s in the header, expected number of hashes <= {len(outline_items) + 1}, found {len(hashes)}')
+                logging.warning(f'Invalid number of "#"s in the header, expected number of hashes <= {len(outline_items) + 1}, found {len(hashes)}')
                 break
             
             if len(hashes) <= len(outline_items):

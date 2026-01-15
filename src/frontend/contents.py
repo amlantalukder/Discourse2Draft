@@ -2,21 +2,21 @@ from shiny import reactive
 from shiny.express import ui, render, module
 import faicons
 from utils import Config, getUIID, print_func_name
-from ..backend.ai.architecture import Architecture
 from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
                 generated_files_status, \
                 generated_files_ai_architecture, \
                 vector_db_collections_type, \
                 vector_db_collections_status
-from .manage_outline import resetOutline, processOutline, getRawOutline, mod_outline_manager, mod_ai_outline_creator
+from .manage_outline import resetOutline, processOutline, generateOutlineByAI, processOutlineByAI, getRawOutline, mod_outline_manager, mod_ai_outline_creator
 from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection, getLiteraturesFromDB
+from .defaults import ContentGenerationScope
 import asyncio
 import json
 import textwrap
 import re
 from datetime import datetime
-from rich import print
 import io
+import logging
 
 @module
 def mod_contents(input, output, session, 
@@ -31,6 +31,7 @@ def mod_contents(input, output, session,
     references = reactive.value([])
 
     outline_from_outline_manager = reactive.value('')
+    write_abstract_flag = reactive.value(True)
     
     stream = ui.MarkdownStream("stream")
 
@@ -45,15 +46,16 @@ def mod_contents(input, output, session,
         with ui.div(class_='row input'):
             class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
             with ui.div(class_=class_name_outline):
-                with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):
+                with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):            
                     with ui.div(class_='col'):
-                        ui.input_checkbox('chk_use_example', 'Use example', value=False)            
+                        ''
                     with ui.div(class_='d-flex flex-column col text-center'):
-                        @render.ui
+                        @render.express
                         @print_func_name
                         def renderLLMandTemp():
-                            return [ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}'),
-                                    ui.span('(Can be changed in the settings panel in the top-right corner)')]
+                            _ = reload_view_flag.get()
+                            ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}')
+                            ui.span('(Can be changed in the settings panel in the top-right corner)')
                     with ui.div(class_='col text-end'):
                         @render.express
                         @print_func_name
@@ -61,7 +63,13 @@ def mod_contents(input, output, session,
                             btn_label = ('Create' if not input.text_outline().strip() else 'Manage') + ' outline with AI'
                             ui.input_action_button('btn_open_outline_manager', btn_label)
                             
-                ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+                with ui.navset_underline(id="user_input_panel", selected="Query"):
+                    with ui.nav_panel("Query"):
+                        ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
+                    with ui.nav_panel("Structured Outline"):
+                        with ui.div(class_='col mt-2'):
+                            ui.input_checkbox('chk_use_example', 'Use example', value=False)
+                        ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
             with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
                 with ui.div(class_=class_name_controls):
                     @render.express
@@ -77,9 +85,6 @@ def mod_contents(input, output, session,
                     with ui.tooltip(placement="right"):
                         ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
                         "Resume / Pause"
-                    with ui.tooltip(placement="right"):
-                        ui.input_action_button('btn_speed', '', icon=faicons.icon_svg("person-running"))
-                        "Writing Speed"
                     @render.express
                     @print_func_name
                     def renderDownloadButton():
@@ -94,7 +99,7 @@ def mod_contents(input, output, session,
                                         @print_func_name
                                         def renderDownloadOptions():
                                             attached_files, file_info = applyGetVectorDBFiles()
-                                            outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+                                            outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
                                             if not outline_file_path.exists(): return
                                             content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
 
@@ -204,7 +209,7 @@ def mod_contents(input, output, session,
         else:
             records = selectFromDB('generated_files', 
                                 field_names=['session', 'file_name', 'status'], 
-                                field_values=[[config_app.session], [file_name], valid_file_statuses])
+                                field_values=[[config_app.session_id], [file_name], valid_file_statuses])
         
         if not records.empty:
             ui.notification_show('File name already exists.', type='error')
@@ -231,7 +236,7 @@ def mod_contents(input, output, session,
             config_app.generated_files_id = ids[0]
             config_app.file_name = file_name
 
-            outline_file_path = f'data/outline_{config_app.generated_files_id}.json'
+            outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
 
             with open(outline_file_path, 'w') as fp:
                 json.dump({}, fp)
@@ -289,7 +294,7 @@ def mod_contents(input, output, session,
 
         if not config_app.file_name: return
         
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
 
         # Read outline
         with open(outline_file_path) as fp:
@@ -298,9 +303,12 @@ def mod_contents(input, output, session,
         raw_outline = '\n'.join(getRawOutline(d_outline))
         ui.update_text_area(id='text_outline', value=raw_outline)
 
+    @print_func_name
     def clearContent():
 
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        if not config_app.generated_files_id: return
+
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
@@ -319,6 +327,10 @@ def mod_contents(input, output, session,
         
         if not config_app.generated_files_id:
             ui.notification_show("Please create a new file or select an existing file.", type="error")
+            return
+        
+        if ((input.switch_show_lit_research() and config_app.vector_db_collections_id_lit_search) or
+        (not input.switch_show_lit_research() and not config_app.vector_db_collections_id_lit_search)):
             return
         
         clearContent()
@@ -357,6 +369,7 @@ def mod_contents(input, output, session,
         
     @reactive.calc
     @reactive.event(reload_view_flag, reload_attached_files_view_flag)
+    @print_func_name
     def getAttachedFiles():
         files, file_info = [], {}
         if config_app.vector_db_collections_id is not None:
@@ -368,6 +381,7 @@ def mod_contents(input, output, session,
     
     @reactive.calc
     @reactive.event(reload_view_flag, reload_attached_files_view_flag)
+    @print_func_name
     def getAttachedLiterature():
         files, file_info = [], {}
         if config_app.vector_db_collections_id_lit_search is not None:
@@ -413,12 +427,12 @@ def mod_contents(input, output, session,
         
         if not config_app.agent: config_app.setAgent()
         
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         # Read outline
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
-
+        
         raw_outline = '\n'.join(getRawOutline(d_outline))
         
         # Cancel writing
@@ -427,13 +441,13 @@ def mod_contents(input, output, session,
         # Show file name, outline and content
         ui.update_text(id='text_file_name', value=config_app.file_name)
         ui.update_text_area(id='text_outline', value=raw_outline)
-
+        
         references.set([])
         attached_references, _ = applyGetVectorDBFiles()
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path, 
-                                                        write_n_contents=0, 
+                                                        content_gen_scope=ContentGenerationScope.DO_NOT_GENERATE.value, 
                                                         attached_references=attached_references), 
                                         clear=True))
 
@@ -467,15 +481,21 @@ def mod_contents(input, output, session,
 
     @print_func_name
     def saveOutline(regenerate=False):
-
+        
+        # Check if regeneration is needed
         records = selectFromDB('generated_files', 
                             field_names=['id', 'file_name'], 
                             field_values=[[config_app.generated_files_id], [config_app.file_name]])
         
         if not (records.empty or regenerate): return True
 
+
         outline = input.text_outline().strip()
-        if outline == '': return False
+        query = input.text_query().strip()
+        active_input_panel = input.user_input_panel()
+
+        if ((active_input_panel == 'Query' and query == '') or 
+            (active_input_panel == 'Structured Outline' and outline == '')): return False
 
         # outline ='''
         # # Title: Neuroinflammation and Cognitive Function: Interplay of Causes, Mechanisms, and Pathological Outcomes
@@ -495,10 +515,35 @@ def mod_contents(input, output, session,
         # <content>
         # continue writing...
         # '''
-    
-        d_outline = processOutline(outline)
 
-        with open(f'data/outline_{config_app.generated_files_id}.json', 'w') as fp:
+        if active_input_panel == 'Query' and query != '':
+            outline = generateOutlineByAI(query)
+            ui.update_text_area(id='text_outline', value=outline)
+            ui.notification_show("Outline created successfully.", type="info")
+            d_outline = processOutline(outline)
+        else:
+            invalid_formatting = False
+            if '<content>' in outline and '# ' in outline:
+                try:
+                    d_outline = processOutline(outline)
+                except Exception as exp:
+                    logging.error(f'Outline formatting is invalid: {exp}') 
+                    invalid_formatting = True
+            else:
+                invalid_formatting = True 
+                
+            if invalid_formatting:
+                try:
+                    outline = processOutlineByAI(outline)
+                    ui.update_text_area(id='text_outline', value=outline)
+                    ui.notification_show("The provided outline was reformatted to find the proper positions for AI to write in.", type="warning")
+                    d_outline = processOutline(outline)
+                except Exception as exp:
+                    logging.error(f'Failed to generate outline with AI: {exp}') 
+                    ui.notification_show("Outline formatting is invalid. Failed to fix it with AI. Please follow the outline format mentioned in docs.", type="error")
+                    return False
+
+        with open(Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json', 'w') as fp:
             json.dump(d_outline, fp)
 
         current_time = datetime.now()
@@ -557,7 +602,7 @@ def mod_contents(input, output, session,
         hierarchy = input.selected_para_hierarchy()
         if not hierarchy: return
         
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         # Read outline
         with open(outline_file_path) as fp:
@@ -572,50 +617,71 @@ def mod_contents(input, output, session,
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path,
-                                                        write_n_contents=1,
+                                                        content_gen_scope=ContentGenerationScope.REGENERATE_PARAGRAPH.value,
                                                         attached_references=attached_references), 
                                         clear=True))
 
     @print_func_name
-    async def generateResponse(d_outline, outline_file_path, write_n_contents=-1, attached_references=[], attached_files_reload_flag_val=True):
+    async def generateResponse(d_outline, 
+                               outline_file_path,
+                               content_gen_scope=ContentGenerationScope.FULL_DRAFT.value, 
+                               attached_references=[], 
+                               attached_files_reload_flag_val=True,
+                               write_abstract=False,
+                               write_abstract_flag_value=None):
 
         @print_func_name
-        def getHierarchy(d_outline, content_pre=[], current_section_list=[], counter=1):
+        def getHierarchy(d_outline, 
+                         content_pre=[], 
+                         current_section_list=[],
+                         content_pre_summary='', 
+                         counter=1, 
+                         abstract_section_header='',
+                         specific_section_header_chain=[],
+                         skip_gen=False):
             '''
             Get all previous content and current section hierarchy up to the point that needs ai generation
             '''
-
+            instructions = ''
             is_gen_needed = False
             for k in d_outline:
+                skip_gen_current_section = skip_gen
+                if abstract_section_header != '' and k == abstract_section_header: skip_gen_current_section = True
+                if len(specific_section_header_chain) > 0 and specific_section_header_chain[0] != k: continue
                 if k == 'References': continue
                 if k != 'content':
-                    content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline[k], 
+                    content_pre, current_section_list, content_pre_summary, instructions, is_gen_needed = getHierarchy(d_outline[k], 
                                                                 content_pre + [f'{'#' * counter} {k}'],
                                                                 current_section_list + [k],
-                                                                counter + 1)
+                                                                content_pre_summary,
+                                                                counter + 1,
+                                                                abstract_section_header=abstract_section_header,
+                                                                specific_section_header_chain=specific_section_header_chain[1:],
+                                                                skip_gen=skip_gen_current_section)
                     if not is_gen_needed: current_section_list.pop()
                 else:
                     content_list = []
                     for v in d_outline[k]:
-                        # Record only the first content_ai tag and 
-                        # all content_user tags after that
                         if v[0] == 'content_ai':
-                            if is_gen_needed: break
-                            if v[1] == '': 
-                                is_gen_needed = True
-                            else:
-                                content_pre.append(v[1])
                             content_list.append(v)
+                            if v[1] != '' or skip_gen_current_section:
+                                content_pre.append(v[1])
+                            else:
+                                is_gen_needed = True 
+                                break
                         elif v[0] == 'content_user':
                             content_list.append(v)
-                            if is_gen_needed: break
                             content_pre.append(v[1])
-                    
+                        elif v[0] == 'content_pre_summary':
+                            content_pre_summary = v[1] + '\n\n' + '\n\n'.join([c for _, c in content_list])
+                        elif v[0] == 'instructions':
+                            instructions = v[1]
+
                     if is_gen_needed: current_section_list.append(content_list)      
                 
                 if is_gen_needed: break
                         
-            return content_pre, current_section_list, is_gen_needed
+            return content_pre, current_section_list, content_pre_summary, instructions, is_gen_needed
         
         @print_func_name
         def getSectionText(section_list):
@@ -637,26 +703,35 @@ def mod_contents(input, output, session,
             return '\n\n'.join(section_text_lines)
         
         @print_func_name
-        def insertContent(d_outline, section_list, response):
+        def insertContent(d_outline, section_list, content_ai, content_pre_summary):
             '''
-            Inserts the ai response to the appropriate position of the outline
+            Inserts the ai generated content to the appropriate position of the outline
             '''
 
             if not len(section_list): return
             
             if len(section_list) == 1:
-                for i, (content_type, content) in enumerate(section_list[0]):
+                for i, (content_type, content) in enumerate(d_outline['content']):
                     if content_type == 'content_ai' and content == '':
-                        d_outline['content'][i][1] = response
+                        d_outline['content'][i][1] = content_ai
+                        for j, (content_type, _) in enumerate(d_outline['content']):
+                            if content_type == 'content_pre_summary':
+                                d_outline['content'][j][1] = content_pre_summary
+                                break
+                        else:
+                            d_outline['content'].append(['content_pre_summary', content_pre_summary])
                         return
             else:
-                insertContent(d_outline[section_list[0]], section_list[1:], response)
+                insertContent(d_outline[section_list[0]], section_list[1:], content_ai, content_pre_summary)
 
         @print_func_name
         def insertReferences(d_outline, ref_list):
 
             top_level_key = list(d_outline.keys())[0]
-            d_outline[top_level_key]['References'] = [('ref', v) for v in enumerate(ref_list)]
+            try:
+                d_outline[top_level_key]['References'] = [('ref', v) for v in enumerate(ref_list)]
+            except:
+                breakpoint()
 
         @print_func_name
         def getSanitizedReferences(references_ai, attached_references, attached_files_reload_flag_val):
@@ -676,7 +751,7 @@ def mod_contents(input, output, session,
         @print_func_name
         def processCitation(content, ref_list, attached_references):
 
-            ref_groups = re.findall(r'\[CITE\((.+?)\)\]', content)
+            ref_groups = re.findall(r'\ *\[CITE\((.+?)\)\]', content)
     
             refs_seen = set()
             d_ref = {}
@@ -688,7 +763,7 @@ def mod_contents(input, output, session,
                 for ref in refs.split(','):
                     ref = ref.strip()
                     if ref not in attached_references: 
-                        print(f'{ref} not found in reference list, skipping...')
+                        logging.warning(f'{ref} not found in reference list, skipping...')
                         continue
                     if ref in d_ref:
                         ref_links.append(d_ref[ref])
@@ -703,10 +778,12 @@ def mod_contents(input, output, session,
                 
                 ref_links = sorted(ref_links)
                 if len(ref_links) > 2 and len(ref_links) == (ref_links[-1]-ref_links[0]+1):
-                    new_citation = f'[<a href="#:~:text=References">{ref_links[0]}-{ref_links[-1]}</a>]'
+                    new_citation = f' [<a href="#:~:text=References">{ref_links[0]}-{ref_links[-1]}</a>]'
                 else:
-                    new_citation = f'[{', '.join([f'<a href="#:~:text=References">{ref_cite}</a>' for ref_cite in sorted(ref_links)])}]'
+                    new_citation = f' [{', '.join([f'<a href="#:~:text=References">{ref_cite}</a>' for ref_cite in sorted(ref_links)])}]'
                 content = content.replace(f'[CITE({refs})]', new_citation)
+
+            if 'CITE' in content: breakpoint()
 
             return content, ref_list
         
@@ -714,71 +791,158 @@ def mod_contents(input, output, session,
         async def dummy(i=None):
             await asyncio.sleep(3)
             if i is None:
-                return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'
+                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'}
             if i % 2:
-                return 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].'
-            else:
-                return 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].'
+                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].'}
+            return {'content': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].'}
+        
+        @print_func_name
+        def findAbstractSection(d_outline: dict) -> str:
+            '''
+            Returns the header of an abstract section (if the outline has abstract) 
+            or an empty string (if the outline does not have abstract)
+            '''
 
-        len_last_content_pre, content_pre_new = 0, None
+            @print_func_name
+            def isThisAbstract(section_header):
+                response = config_app.agent_abstract_detector.invoke({'current_section': section_header})
+                return response['is_abstract']
+            
+            if not d_outline: return ''
 
-        ref_list = []
+            title = next(iter(d_outline))
+            first_section_header = next(iter(d_outline[title]))
+            
+            if not isThisAbstract(first_section_header): return ''
+            return first_section_header
+        
+        def sanitizeContent(content):
+            return re.sub(r' \~([^\~])', r' \\~\1', content)
+
+        abstract_section_header = findAbstractSection(d_outline)
+
         attached_references = {str(k): v for k, v, _ in attached_references}
-        while True:
 
-            content_pre, current_section_list, is_gen_needed = getHierarchy(d_outline)
+        if not write_abstract:
+
+            len_last_content_pre, content_pre_new = 0, None
+
+            ref_list = []
+            
+            while True:
+
+                match content_gen_scope:
+                    case ContentGenerationScope.DO_NOT_GENERATE.value:
+                        content_pre, current_section_list, content_pre_summary, instructions, is_gen_needed = getHierarchy(d_outline, skip_gen=True)
+                    case ContentGenerationScope.FULL_DRAFT.value:
+                        content_pre, current_section_list, content_pre_summary, instructions, is_gen_needed = getHierarchy(d_outline, abstract_section_header=abstract_section_header)
+                    case ContentGenerationScope.REGENERATE_PARAGRAPH.value:
+                        content_pre, current_section_list, content_pre_summary, instructions, is_gen_needed = getHierarchy(d_outline)
+                
+                current_section = getSectionText(current_section_list)
+
+                if content_pre_new is None:
+                    content_pre_new = content_pre
+                else:
+                    content_pre_new = content_pre[len_last_content_pre + 1:]
+
+                content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
+                
+                if attached_references:
+                    content_pre_new, ref_list = processCitation(content_pre_new, ref_list, attached_references)
+                    references.set(ref_list.copy())
+                    await reactive.flush()
+                len_last_content_pre = len(content_pre)
+
+                content_pre_new = sanitizeContent(content_pre_new)
+            
+                yield content_pre_new
+                
+                if not is_gen_needed: break
+            
+                # if attached_references:
+                #     response = await dummy(len(ref_list))  
+                # else:
+                #     response = await dummy()
+
+                if not content_pre_summary: content_pre_summary = '\n\n'.join(content_pre)
+                
+                response = await config_app.agent.ainvoke({'content_pre': content_pre_summary, 
+                                                           'current_section': current_section,
+                                                           'content_specific_instructions': instructions})
+                
+                content, content_pre_summary = response['content'], response['content_pre']
+                
+                attached_references_ai = response.get('references', {})
+                attached_references, attached_files_reload_flag_val = getSanitizedReferences(attached_references_ai, attached_references, not attached_files_reload_flag_val)
+
+                insertContent(d_outline, current_section_list, content, content_pre_summary)
+
+                if attached_references:
+                    response_with_citations, ref_list = processCitation(content, ref_list, attached_references)
+                    references.set(ref_list.copy())
+                    await reactive.flush()
+                    insertReferences(d_outline, ref_list)
+                
+                with open(outline_file_path, 'w') as fp:
+                    json.dump(d_outline, fp)
+
+                current_time = datetime.now()
+
+                updateDB('generated_files', 
+                            update_fields=['status', 'update_date'], 
+                            update_values=[generated_files_status.RUNNING.value, current_time], 
+                            select_fields=['id'], 
+                            select_values=[[config_app.generated_files_id]])
+                
+                content = sanitizeContent(content)
+
+                tokens = response_with_citations.split(' ') if attached_references else content.split(' ')
+                for i, s in enumerate(tokens):
+                    await asyncio.sleep(0.05)
+                    yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
+
+                ui.notification_show("Progress saved", type="message")
+
+            # Add abstract section if needed
+            if (content_gen_scope == ContentGenerationScope.FULL_DRAFT.value and
+                abstract_section_header != '' and
+                write_abstract_flag_value is not None):
+
+                write_abstract_flag.set(write_abstract_flag_value)
+
+        else:
+            
+            title = next(iter(d_outline))
+            content_pre, \
+                current_section_list, \
+                    content_pre_summary, \
+                        instructions, \
+                            is_gen_needed = getHierarchy(d_outline, 
+                                                         specific_section_header_chain=[title, abstract_section_header])
             
             current_section = getSectionText(current_section_list)
 
-            if content_pre_new is None:
-                content_pre_new = content_pre
-            else:
-                content_pre_new = content_pre[len_last_content_pre + 1:]
+            yield '\n\n'.join(content_pre) + '\n\n'
 
-            content_pre_new = '\n\n'.join(content_pre_new) + '\n\n'
-            
-            if attached_references:
-                content_pre_new, ref_list = processCitation(content_pre_new, ref_list, attached_references)
-                references.set(ref_list.copy())
-            await reactive.flush()
-            len_last_content_pre = len(content_pre)
+            if not is_gen_needed: return
 
-            yield content_pre_new
-            
-            if write_n_contents == 0 or not is_gen_needed: break
-        
-            # if attached_references:
-            #     response = await dummy(len(ref_list))  
-            # else:
-            #     response = await dummy()
-            response = await config_app.agent.ainvoke({'content_pre': '\n\n'.join(content_pre), 'current_section': current_section}, {"configurable": {"thread_id": "abc123"}})
-            
-            content = response['content']
-            attached_references_ai = response.get('references', {})
+            ui.notification_show(f"Writing {abstract_section_header}", type="message")
 
-            print(content, attached_references_ai)
+            whole_content, _, content_pre_summary, *_ = getHierarchy(d_outline, abstract_section_header=abstract_section_header)
 
-            attached_references, attached_files_reload_flag_val = getSanitizedReferences(attached_references_ai, attached_references, not attached_files_reload_flag_val)
+            if not content_pre_summary: content_pre_summary = '\n\n'.join(content_pre)
 
-            insertContent(d_outline, current_section_list, content)
+            response = await config_app.agent_abstract_writer.ainvoke({'content_pre': content_pre_summary, 
+                                                                       'current_section': current_section,
+                                                                       'content_specific_instructions': instructions})
 
-            if attached_references:
-                response_with_citations, ref_list = processCitation(content, ref_list, attached_references)
-                references.set(ref_list.copy())
-                await reactive.flush()
-                insertReferences(d_outline, ref_list)
-                tokens = response_with_citations.split(' ')
-            else:
-                tokens = content.split(' ')
+            content, content_pre_summary = response['content'], response['content_pre']
 
-            for i, s in enumerate(tokens):
-                await asyncio.sleep(0.1 if not config_app.write_faster else 0.01)
-                yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
-            
+            insertContent(d_outline, current_section_list, content, content_pre_summary)
+
             with open(outline_file_path, 'w') as fp:
                 json.dump(d_outline, fp)
-
-            ui.notification_show("Progress saved", type="message")
 
             current_time = datetime.now()
 
@@ -788,8 +952,36 @@ def mod_contents(input, output, session,
                         select_fields=['id'], 
                         select_values=[[config_app.generated_files_id]])
             
-            if write_n_contents > 0: write_n_contents -= 1
+            tokens = content.split(' ')
+            for i, s in enumerate(tokens):
+                await asyncio.sleep(0.05)
+                yield s + ' ' if i < len(tokens)-1 else s + '\n\n'
 
+            whole_content = '\n\n'.join(whole_content[len(content_pre)+1:]) + '\n\n'
+
+            if attached_references:
+                whole_content, ref_list = processCitation(whole_content, [], attached_references)
+
+            yield whole_content
+
+            ui.notification_show("Progress saved", type="message")
+
+    @reactive.effect
+    @reactive.event(write_abstract_flag, ignore_init=True)
+    @print_func_name
+    async def writeAbstract():
+
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
+        
+        with open(outline_file_path) as fp:
+            d_outline = json.load(fp)
+        
+        attached_references, _ = applyGetVectorDBFiles()
+        await stream.stream(generateResponse(d_outline, 
+                                             outline_file_path,
+                                             attached_references=attached_references,
+                                             write_abstract=True), clear=True)
+            
     @print_func_name
     async def generate(regenerate):
 
@@ -801,7 +993,7 @@ def mod_contents(input, output, session,
             ui.notification_show("Please provide an outline.", type="error")
             return
 
-        outline_file_path = Config.DIR_DATA / f'outline_{config_app.generated_files_id}.json'
+        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
@@ -811,9 +1003,8 @@ def mod_contents(input, output, session,
         await stream.stream(generateResponse(d_outline, 
                                              outline_file_path,
                                              attached_references=attached_references,
-                                             attached_files_reload_flag_val=reload_attached_files_view_flag.get()), 
-                            clear=True)
-
+                                             attached_files_reload_flag_val=reload_attached_files_view_flag.get(),
+                                             write_abstract_flag_value=not write_abstract_flag.get()), clear=True)
         config_app.is_writing = True
 
     @reactive.effect
@@ -863,22 +1054,10 @@ def mod_contents(input, output, session,
                     ui.notification_show("Writing stopped", type="warning")
 
             config_app.is_writing = False
-
-            ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("play"))
             
             loop = asyncio.get_event_loop()
             loop.create_task(session.send_custom_message('reload_content', {'ui_id': ui_id}))
 
-        else:
-            ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause"))
-
-    @reactive.effect
-    @reactive.event(input.btn_speed)
-    @print_func_name
-    def speed():
-        config_app.write_faster = not config_app.write_faster
-        ui.update_action_button(
-            "btn_speed", icon=faicons.icon_svg("person-walking" if config_app.write_faster else "person-running")
-        )
+        ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause" if stream_status == "running" else "play"))
 
     return content

@@ -1,8 +1,12 @@
 import requests
 import xmltodict
 import traceback
-import asyncio
+import logging
+from utils import print_func_name
 
+print = logging.info
+
+@print_func_name
 def search_pubmed_article(query: str, 
                           max_results: int = 10, 
                           content_size: int|None=None,
@@ -98,6 +102,14 @@ def search_pubmed_article(query: str,
             if isinstance(val, dict):
                 return val.get('#text', '')
             return val
+        
+        def extractAuthors(contrib):
+            if 'collab' in contrib:
+                return {'first_name': '', 
+                        'last_name': contrib['collab'].strip()}
+            else:
+                return {'first_name': contrib['name']['given-names']['#text'].strip(), 
+                        'last_name': contrib['name']['surname'].strip()}
 
         try:
             d = getPubMedArticleEutils(pmcid=pmcid)
@@ -120,25 +132,29 @@ def search_pubmed_article(query: str,
 
         ref['title'] = parseTextField(front['article-meta']['title-group']['article-title'])
     
-        authors = []
+        authors = []            
+
         contrib_group = front['article-meta']['contrib-group']
+    
         if isinstance(contrib_group, list):
             for contrib_group_element in contrib_group:
                 if isinstance(contrib_group_element['contrib'], list):
                     for contrib in contrib_group_element['contrib']:
                         if contrib['@contrib-type'] == 'author':
-                            authors.append({'first_name': contrib['name']['given-names']['#text'].strip(), 
-                                            'last_name': contrib['name']['surname'].strip()})
+                            authors.append(extractAuthors(contrib))
+                else:
+                    contrib = contrib_group_element['contrib']
+                    if contrib['@contrib-type'] == 'author':
+                            authors.append(extractAuthors(contrib))
         elif isinstance(contrib_group['contrib'], list):
             for contrib in contrib_group['contrib']:
                 if contrib['@contrib-type'] == 'author':
-                    authors.append({'first_name': contrib['name']['given-names']['#text'].strip(), 
-                                    'last_name': contrib['name']['surname'].strip()})
+                    authors.append(extractAuthors(contrib))
         else:
-            if contrib_group['contrib']['@contrib-type'] == 'author':
-                if 'collab' in contrib_group['contrib']:
-                    authors.append({'first_name': '', 
-                                    'last_name': contrib_group['contrib']['collab'].strip()})
+            contrib = contrib_group['contrib']
+            if contrib['@contrib-type'] == 'author':
+                authors.append(extractAuthors(contrib))
+            
 
         ref['authors'] = authors
 
@@ -207,11 +223,12 @@ def search_pubmed_article(query: str,
 
     return res
 
+@print_func_name
 async def search_pubmed_article_async(*args, **kargs):
 
     return search_pubmed_article(*args, **kargs)
 
-
+@print_func_name
 def formatAPA(ref):
 
     # Author, A. A., Author, B. B., & Author, C. C. (Year). Title of article. Journal Title, volume(issue), page numbers. DOI or URL.

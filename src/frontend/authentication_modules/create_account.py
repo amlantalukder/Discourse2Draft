@@ -3,6 +3,7 @@ from shiny.express import module, ui
 from ...backend.db import selectFromDB, insertIntoDB, encryptPassword
 from utils import print_func_name
 from datetime import datetime
+from .utils import validateField, FieldType
 
 # -----------------------------------------------------------------------
 @module
@@ -21,11 +22,12 @@ def mod_create_account(input, output, session, config_app, changeView):
             with ui.div(class_='row gap-2'):
                 ui.input_password('text_password', 'Password')
                 ui.input_password('text_confirm_password', 'Confirm password')
-            with ui.div(class_='row justify-content-between'):
-                with ui.div(class_='col-auto'):
-                    ui.input_action_button('btn_show_login', 'Login')
+                ui.help_text("Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?\":{{}}|<>).")
+            with ui.div(class_='row justify-content-between mt-3'):
                 with ui.div(class_='col-auto'):
                     ui.input_action_button('btn_create_account', 'Create account')
+                with ui.div(class_='col-auto'):
+                    ui.input_action_button('btn_show_login', 'Back to Login')
 
     # -----------------------------------------------------------------------
     @reactive.effect
@@ -46,15 +48,28 @@ def mod_create_account(input, output, session, config_app, changeView):
         password = input.text_password()
         confirm_password = input.text_confirm_password()
 
-        records = selectFromDB(table_name='credentials', field_names=['email'], field_values=[[email]])
-
-        if not records.empty:
-            ui.notification_show('The email address already exists in database, please login with this email address or try to create account with another email address.', type='error')
-            return
-        
+        for field_name, field_value, field_type in zip(['First name', 'Last name', 'Email', 'Password', 'Confirm password'],
+                                                       [first_name, last_name, email, password, confirm_password],
+                                                       [FieldType.NAME.value, FieldType.NAME.value, FieldType.EMAIL.value, FieldType.PASSWORD.value, FieldType.PASSWORD.value]):
+            success, reason = validateField(field_name, field_value, field_type)
+            if not success:
+                ui.notification_show(reason, type='error')
+                return
+            
         if password != confirm_password:
             ui.notification_show('Passwords do not match. Please try again.', type='error')
             return
+
+        records = selectFromDB(table_name='credentials', field_names=['email'], field_values=[[email]])
+
+        if not records.empty:
+            ui.notification_show(('The email address already exists in database,' 
+                                 'please login with this email address or '
+                                 'try to create account with another email address.'), type='error', duration=10)
+            return
+        
+        first_name = first_name[0].upper() + first_name[1:]
+        last_name = last_name[0].upper() + last_name[1:]
         
         current_time = datetime.now()
 

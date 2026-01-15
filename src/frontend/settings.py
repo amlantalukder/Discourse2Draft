@@ -2,7 +2,6 @@ from shiny import reactive
 from shiny.express import ui, module, render
 from utils import print_func_name
 from ..backend.ai.llms import extractAvailableLLMs
-from ..backend.ai.architecture import Architecture
 
 @module
 def mod_settings(input, output, session, callback_fn, config_app, reload_flag):

@@ -32,7 +32,7 @@ _Discourse2Draft_ has the facility of uploading documents in "text (TXT)", "Micr
 ## Content generation
 
 <div class="fig-container">
-<img src="../www/assets/architectures_small.png" alt="Architecture" width="100%" />
+<img src="../www/assets/architectures_small.png" alt="ContentWriterArchitecture" width="100%" />
 
 <strong>Figure 2: </strong>&nbsp;Behind-the-scene user input processing steps and different AI architectures.
 

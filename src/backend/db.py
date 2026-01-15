@@ -9,8 +9,11 @@ from datetime import datetime
 from typing import Literal, List, Optional
 import dotenv
 from enum import Enum
+import logging
+from utils import print_func_name
 
 # -----------------------------------------------------------------------
+@print_func_name
 def encryptPassword(password):
 
     # Create a SHA-256 hash object
@@ -67,9 +70,8 @@ class Config:
         generated_files_status.CANCELLED.value: 'Writing stopped by user',
         generated_files_status.DELETED.value: 'Deleted'
     }
-
+    
 # -----------------------------------------------------------------------
-engine = sa.create_engine(f'postgresql://{Config.env_config["USER"]}:{Config.env_config["PASSWORD"]}@{Config.env_config["HOST"]}/{Config.env_config["DATABASE"]}')
 Base = declarative_base()
     
 # -----------------------------------------------------------------------
@@ -221,8 +223,13 @@ class VectorDBCollectionFiles(Base):
     def __repr__(self):
         return '\n'.join([f'{k}: {v}' for k, v in self.__dict__.items()])
 
+
 # -----------------------------------------------------------------------
-Base.metadata.create_all(engine)
+try:
+    engine = sa.create_engine(f'postgresql://{Config.env_config["USER"]}:{Config.env_config["PASSWORD"]}@{Config.env_config["HOST"]}/{Config.env_config["DATABASE"]}')
+    Base.metadata.create_all(engine)
+except Exception as exp:
+    logging.error(exp)
 
 # -----------------------------------------------------------------------
 tables = {'credentials': Credentials, 
@@ -232,20 +239,21 @@ tables = {'credentials': Credentials,
           'literature': Literature,
           'vector_db_collections': VectorDBCollections,
           'vector_db_collection_files': VectorDBCollectionFiles}
-
+    
 # -----------------------------------------------------------------------
+@print_func_name
 def selectFromDB(table_name: str, 
-                 field_names: list, 
-                 field_values: list[list], 
-                 order_by_field_names: list = [], 
-                 order_by_types: List[Literal['ASC', 'DESC']] = [], 
-                 limit: int|None = None):
+                field_names: list, 
+                field_values: list[list], 
+                order_by_field_names: list = [], 
+                order_by_types: List[Literal['ASC', 'DESC']] = [], 
+                limit: int|None = None):
 
     table = tables[table_name]
     with Session(engine) as session:
         cursor = (session
-                  .query(table)
-                  .filter(*[getattr(table, name).in_(values) for name, values in zip(field_names, field_values)]) 
+                .query(table)
+                .filter(*[getattr(table, name).in_(values) for name, values in zip(field_names, field_values)]) 
         )
 
         if order_by_field_names:
@@ -261,11 +269,12 @@ def selectFromDB(table_name: str,
         return df
     
 # -----------------------------------------------------------------------
+@print_func_name
 def insertIntoDB(table_name: str, field_names: list, field_values: list[list], 
-                 rel_field_names: list[str] = [], 
-                 rel_table_names: list[str] = [], 
-                 rel_table_field_names: list[list] = [], 
-                 rel_table_field_values: list[list[list]] = []):
+                rel_field_names: list[str] = [], 
+                rel_table_names: list[str] = [], 
+                rel_table_field_names: list[list] = [], 
+                rel_table_field_values: list[list[list]] = []):
 
     inserted_ids = []
 
@@ -295,13 +304,18 @@ def insertIntoDB(table_name: str, field_names: list, field_values: list[list],
     return inserted_ids
 
 # -----------------------------------------------------------------------
-def updateDB(table_name: str, update_fields: list, update_values: list, select_fields: list, select_values: list[list]):
+@print_func_name
+def updateDB(table_name: str, 
+             update_fields: list, 
+             update_values: list, 
+             select_fields: list, 
+             select_values: list[list]):
 
     table = tables[table_name]
     with Session(engine) as session:
         cursor = (session
-                  .query(table)
-                  .filter(*[getattr(table, name).in_(values) for name, values in zip(select_fields, select_values)])
+                .query(table)
+                .filter(*[getattr(table, name).in_(values) for name, values in zip(select_fields, select_values)])
         )
         for obj in cursor.all():
             for k, v in zip(update_fields, update_values):
