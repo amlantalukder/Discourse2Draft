@@ -145,7 +145,7 @@ def getRawOutline(d, raw_outline=[], counter=1):
 def mod_outline_manager(input, output, session, outline, saved_outline, close_fn=None):
 
     @module
-    def mod_outline_tools(input, output, session, id_suffix, text, show_insert_above=True, show_insert_within=True, show_remove=True):
+    def mod_outline_tools(input, output, session, id_suffix, text_type, text, show_insert_above=True, show_insert_within=True, show_remove=True):
 
         show_text = reactive.value(False)
         is_edit_mode = reactive.value(False)
@@ -157,8 +157,10 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                 def renderText():
                     if show_text.get():
                         ui.input_text_area('text_text', '', resize='vertical')
-                    elif text == '[Reserved for AI content]':
-                        ui.p(text, class_='reserved-for-ai')
+                    elif text_type == 'content_ai':
+                        ui.p('[Reserved for AI content]', class_='reserved-for-ai')
+                    elif text_type == 'instructions':
+                        ui.markdown(f'**Instructions:**\n\n{text}')
                     else:
                         ui.markdown(text)
                     
@@ -175,7 +177,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                             ui.input_action_link('btn_insert_text_above_options', '', icon=faicons.icon_svg("plus"))
                                             with ui.div(class_='d-flex flex-column gap-2'):
                                                 ui.strong('Insert following content type above this text')
-                                                ui.input_radio_buttons('radio_text_type_insert_above', 'Content type', choices=['Text', 'AI'], inline=True)
+                                                ui.input_radio_buttons('radio_text_type_insert_above', 'Content type', choices=['Text', 'Instructions', 'AI'], inline=True)
                                                 ui.input_action_button('btn_insert_above', 'Insert above')
                                     'Insert above'
                         if show_insert_within:
@@ -185,14 +187,14 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                         ui.input_action_link('btn_insert_within_options', '', icon=faicons.icon_svg("arrow-right-to-bracket"))
                                         with ui.div(class_='d-flex flex-column gap-2'):
                                             ui.strong('Insert following content type within this header')
-                                            ui.input_radio_buttons('radio_text_type_insert_within', 'Content type', choices=['Header', 'Text', 'AI'], inline=True)
+                                            ui.input_radio_buttons('radio_text_type_insert_within', 'Content type', choices=['Header', 'Text', 'Instructions', 'AI'], inline=True)
                                             ui.input_action_button('btn_insert_within', 'Insert within')
                                 'Insert within'
                         if show_remove:
                             with ui.tooltip():
                                 ui.input_action_link('btn_remove', '', icon=faicons.icon_svg("xmark"))
                                 'Remove'                 
-                        if not show_text.get():
+                        if not show_text.get() and text != '[Reserved for AI content]':
                             with ui.tooltip():
                                 ui.input_action_link('btn_edit', '', icon=faicons.icon_svg("pen"))
                                 'Edit'
@@ -226,6 +228,8 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                     match action['text_type']:
                                         case 'Text':
                                             values.append(('content_user', '<new>'))
+                                        case 'Instructions':
+                                            values.append(('instructions', '<new>'))
                                         case 'AI':
                                             values.append(('content_ai', ''))
                                 values.append((v1, v2))
@@ -234,9 +238,8 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                     values.append((v1, v2))
                             case 'edit':
                                 if id_suffix_current == id_suffix:
-                                    values.append((v1, action['text_new']))
-                                else:
-                                    values.append((v1, v2))
+                                    v2 = action['text_new']
+                                values.append((v1, v2))
                     d_new.append((k, values))
                     continue
 
@@ -258,6 +261,8 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                             else:
                                 if action['text_type'] == 'Text':
                                     contents = [(f'content_user', '<new>')] + d[k].get('content', [])
+                                elif action['text_type'] == 'Instructions':
+                                    contents = [(f'instructions', '<new>')] + d[k].get('content', [])
                                 else:
                                     contents = [(f'content_ai', '')] + d[k].get('content', [])
                                 d_new.append((k, {**d[k], **{'content': contents}}))
@@ -292,7 +297,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
         @print_func_name
         def insert_text_above():
             text_type = input.radio_text_type_insert_above()
-            if text_type not in ['Text', 'AI']: return
+            if text_type not in ['Text', 'AI', 'Instructions']: return
             action = {'type': 'insert_above', 'text_type': text_type}
             d_outline.set(manageOutline(action, d_outline.get()))
 
@@ -301,7 +306,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
         @print_func_name
         def insert_within():
             text_type = input.radio_text_type_insert_within()
-            if text_type not in ['Header', 'Text', 'AI']: return
+            if text_type not in ['Header', 'Text', 'AI', 'Instructions']: return
             action = {'type': 'insert_within', 'text_type': text_type}
             d_outline.set(manageOutline(action, d_outline.get()))
 
@@ -378,10 +383,10 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                 show_insert_within = False
                                 for index_content, (v1, v2) in enumerate(d[k]):
                                     id_suffix_current = f'{id_suffix_prev}_{index}_content{index_content}' if id_suffix_prev else f'{index}_content{index_content}'
-                                    text = v2 if v2.startswith('<new>') else '[Reserved for AI content]' if v1 == 'content_ai' else v2
+                                
                                     outline_ui_elements.append(
                                         core_ui.div(
-                                            mod_outline_tools(id=getUIID(id_suffix_current), id_suffix=id_suffix_current, text=text, show_insert_within=show_insert_within),    
+                                            mod_outline_tools(id=getUIID(id_suffix_current), id_suffix=id_suffix_current, text_type=v1, text=v2, show_insert_within=show_insert_within),    
                                             class_='ps-4'
                                         )
                                     )
@@ -392,7 +397,8 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                             outline_ui_elements.append(
                                 core_ui.div(
                                     mod_outline_tools(id=getUIID(id_suffix_current), 
-                                                        id_suffix=id_suffix_current, 
+                                                        id_suffix=id_suffix_current,
+                                                        text_type='header', 
                                                         text=text, 
                                                         show_insert_above=(level > 0),
                                                         show_insert_within=(not k.startswith('<new>')),

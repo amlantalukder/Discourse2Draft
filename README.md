@@ -19,6 +19,11 @@ Quantum computing has its roots in the early 1980s when physicist Richard Feynma
 <content>
 ## 2. Quantum Information Processing
 ### Quantum Bits (Qubits)
+<Instructions>
+- Definition of qubits
+- Comparison with classical bits
+- Types of qubits (e.g., superconducting, trapped ions)
+</Instructions>
 <content>
 ### Unary Operators
 <content>

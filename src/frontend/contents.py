@@ -308,6 +308,9 @@ def mod_contents(input, output, session,
 
         if not config_app.generated_files_id: return
 
+        # -------------------------------------------------------------
+        # Remove all ai generated content from the outline
+        # -------------------------------------------------------------
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         with open(outline_file_path) as fp:
@@ -425,8 +428,12 @@ def mod_contents(input, output, session,
             references.set([])
             return
         
+        # Cancel writing
+        stream.latest_stream.cancel()
+        
         if not config_app.agent: config_app.setAgent()
         
+        # Load outline
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
         # Read outline
@@ -434,12 +441,23 @@ def mod_contents(input, output, session,
             d_outline = json.load(fp)
         
         raw_outline = '\n'.join(getRawOutline(d_outline))
-        
-        # Cancel writing
-        stream.latest_stream.cancel()
 
-        # Show file name, outline and content
+        # Load query
+        query_file_path = Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.json'
+        if query_file_path.exists():
+            with open(query_file_path) as fp:
+                query = fp.read()
+        else:
+            query = ''
+
+        if query:
+            ui.update_navs(id='user_input_panel', selected='Query')
+        else:
+            ui.update_navs(id='user_input_panel', selected='Structured Outline')
+
+        # Show file name, query, outline and content
         ui.update_text(id='text_file_name', value=config_app.file_name)
+        ui.update_text_area(id='text_query', value=query)
         ui.update_text_area(id='text_outline', value=raw_outline)
         
         references.set([])
@@ -521,6 +539,9 @@ def mod_contents(input, output, session,
             ui.update_text_area(id='text_outline', value=outline)
             ui.notification_show("Outline created successfully.", type="info")
             d_outline = processOutline(outline)
+
+            with open(Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.json', 'w') as fp:
+                fp.write(query)
         else:
             invalid_formatting = False
             if '<content>' in outline and '# ' in outline:
