@@ -37,8 +37,9 @@ class Summarize:
     </Instructions>
     '''
 
-    def __init__(self, llm):
+    def __init__(self, llm, input_field):
 
+        self.input_field = input_field
         parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=SummarizeSchema), 
                                              llm=llm,
                                              max_retries=Config.RETRY_COUNTER)
@@ -50,6 +51,6 @@ class Summarize:
 
         return extractLLMResponse(task_name = 'Summarize', 
                                   chain = self.summarize_chain,
-                                  kargs = {'content': state['content_pre']},
+                                  kargs = {'content': state[self.input_field]},
                                   key_to_find = 'summary',
                                   value_name = 'content_pre')

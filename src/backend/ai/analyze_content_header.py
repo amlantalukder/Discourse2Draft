@@ -20,12 +20,12 @@ class AnalyzeContentHeaderSchemaForLitSearch(BaseModel):
 class AnalyzeContentHeader:
 
     analyze_content_header_system_prompt = lambda self, max_keyphrases: f'''\
-        You will be given a section header. Analyze the section header and find a list of independent 'keyphrases' on which you need information to write the section content. Always follow the rules below
+        You will be given a section header on a topic. Analyze the section header and find a list of independent 'keyphrases' on which you need information to write the section content. Always follow the rules below
 
         <Instructions>
         - List maximum of {max_keyphrases} key phrases. THE LIST MUST NOT BE MORE THAN {max_keyphrases}.
         - Each key phrase must be relevant to the section header.
-        - Each key phrase must be semantically independent of the section header.
+        - Each key phrase must be semantically independent so that it can be used later to search information about the topic and the section header.
         </Instructions>\
         '''
 

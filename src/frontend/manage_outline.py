@@ -2,7 +2,8 @@ from shiny import reactive, ui as core_ui
 from shiny.express import ui, render, module
 from shiny.types import FileInfo
 from utils import print_func_name, getUIID
-from .common import uploadFiles
+from .common import uploadFiles, unMarkdownText
+from .defaults import SpecialSectionTypes, ContentTypes
 from ..backend.ai.llms import extractAvailableLLMs
 from ..backend.ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
 import faicons
@@ -13,14 +14,12 @@ import logging
 def resetOutline(d):
     
     for k, v in d.items():
-        if k != 'References': 
-            continue
-        if k != 'content':
+        if k != SpecialSectionTypes.CONTENT.value:
             d[k] = resetOutline(v.copy())
         else:
-            for i, [content_type, _] in enumerate(d['content']):
-                if content_type == 'content_ai':
-                    d['content'][i][1] = ''
+            for i, [content_type, _] in enumerate(d[SpecialSectionTypes.CONTENT.value]):
+                if content_type in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_PRE_SUMMARY.value]:
+                    d[SpecialSectionTypes.CONTENT.value][i][1] = ''
 
     return d
 
@@ -28,7 +27,7 @@ def resetOutline(d):
 def insertOutline(d, outline_items):
 
     if len(outline_items) == 1:
-        d['content'] = d.get('content', []) + outline_items
+        d[SpecialSectionTypes.CONTENT.value] = d.get(SpecialSectionTypes.CONTENT.value, []) + outline_items
         return d
     
     if outline_items[0] not in d:
@@ -43,15 +42,15 @@ def processOutline(outline):
 
     def insertUserContentToOutline(d_outline, outline_items, lines):
         content = '\n'.join(lines).strip()
-        pattern_instructions = r'<Instructions>([\w\W]*?)<\/Instructions>'
+        pattern_instructions = r'<instructions>([\w\W]*?)<\/instructions>'
         instructions = re.findall(pattern_instructions, content)
         instructions = '\n'.join(map(lambda x: x.strip(), instructions))
         content = re.sub(pattern_instructions, '', content)
         outline_items_new = outline_items.copy()
         if instructions:
-            outline_items_new.append(['instructions', instructions])
+            outline_items_new.append([ContentTypes.INSTRUCTIONS.value, instructions])
         if content:
-            outline_items_new.append(['content_user', content])
+            outline_items_new.append([ContentTypes.CONTENT_USER.value, content])
         d_outline = insertOutline(d_outline.copy(), outline_items_new)
         return d_outline
     
@@ -73,7 +72,7 @@ def processOutline(outline):
                 lines = []
             
             hashes = line_x.split()[0]
-            header = ' '.join(line_x.split()[1:])
+            header = unMarkdownText(' '.join(line_x.split()[1:])).strip()
             
             if hashes != '#' * len(hashes):
                 ui.notification_show("'#'s must be followed by a space", type="error")
@@ -92,18 +91,18 @@ def processOutline(outline):
             d_outline = insertUserContentToOutline(d_outline, outline_items, lines)
             
         if i < len(chunks_leading_to_content)-1:
-            d_outline = insertOutline(d_outline.copy(), outline_items + [['content_ai', '']])
+            d_outline = insertOutline(d_outline.copy(), outline_items + [[ContentTypes.CONTENT_AI.value, '']])
 
     return d_outline
 
 @print_func_name
-def generateOutlineByAI(topic):
+def generateOutlineByAI(query):
     '''
-    Use AI to generate outline from a given topic
+    Use AI to generate outline from a given query
     '''
     agent = OutlineCreatorArchitecture().agent
     
-    response = agent.invoke({'topic': topic})
+    response = agent.invoke({'query': query})
     outline = response['content']
     
     return outline
@@ -126,18 +125,16 @@ def getRawOutline(d, raw_outline=[], counter=1):
 
     if not isinstance(d, dict):
         for k, v in d:
-            if k == 'content_pre_summary': continue
-            if k == 'content_ai':
+            if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.IS_ABSTRACT.value]: continue
+            if k == ContentTypes.CONTENT_AI.value:
                 raw_outline.append('<content>')
-            elif k == 'instructions':
-                raw_outline.append(f'<Instructions>\n{v}\n</Instructions>')
+            elif k == ContentTypes.INSTRUCTIONS.value:
+                raw_outline.append(f'<instructions>\n{v}\n</instructions>')
             else:
                 raw_outline.append(v)
     else:
         for k in d:
-            if k == 'References':
-                continue
-            raw_outline = getRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != 'content' else raw_outline, counter+1)
+            raw_outline = getRawOutline(d[k], raw_outline + [f'{'#' * counter} {k}'] if k != SpecialSectionTypes.CONTENT.value else raw_outline, counter+1)
 
     return raw_outline                                         
 
@@ -157,9 +154,9 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                 def renderText():
                     if show_text.get():
                         ui.input_text_area('text_text', '', resize='vertical')
-                    elif text_type == 'content_ai':
+                    elif text_type == ContentTypes.CONTENT_AI.value:
                         ui.p('[Reserved for AI content]', class_='reserved-for-ai')
-                    elif text_type == 'instructions':
+                    elif text_type == ContentTypes.INSTRUCTIONS.value:
                         ui.markdown(f'**Instructions:**\n\n{text}')
                     else:
                         ui.markdown(text)
@@ -213,8 +210,6 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
             i_new = 0
             
             for i, k in enumerate(list(d.keys())):
-                if k == 'References':
-                    continue
                 if k.startswith('content'):
                     if 'content' not in id_suffix:
                         d_new.append((k, d[k]))
@@ -227,11 +222,11 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                 if id_suffix_current == id_suffix:
                                     match action['text_type']:
                                         case 'Text':
-                                            values.append(('content_user', '<new>'))
+                                            values.append((ContentTypes.CONTENT_USER.value, '<new>'))
                                         case 'Instructions':
-                                            values.append(('instructions', '<new>'))
+                                            values.append((ContentTypes.INSTRUCTIONS.value, '<new>'))
                                         case 'AI':
-                                            values.append(('content_ai', ''))
+                                            values.append((ContentTypes.CONTENT_AI.value, ''))
                                 values.append((v1, v2))
                             case 'remove':
                                 if id_suffix_current != id_suffix:
@@ -260,12 +255,12 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                                 d_new.append((k, dict([(f'<new>_{i_new}', {})] + list(d[k].items()))))        
                             else:
                                 if action['text_type'] == 'Text':
-                                    contents = [(f'content_user', '<new>')] + d[k].get('content', [])
+                                    contents = [(ContentTypes.CONTENT_USER.value, '<new>')] + d[k].get(SpecialSectionTypes.CONTENT.value, [])
                                 elif action['text_type'] == 'Instructions':
-                                    contents = [(f'instructions', '<new>')] + d[k].get('content', [])
+                                    contents = [(ContentTypes.INSTRUCTIONS.value, '<new>')] + d[k].get(SpecialSectionTypes.CONTENT.value, [])
                                 else:
-                                    contents = [(f'content_ai', '')] + d[k].get('content', [])
-                                d_new.append((k, {**d[k], **{'content': contents}}))
+                                    contents = [(ContentTypes.CONTENT_AI.value, '')] + d[k].get(SpecialSectionTypes.CONTENT.value, [])
+                                d_new.append((k, {**d[k], **{SpecialSectionTypes.CONTENT.value: contents}}))
                             i_new += 1
                         else:
                             d_new.append((k, manageOutline(action, d[k], id_suffix_prev=id_suffix_current)))
@@ -376,9 +371,6 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                         outline_ui_elements = []
                         
                         for index, k in enumerate(list(d.keys())):
-                            if k == 'References':
-                                continue
-                                
                             if k.startswith('content'):
                                 show_insert_within = False
                                 for index_content, (v1, v2) in enumerate(d[k]):
@@ -527,8 +519,8 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
     @ui.bind_task_button(button_id="btn_create_outline")
     @reactive.extended_task
     @print_func_name
-    async def generateOutline(agent, topic):
-        response = await agent.ainvoke({'topic': topic})
+    async def generateOutline(agent, query):
+        response = await agent.ainvoke({'query': query})
         response = response['content']
         print(response)
         return response

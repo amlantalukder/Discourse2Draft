@@ -1,3 +1,4 @@
+
 from ..backend.ai.architecture import (ContentWriterArchitecture,
                                        AbstractSectionDetectorArchitecture,
                                        AbstractWriterArchitecture)
@@ -8,8 +9,17 @@ from enum import Enum
 
 class ContentGenerationScope(Enum):
     DO_NOT_GENERATE = 'Do Not Generate'
-    REGENERATE_PARAGRAPH = 'Regenerate Paragraph'
-    FULL_DRAFT = 'Full Draft'
+    GENERATE_IF_NEEDED = 'Generate Content If Needed'
+
+class SpecialSectionTypes(Enum):
+    CONTENT = 'content'
+
+class ContentTypes(Enum):
+    IS_ABSTRACT = 'is_abstract'
+    INSTRUCTIONS = 'instructions'
+    CONTENT_USER = 'content_user'
+    CONTENT_AI = 'content_ai'
+    CONTENT_PRE_SUMMARY = 'content_pre_summary'
 
 @dataclass
 class ConfigApp:

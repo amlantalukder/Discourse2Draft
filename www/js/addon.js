@@ -79,6 +79,9 @@ Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
             event.preventDefault(); // Prevent default browser menu
             let menu = document.getElementById(`${ui_id}-ctx_menu`);
 
+            console.log(ui_id);
+            console.log(menu);
+
             let ancestor_props = document.getElementsByClassName('app-body-container')[0].getBoundingClientRect();
             let container_props = targetDiv.getBoundingClientRect();
 

@@ -9,21 +9,21 @@ Given an outline, Discourse2Draft can generate the content. It can be useful to 
 ```
 # Title: Quantam Computing and its Applications
 ## Introduction
-<Instructions>
+<instructions>
 - High-level overview of quantum computing
 - Importance and potential applications
-</Instructions>
+</instructions>
 <content>
 ## 1. History of Quantum Computing
 Quantum computing has its roots in the early 1980s when physicist Richard Feynman proposed the idea of a quantum computer that could simulate physical systems more efficiently than classical computers. Over the years, significant milestones have been achieved, including the development of quantum algorithms like Shor's algorithm for factoring large numbers and Grover's algorithm for database searching.
 <content>
 ## 2. Quantum Information Processing
 ### Quantum Bits (Qubits)
-<Instructions>
+<instructions>
 - Definition of qubits
 - Comparison with classical bits
 - Types of qubits (e.g., superconducting, trapped ions)
-</Instructions>
+</instructions>
 <content>
 ### Unary Operators
 <content>

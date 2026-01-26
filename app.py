@@ -95,19 +95,20 @@ with ui.div(class_="app-container"):
     def renderView():
         if login_status.get() in ['logged_in', 'guest']:
             _ = reload_main_view_flag.get()
-            mod_main(id=getUIID('main'), config_app=config_app, reload_view_flag=reload_main_view_flag)
+            ui_id = getUIID('main')
+            mod_main(id=ui_id, config_app=config_app, reload_view_flag=reload_main_view_flag, ui_id=ui_id)
         else:
             mod_authentication(id=getUIID('auth'), config_app=config_app, changeLoginStatus=changeLoginStatus)
         
     ui.include_js(Config.DIR_HOME / "www" / "js" / "auth.js", method='inline')
 
-@reactive.calc
-def loadMainView():
-    return mod_main(id='main', config_app=config_app, reload_view_flag=reload_main_view_flag)
+# @reactive.calc
+# def loadMainView():
+#     return mod_main(id='main', config_app=config_app, reload_view_flag=reload_main_view_flag)
 
-@reactive.calc
-def loadAuthView():
-    return mod_authentication(id='auth', config_app=config_app, changeLoginStatus=changeLoginStatus)
+# @reactive.calc
+# def loadAuthView():
+#     return mod_authentication(id='auth', config_app=config_app, changeLoginStatus=changeLoginStatus)
 
 @reactive.effect
 @reactive.event(input.email)

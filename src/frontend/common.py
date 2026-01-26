@@ -4,6 +4,7 @@ from shiny.types import ImgData
 from utils import Config, print_func_name
 from pathlib import Path
 import pandas as pd
+from .defaults import SpecialSectionTypes, ContentTypes
 from ..backend.db import selectFromDB, updateDB, insertIntoDB, \
                 vector_db_collections_status, \
                 vector_db_collections_type, \
@@ -270,9 +271,11 @@ def getDocContent(file_id, attached_files=[], file_info={}):
     @print_func_name
     def processCitation(content, ref_list=[], used_files_info={}):
 
+        content = formatCitations(content)
+
         content_tex = content
         
-        ref_groups = re.findall(r'\[CITE\((.+?)\)\]', content)
+        ref_groups = re.findall(r'CITE\(([\w\W]+?)\)', content)
     
         refs_seen = set()
         d_ref = {}
@@ -330,22 +333,19 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         if not isinstance(d, dict):
             for k, v in d:
-                if k == 'ref':
-                    content_md.append(f'\n[{v[0]+1}]: {v[1]}')
-                    content_docx.add_paragraph(f'[{v[0]+1}]. {v[1]}')
-                elif k in ['content_ai', 'content_user']:
+                if k in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_USER.value]:
                     content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
                     content_md.append(content_text)
                     content_docx.add_paragraph(content_text)
                     content_tex.append(content_tex_text)
         else:
             for k in d:
-                if k != 'content':
+                if k != SpecialSectionTypes.CONTENT.value:
                     content_docx.add_heading(k, level=level)
                     content_md, content_docx, content_tex, ref_list, used_files_info = extractContentFromOutline(d[k], 
                                                                                                                  content_md + [f'{'#' * level} {k}'], 
                                                                                                                  content_docx, 
-                                                                                                                 content_tex + ([latexLevels(level, k)] if k != 'References' else []), 
+                                                                                                                 content_tex + [latexLevels(level, k)], 
                                                                                                                  ref_list, used_files_info, level+1)
                 else:
                     content_md, content_docx, content_tex, ref_list, used_files_info = extractContentFromOutline(d[k], 
@@ -396,14 +396,20 @@ def getDocContent(file_id, attached_files=[], file_info={}):
         d_outline = json.load(fp)
 
     attached_references = {str(k): v for k, v, _ in attached_files}
-    content_md, content_docx, content_tex, _, used_files_info= extractContentFromOutline(d_outline)
-    content_md = '\n'.join(content_md)
-    content_tex = convertToLatex(content_tex)
+    content_md, content_docx, content_tex, ref_list, used_files_info= extractContentFromOutline(d_outline)
     
     if attached_files:
+        content_md.append('## References')
+        content_docx.add_heading('References', level=2)
+        for i, ref in enumerate(ref_list):
+            content_md.append(f'\n[{i+1}] {ref}')
+            content_docx.add_paragraph(f'[{i+1}] {ref}')
         bibs = getBibFormat(used_files_info)
     else:
         bibs = ''
+
+    content_md = '\n'.join(content_md)
+    content_tex = convertToLatex(content_tex)
 
     return content_md, content_docx, content_tex, bibs
 
@@ -446,4 +452,28 @@ def uploadFiles(files, email='', session_id=''):
         with open(Config.DIR_CONTENTS / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
             with open(file['datapath'], 'rb') as fp_r:
                 fp.write(fp_r.read())
+
+@print_func_name
+def unMarkdownText(text):
+
+    from bs4 import BeautifulSoup
+    from markdown import markdown
+
+    html = markdown(text)
+    return ''.join(BeautifulSoup(html).findAll(text=True))
+
+@print_func_name
+def formatCitations(text):
+    '''
+    Convert [CITE(abc), CITE(bcd), CITE(cde)] to [CITE(abc, bcd, cde)]
+    '''
+    pattern = r'\[(?:CITE\([^)]+\)(?:,\s*)?)+\]'
+    
+    def replace_func(match):
+        # Extract all citations
+        citations = re.findall(r'CITE\(([^)]+)\)', match.group(0))
+        # Rebuild as single CITE with all arguments
+        return f'[CITE({", ".join(citations)})]'
+    
+    return re.sub(pattern, replace_func, text)
     

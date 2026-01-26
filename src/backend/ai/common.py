@@ -32,7 +32,7 @@ class StateContentManager(TypedDict):
 
 # ---------------------------------------------------------------------------
 class StateOutlineManager(TypedDict):
-    topic: str
+    query: str
     steps: Annotated[List[str], add]
     content: str
     outline_unstructured: str

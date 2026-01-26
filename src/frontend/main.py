@@ -5,7 +5,7 @@ from .contents import mod_contents
 from .sidebar_modules.sidebar import mod_sidebar
 
 @module
-def mod_main(input, output, session, config_app, reload_view_flag):
+def mod_main(input, output, session, config_app, reload_view_flag, ui_id):
 
     reload_content_view_flag = reactive.value(True)
     reload_content_attached_files_view_flag = reactive.value(True)
@@ -29,14 +29,14 @@ def mod_main(input, output, session, config_app, reload_view_flag):
                 @render.express
                 @print_func_name
                 def renderView():
-                    ui_id = getUIID('contents')
-                    mod_contents(ui_id, 
+                    ui_id_contents = getUIID('contents')
+                    mod_contents(ui_id_contents, 
                             config_app=config_app,
                             reload_view_flag=reload_content_view_flag,
                             reload_attached_files_view_flag=reload_content_attached_files_view_flag,
                             reload_generated_docs_view_flag=reload_generated_docs_view_flag,
                             reload_uploaded_docs_view_flag=reload_uploaded_docs_view_flag,
-                            ui_id=f'main-{ui_id}')
+                            ui_id=f'{ui_id}-{ui_id_contents}')
 
     @reactive.effect
     @reactive.event(reload_view_flag)

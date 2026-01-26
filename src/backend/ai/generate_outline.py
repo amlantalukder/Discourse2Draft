@@ -5,26 +5,28 @@ from ..utils import Config
 from .common import StateOutlineManager, extractLLMResponse, Config
 from .prompts import setPrompt
 import logging
+import re
 
 # ---------------------------------------------------------------------------
 class GenerateOutlineSchema(BaseModel):
     '''
-    Returns the outline on the provided topic
+    Returns the outline on the provided query
     '''
-    content: str = Field(description='Outline on the provided topic')
+    content: str = Field(description='Outline on the provided query')
 
 # ---------------------------------------------------------------------------
 class GenerateOutline:
 
     generate_outline_system_prompt = '''
-    You are an expert in generating outline for content on a given topic.
+    You are an expert in generating outline for content on a given query.
 
     <Instructions>
-    - Read the given topic. 
+    - Read the given query. 
     - Generate an outline with section, subsection headers.
     - Each outline must start with a "Title".
-    - Do not provide "References" section or any other extra sections or sub-sections that may not have content on the topic. 
+    - Do not provide "References" section or any other extra sections or sub-sections that may not have content based on the query. 
     - Place "<content>" tag wherever the content should be written.
+    - If there is section specific instructions in the query, create an "<instructions></instruction>" tag under that specifc section and provide the instructions inside it.
     </Instructions>
 
     <Output format>
@@ -33,13 +35,17 @@ class GenerateOutline:
     </Output format>
 
     <Example>
-    <Topic> 
+    <Query> 
     Hypertensive Disorders of Pregnancy
-    </Topic>
+    </Query>
 
     <Output>
     # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
     ## I. Introduction
+    <instructions>
+     - Provide a brief overview of hypertensive disorders of pregnancy, including their significance and impact on maternal and fetal
+     - Provide statistics on prevalence and outcomes.
+    </instructions>
     <content>
     ### A. Historical Perspective and Evolution of Understanding
     <content>
@@ -51,9 +57,9 @@ class GenerateOutline:
     '''
 
     generate_outline_human_prompt = lambda self, instructions: (f'''
-    <Topic>
-    {{topic}}
-    </Topic>
+    <Query>
+    {{query}}
+    </Query>
                                               
     <Instructions>
     {instructions}
@@ -77,7 +83,7 @@ class GenerateOutline:
         self.generate_outline_chain = self.generate_outline_prompt | llm | parser
 
     def __call__(self, state: StateOutlineManager):
-        '''LLM generates outline from a given topic'''
+        '''LLM generates outline from a given query'''
 
         def contentChecker(response):
             if '<content>' not in response['content']:
@@ -85,9 +91,16 @@ class GenerateOutline:
                 return False
             return True
 
-        return extractLLMResponse(task_name = 'Generate Outline', 
+        return_vals = extractLLMResponse(task_name = 'Generate Outline', 
                                   chain = self.generate_outline_chain,
-                                  kargs = {'topic': state['topic']},
+                                  kargs = {'query': state['query']},
                                   key_to_find = 'content',
                                   value_name = 'content',
                                   additionalCheckingFunc=contentChecker)
+        
+        # Remove markdown tags
+        return_vals['content'] = return_vals['content'].strip()
+        if return_vals['content'].startswith('```markdown'):
+            return_vals['content'] = re.sub(r'```(markdown)?[\n]*', '', return_vals['content'])
+
+        return return_vals

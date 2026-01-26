@@ -21,6 +21,7 @@ dependencies = [
     "langchain-openai>=0.3.27",
     "langchain-unstructured>=0.1.6",
     "langgraph>=0.3.34",
+    "markdown>=3.10.1",
     "matplotlib>=3.10.3",
     "pandas>=2.2.3",
     "psycopg2-binary>=2.9.10",

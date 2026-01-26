@@ -22,7 +22,7 @@ class GatherContext:
                 est = sorted(est)
                 
                 d_tok_est = {}
-                token_limit = Config.TOKENS_PER_LLM_CALL
+                token_limit = Config.MAX_CONTEXT_TOKENS
                 for j, (s, k, i) in enumerate(est):
                     d_tok_est[k] = {**d_tok_est.get(k, {}), **{i: 0}}
                     d_tok_est[k][i] = min(s, token_limit//(len(est)-j))
