@@ -587,6 +587,7 @@ function initGraph(conceptMap) {
     document.getElementById('reset-btn').addEventListener('click', () => {
         graph.expandedNodes.clear();
         graph.render();
+        graph.svg.call(graph.g.attr('transform', null));
     });
 
     document.getElementById('expand-all-btn').addEventListener('click', () => {

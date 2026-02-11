@@ -140,30 +140,17 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
 
     with ui.div(class_='side-bar-docs-container'):
 
-        @render.express
-        @print_func_name
-        def renderSearchBar():
-            docs = getUploadedDocs()
-
-            if len(docs) <= 2: return
-            
-            ui.input_text(id='txt_search_uploaded_docs', label='', placeholder='Search')
+        ui.input_text(id='txt_search_uploaded_docs', label='', placeholder='Search')
         
         @render.express
         @print_func_name
         def renderUploadedDocs():
 
-            docs = getUploadedDocs()
+            docs = filterUploadedDocs()
 
             if docs.empty:
                 ui.span('No uploaded documents')
                 return
-            
-            try:
-                file_name_prefix = input.txt_search_uploaded_docs()
-                docs = docs[docs['file_name'].str.startswith(file_name_prefix)]
-            except:
-                pass
 
             with ui.div(class_='d-flex gap-3'):
                 with ui.div(class_='col-auto d-flex align-items-center'):
@@ -226,6 +213,18 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
                             field_names=['session', 'status'],
                             field_values=[[config_app.session_id], [uploaded_files_status.UPLOADED.value]],
                             order_by_field_names=['file_name'])
+
+        return docs
+    
+    @reactive.calc
+    @reactive.event(input.txt_search_uploaded_docs)
+    def filterUploadedDocs():
+
+        docs = getUploadedDocs()
+
+        if not docs.empty:
+            file_name_prefix = input.txt_search_uploaded_docs()
+            docs = docs[docs['file_name'].str.startswith(file_name_prefix)]
 
         return docs
     
