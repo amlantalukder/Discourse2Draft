@@ -88,6 +88,6 @@ class FormatOutline:
         return extractLLMResponse(task_name = 'Format Outline', 
                                   chain = self.format_outline_chain,
                                   kargs = {'outline_unstructured': state['outline_unstructured']},
-                                  key_to_find = 'content',
-                                  value_name = 'content',
+                                  keys_to_find = ['content'],
+                                  value_names = ['content'],
                                   additionalCheckingFunc=contentChecker)

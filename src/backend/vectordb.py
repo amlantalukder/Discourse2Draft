@@ -93,6 +93,7 @@ def getLoader(file_path: Path):
         case '.json':
             loader = JSONLoader(file_path=file_path)
         case '.pdf':
+            breakpoint()
             loader = PyPDFLoader(file_path=file_path)
         case _:
             loader = UnstructuredLoader(file_path=file_path)

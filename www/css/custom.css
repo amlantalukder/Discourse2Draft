@@ -167,6 +167,15 @@ div.app-body-container div.app-body div.content-container div.content-header {
   color: #646464;
   padding: 15px;
 }
+div.app-body-container div.app-body div.content-container div.content .btn,
+div.app-body-container div.app-body div.content-container div.content-header .btn {
+  font-size: 12px;
+}
+div.app-body-container div.app-body div.content-container div.content .vertical-divider,
+div.app-body-container div.app-body div.content-container div.content-header .vertical-divider {
+  border-left: #000 solid 1px;
+  height: 30px;
+}
 div.app-body-container div.app-body div.content-container div.content-header {
   background-color: #e7e7f8;
   display: flex;
@@ -370,7 +379,6 @@ div.side-bar-docs-container .checkbox,
 div.side-bar-docs-container label,
 div.side-bar-docs-container input {
   margin: 0;
-  padding: 0;
   min-height: 0;
 }
 div.side-bar-docs-container .cut-text {
@@ -481,4 +489,97 @@ div.fig-container {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+}
+
+div.graph-container {
+  position: relative;
+  background: white;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  height: 800px;
+  width: 100%;
+}
+div.graph-container svg {
+  display: block;
+  background: linear-gradient(to bottom, #f5f5f5 0%, #ffffff 100%);
+  width: 100%;
+  height: 100%;
+}
+div.graph-container .node {
+  transition: all 0.2s ease;
+}
+div.graph-container .node:hover {
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+}
+div.graph-container .link {
+  stroke: #999;
+  stroke-opacity: 0.6;
+}
+div.graph-container .label {
+  font-family: "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: auto;
+  cursor: pointer;
+}
+div.graph-container .controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+div.graph-container .controls button {
+  display: block;
+  background: #dfe5f8;
+  color: black;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 10px;
+  transition: background 0.2s;
+  width: 100%;
+  text-align: left;
+}
+div.graph-container .controls button:hover {
+  background: #aab9e8;
+}
+div.graph-container .controls button:last-child {
+  margin-bottom: 0;
+}
+div.graph-container .legend {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: white;
+  border: 1px solid #ddd;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  font-size: 12px;
+}
+div.graph-container .legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+div.graph-container .legend-item:last-child {
+  margin-bottom: 0;
+}
+div.graph-container .legend-color {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 8px;
+  border: 2px solid white;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
 }

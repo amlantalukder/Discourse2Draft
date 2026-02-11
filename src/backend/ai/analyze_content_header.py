@@ -87,5 +87,5 @@ class AnalyzeContentHeader:
                                   chain = analyze_content_header_chain,
                                   kargs = {'content_pre': state['content_pre'],
                                             'current_section': state['current_section']},
-                                  key_to_find = 'keyphrases',
-                                  value_name = 'keyphrases')
+                                  keys_to_find = ['keyphrases'],
+                                  value_names = ['keyphrases'])

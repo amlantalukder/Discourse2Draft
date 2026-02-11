@@ -24,16 +24,23 @@ class WriteAbstract:
     - Avoid including any new information that is not present in the main content.
     - Avoid using technical jargon; the abstract should be understandable to a broad audience.
     - Avoid using citations or references in the abstract.
+    - Generated content must serve the purpose of an abstract written from the "Previous Content Summary".
+    - Generated content must preserve the flow and continuity of the writing under the "Current Content".
+    - Generated content must avoid repeated statements or reasoning as written under the "Current Content".
     </Instructions>'''
 
     write_abstract_human_prompt = lambda self, instructions: (f'''
-    <Content>
-    {{content}}
-    </Content>
+    <Previous Content Summary>
+    {{content_pre}}
+    </Previous Content Summary>
+
+    <Current Content>
+    {{current_section}}
+    </Current Content>
                                                               
     <Instructions>
     {instructions}
-    
+
     - Provide the output in the following format.
     {{format_instructions}}
     </Instructions>
@@ -42,22 +49,34 @@ class WriteAbstract:
 
     def __init__(self, llm, instructions):
 
-        parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=WriteAbstractSchema), 
+        self.llm = llm
+        self.instructions = instructions
+
+        self.parser = OutputFixingParser.from_llm(parser=PydanticOutputParser(pydantic_object=WriteAbstractSchema), 
                                              llm=llm,
                                              max_retries=Config.RETRY_COUNTER)
         
         self.write_abstract_prompt = setPrompt(self.write_abstract_system_prompt, 
                                                  self.write_abstract_human_prompt(instructions),
-                                                 parser)
+                                                 self.parser)
         
-        self.write_abstract_chain = self.write_abstract_prompt | llm | parser
+        self.write_abstract_chain = self.write_abstract_prompt | llm | self.parser
 
 
     def __call__(self, state: StateContentManager):
         '''LLM generates an abstract content'''
+    
+        if state['content_specific_instructions']:
+            instructions = f'{self.instructions}\n{state['content_specific_instructions']}'
+            write_abstract_chain = setPrompt(self.write_abstract_system_prompt, 
+                                                self.write_abstract_human_prompt(instructions), 
+                                                self.parser) | self.llm | self.parser
+        else:
+            write_abstract_chain = self.write_abstract_chain
 
         return extractLLMResponse(task_name = 'Write Abstract', 
-                                  chain = self.write_abstract_chain,
-                                  kargs = {'content': state['content_pre']},
-                                  key_to_find = 'content',
-                                  value_name = 'content')
+                                  chain = write_abstract_chain,
+                                  kargs = {'content_pre': state['content_pre'],
+                                           'current_section': state['current_section']},
+                                  keys_to_find = ['content'],
+                                  value_names = ['content'])

@@ -94,8 +94,8 @@ class GenerateOutline:
         return_vals = extractLLMResponse(task_name = 'Generate Outline', 
                                   chain = self.generate_outline_chain,
                                   kargs = {'query': state['query']},
-                                  key_to_find = 'content',
-                                  value_name = 'content',
+                                  keys_to_find = ['content'],
+                                  value_names = ['content'],
                                   additionalCheckingFunc=contentChecker)
         
         # Remove markdown tags

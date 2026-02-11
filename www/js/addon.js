@@ -12,28 +12,22 @@ function getDOMHierarchy(element) {
     }
 
     var elements = [...document.getElementsByTagName('shiny-markdown-stream')[0].children];
-
     var hierarchy = [];
-    var hierarchy_options = [];
     var para_index = 0;
     for (let i = 0; i < elements.length; i++) {
-        if (elements[i] == element) {
-            for (let j in hierarchy_options) {
-                hierarchy.push(hierarchy_options[j].at(-1));
-            }
-            hierarchy.push(para_index);
-            break;
-        }
-
         if (elements[i].tagName.startsWith('H')) {
             index = parseInt(elements[i].tagName.slice(1), 10) - 1;
-            if (!Array.isArray(hierarchy_options[index])) {
-                hierarchy_options[index] = [];
+            while (hierarchy.length - 1 > index) {
+                hierarchy.pop();
             }
-            hierarchy_options[index].push(htmlDecode(elements[i].innerHTML));
+            hierarchy[index] = htmlDecode(elements[i].innerHTML);
             para_index = 0;
         }
         else if (elements[i].tagName == 'P') {
+            if (elements[i] == element) {
+                hierarchy.push(para_index);
+                break;
+            }
             para_index += 1
         }
     }
@@ -51,59 +45,71 @@ Shiny.addCustomMessageHandler("reload_content", ({ ui_id }) => {
 
             var element = event.target;
             if (element.tagName == 'P') {
-                if (!element.classList.contains('highlight-with-color')) {
-                    element.classList.add('highlight-with-color');
+                if (!element.classList.contains('highlight-with-border')) {
+                    element.classList.add('highlight-with-border');
                 }
 
                 element.addEventListener('mouseout', (event) => {
-                    element.classList.remove('highlight-with-color');
+                    element.classList.remove('highlight-with-border');
                 });
             }
         });
 
         var current_element;
 
-        targetDiv.addEventListener('contextmenu', (event) => {
+        targetDiv.addEventListener('click', (event) => {
 
             if (current_element) {
-                current_element.classList.remove('highlight-with-border');
+                current_element.classList.remove('highlight-with-color');
+            }
+
+            event.preventDefault(); // Prevent default browser menu
+
+            if (event.target.tagName != 'P') {
+                return;
             }
 
             current_element = event.target;
             var hierarchy = getDOMHierarchy(current_element);
 
+            console.log(current_element);
+            console.log(hierarchy);
+
             if (!hierarchy.length) {
                 return;
             }
 
-            event.preventDefault(); // Prevent default browser menu
-            let menu = document.getElementById(`${ui_id}-ctx_menu`);
+            let menu = document.getElementById('regenerate_text_controls');
 
-            console.log(ui_id);
-            console.log(menu);
+            //let ancestor_props = document.getElementsByClassName('app-body-container')[0].getBoundingClientRect();
+            //let container_props = targetDiv.getBoundingClientRect();
 
-            let ancestor_props = document.getElementsByClassName('app-body-container')[0].getBoundingClientRect();
-            let container_props = targetDiv.getBoundingClientRect();
+            //let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
+            //let top = Math.min(event.clientY, container_props.bottom - 75) - ancestor_props.top;
 
-            let left = Math.min(event.clientX, container_props.right - 250) - ancestor_props.left;
-            let top = Math.min(event.clientY, container_props.bottom - 75) - ancestor_props.top;
-
-            if (!current_element.classList.contains('highlight-with-border')) {
-                current_element.classList.add('highlight-with-border');
+            if (!current_element.classList.contains('highlight-with-color')) {
+                current_element.classList.add('highlight-with-color');
             }
 
+            console.log(menu);
             menu.style.display = 'block';
-            menu.style.left = `${left}px`;
-            menu.style.top = `${top}px`;
+            //menu.style.left = `${left}px`;
+            //menu.style.top = `${top}px`;
 
             Shiny.setInputValue(`${ui_id}-selected_para_hierarchy`, hierarchy);
         });
 
         $(document).bind("click", function (event) {
-            document.getElementById(`${ui_id}-ctx_menu`).style.display = "none";
 
-            if (current_element) {
+            const regenerate_text_controls_elements = document.querySelector('#regenerate_text_controls');
+            const popover_regen_instruction = document.querySelector('#popover_regen_instruction');
+
+            if (event.target != current_element &&
+                !regenerate_text_controls_elements.contains(event.target) &&
+                !popover_regen_instruction.contains(event.target)) {
+                document.getElementById('regenerate_text_controls').style.display = 'none';
                 current_element.classList.remove('highlight-with-border');
+                current_element.classList.remove('highlight-with-color');
             }
         });
     }

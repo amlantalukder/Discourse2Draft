@@ -29,7 +29,7 @@ def checkIfSummaryNeededForPrevContent(state: StateContentManager) -> bool:
 def checkIfSummaryNeededForGenContent(state: StateContentManager) -> Command:
     if len(state.get('content').split()) > Config.NUM_TOKENS_SUMMARY:
         return Command(goto="Summarize Generated Content")
-    return Command(update={'content_pre': state.get('content')}, goto=END)
+    return Command(update={'content_summary': state.get('content')}, goto=END)
         
 # -----------------------------------------------------------------------
 @print_func_name
@@ -90,9 +90,9 @@ class ContentWriterArchitecture(Architecture):
         workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre'))
+        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
         workflow.add_node("Generate Content", GenerateContent(llm=self.llm, instructions=self.instructions))
-        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content'))
+        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
         workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
 
         workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Generate Content"})
@@ -110,7 +110,7 @@ class ContentWriterArchitecture(Architecture):
         workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre'))
+        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
         workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
         if self.collection_name:
             workflow.add_node("Gather Context from Documents", GatherContext(collection_name=self.collection_name))
@@ -120,7 +120,7 @@ class ContentWriterArchitecture(Architecture):
         if self.collection_name and self.collection_name_lit_search:
             workflow.add_node("Wait for the Other Branch", wait)
         workflow.add_node("Generate Content", GenerateContentRAG(llm=self.llm, instructions=self.instructions))
-        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content'))
+        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
         workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
 
         workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Analyze Content Header"})
@@ -149,11 +149,11 @@ class ContentWriterArchitecture(Architecture):
         workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre'))
+        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
         workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
         workflow.add_node("Gather Context", GatherContextGraph(llm=self.llm, collection_name=self.collection_name))
         workflow.add_node("Generate Content", GenerateContentGraphRAG(llm=self.llm, instructions=self.instructions))
-        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content'))
+        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
         workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
 
         workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Analyze Content Header"})

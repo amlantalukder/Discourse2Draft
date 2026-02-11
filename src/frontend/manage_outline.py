@@ -18,7 +18,7 @@ def resetOutline(d):
             d[k] = resetOutline(v.copy())
         else:
             for i, [content_type, _] in enumerate(d[SpecialSectionTypes.CONTENT.value]):
-                if content_type in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_PRE_SUMMARY.value]:
+                if content_type in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.CONCEPT_MAP.value]:
                     d[SpecialSectionTypes.CONTENT.value][i][1] = ''
 
     return d
@@ -125,7 +125,7 @@ def getRawOutline(d, raw_outline=[], counter=1):
 
     if not isinstance(d, dict):
         for k, v in d:
-            if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.IS_ABSTRACT.value]: continue
+            if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.IS_ABSTRACT.value, ContentTypes.CONCEPT_MAP.value]: continue
             if k == ContentTypes.CONTENT_AI.value:
                 raw_outline.append('<content>')
             elif k == ContentTypes.INSTRUCTIONS.value:
@@ -158,7 +158,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                         ui.p('[Reserved for AI content]', class_='reserved-for-ai')
                     elif text_type == ContentTypes.INSTRUCTIONS.value:
                         ui.markdown(f'**Instructions:**\n\n{text}')
-                    else:
+                    elif text_type == ContentTypes.CONTENT_USER.value:
                         ui.markdown(text)
                     
                     with ui.div(class_='d-flex gap-2 align-items-center'):                                                                       

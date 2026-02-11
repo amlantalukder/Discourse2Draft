@@ -4,6 +4,7 @@ from langchain.output_parsers.fix import OutputFixingParser
 from langchain_core.tools import tool
 from langchain.chains import GraphQAChain
 from langgraph.prebuilt import create_react_agent
+from typing import Dict, List
 from pydantic import BaseModel, Field
 from .llms import getAIModel
 from .common import (StateContentManager, extractLLMResponse,
@@ -35,6 +36,9 @@ class GenerateContentGraphRAGSchema(BaseModel):
     Returns the content to fill the provided outline section
     '''
     content: str = Field(description='Content to fill the provided outline section')
+    concept_map: Dict[str, List[str]] = Field(description='''Unidirectional hierarchical concept flow map of generated content.\
+                                         The nodes are represented as the keys in the dictionary.
+                                         The edges of a key node are represented by a List of node names.''')
 
 # ---------------------------------------------------------------------------
 class GenerateContentGraphRAG:
@@ -59,6 +63,7 @@ class GenerateContentGraphRAG:
     - Read the Previous Content Summary.
     - Find the <content> tag in Current Section. 
     - Write output texts that will fit in the <content> tag position and that will maintain continuity and relevance with the text above and below it.
+    - Generate unidirectional hierarchical concept flow map of generated content.
 
     {CITE_CONTEXT_INSTRUCTIONS}
 
@@ -105,5 +110,5 @@ class GenerateContentGraphRAG:
                                   chain = generate_content_chain,
                                   kargs = {'content_pre': state['content_pre'],
                                             'current_section': state['current_section']},
-                                  key_to_find = 'content',
-                                  value_name = 'content')
+                                  keys_to_find = ['content', 'concept_map'],
+                                  value_names = ['content', 'concept_map'])

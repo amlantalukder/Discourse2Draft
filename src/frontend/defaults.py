@@ -20,6 +20,7 @@ class ContentTypes(Enum):
     CONTENT_USER = 'content_user'
     CONTENT_AI = 'content_ai'
     CONTENT_PRE_SUMMARY = 'content_pre_summary'
+    CONCEPT_MAP = 'concept_map'
 
 @dataclass
 class ConfigApp:

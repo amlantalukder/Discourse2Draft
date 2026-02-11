@@ -27,8 +27,10 @@ class StateContentManager(TypedDict):
     literature_list: List[Dict[str, str]]
     steps: Annotated[List[str], add]
     content: str
+    content_summary: str
     references: List[ReferenceSchema]
     is_abstract: bool
+    concept_map: dict
 
 # ---------------------------------------------------------------------------
 class StateOutlineManager(TypedDict):
@@ -39,21 +41,24 @@ class StateOutlineManager(TypedDict):
 
 # ---------------------------------------------------------------------------
 @print_func_name
-def extractLLMResponse(task_name, chain, kargs, key_to_find, value_name, additionalCheckingFunc=None, return_response=False):
+def extractLLMResponse(task_name, chain, kargs, keys_to_find, value_names, additionalCheckingFunc=None, return_response=False):
 
     task_node_name = re.sub(r'[ ()]', '', task_name)
 
     for c in range(Config.RETRY_COUNTER):
         
         response = chain.invoke(input=kargs)
-        try:
-            response = dict(response)
-            value = response[key_to_find]
-        except:
-            logging.info(f'{task_node_name} response does not have {key_to_find}, response: {response}')
-            if c < Config.RETRY_COUNTER:
-                logging.info('Retrying...')
-            continue
+        response = dict(response)
+
+        return_dict = {'steps': [task_name]}
+        for key_to_find, value_name in zip(keys_to_find, value_names):
+            try:
+                return_dict[value_name] = response[key_to_find]
+            except:
+                logging.info(f'{task_node_name} response does not have {key_to_find}, response: {response}')
+                if c < Config.RETRY_COUNTER:
+                    logging.info('Retrying...')
+                continue
 
         if additionalCheckingFunc and not additionalCheckingFunc(response):
             if c < Config.RETRY_COUNTER:
@@ -61,9 +66,9 @@ def extractLLMResponse(task_name, chain, kargs, key_to_find, value_name, additio
             continue 
 
         if return_response:
-            return {value_name: value, 'steps': [task_name]}, response    
+            return return_dict, response    
 
-        return {value_name: value, 'steps': [task_name]}
+        return return_dict
         
     raise Exception(f'{task_node_name} failed to generate content after {Config.RETRY_COUNTER} retries.')
 

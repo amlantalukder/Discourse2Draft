@@ -10,6 +10,7 @@ from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
 from .manage_outline import resetOutline, processOutline, generateOutlineByAI, processOutlineByAI, getRawOutline, mod_outline_manager, mod_ai_outline_creator
 from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection, getLiteraturesFromDB, formatCitations
 from .defaults import ContentGenerationScope, SpecialSectionTypes, ContentTypes
+from .concept_map import mod_concept_map
 import asyncio
 import json
 import textwrap
@@ -32,159 +33,194 @@ def mod_contents(input, output, session,
 
     outline_from_outline_manager = reactive.value('')
     write_abstract_flag = reactive.value(True)
+
+    regen_instructions = reactive.value('')
     
     stream = ui.MarkdownStream("stream")
 
-    with ui.hold() as content:
-        with ui.div(class_='row name-bar'):
-            with ui.div(class_='col file-name'):
-                ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
-                ui.input_action_button('btn_save_file_name', 'Save')
-                with ui.tooltip(placement="top"):
-                    ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
-                    "New File"
-        with ui.div(class_='row input'):
-            class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
-            with ui.div(class_=class_name_outline):
-                with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):            
-                    with ui.div(class_='col'):
-                        ''
-                    with ui.div(class_='d-flex flex-column col text-center'):
-                        @render.express
-                        @print_func_name
-                        def renderLLMandTemp():
-                            _ = reload_view_flag.get()
-                            ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}')
-                            ui.span('(Can be changed in the settings panel in the top-right corner)')
-                    with ui.div(class_='col text-end'):
-                        @render.express
-                        @print_func_name
-                        def renderManageOutline():
-                            btn_label = ('Create' if not input.text_outline().strip() else 'Manage') + ' outline with AI'
-                            ui.input_action_button('btn_open_outline_manager', btn_label)
-                            
-                with ui.navset_underline(id="user_input_panel", selected="Query"):
-                    with ui.nav_panel("Query"):
-                        ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
-                    with ui.nav_panel("Structured Outline"):
-                        with ui.div(class_='col mt-2'):
-                            ui.input_checkbox('chk_use_example', 'Use example', value=False)
-                        ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
-            with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
-                with ui.div(class_=class_name_controls):
+    
+    with ui.div(class_='row name-bar'):
+        with ui.div(class_='col file-name'):
+            ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
+            ui.input_action_button('btn_save_file_name', 'Save')
+            with ui.tooltip(placement="top"):
+                ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
+                "New File"
+    with ui.div(class_='row input'):
+        class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
+        with ui.div(class_=class_name_outline):
+            with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):            
+                with ui.div(class_='col'):
+                    ''
+                with ui.div(class_='d-flex flex-column col text-center'):
                     @render.express
                     @print_func_name
-                    def renderOutlineControl():
-                        text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
-                        with ui.tooltip(placement="right"):
-                            ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
-                            text 
-                    with ui.tooltip(placement="right"):
-                        ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
-                        "Write from the start"
-                    with ui.tooltip(placement="right"):
-                        ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
-                        "Resume / Pause"
-                    @render.express
-                    @print_func_name
-                    def renderDownloadButton():
+                    def renderLLMandTemp():
                         _ = reload_view_flag.get()
-                        if not config_app.file_name: return
-                        with ui.tooltip(placement="right"):
-                            with ui.div():
-                                with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                    ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
-                                    with ui.div(class_='d-flex flex-column gap-2'):
-                                        @render.express
-                                        @print_func_name
-                                        def renderDownloadOptions():
-                                            attached_files, file_info = applyGetVectorDBFiles()
-                                            outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
-                                            if not outline_file_path.exists(): return
-                                            content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
-
-                                            @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.md')
-                                            @print_func_name
-                                            async def renderDownloadContentMD():
-                                                yield content_md
-
-                                            @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.docx')
-                                            @print_func_name
-                                            async def renderDownloadContentDocx():
-                                                docx_buffer = io.BytesIO()
-                                                content_docx.save(docx_buffer)
-                                                docx_buffer.seek(0)
-
-                                                yield docx_buffer.read()
-
-                                            @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.tex')
-                                            @print_func_name
-                                            async def renderDownloadContentTex():
-                                                yield content_tex
-                                                    
-                                            if bibs:
-                                                @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.bib')
-                                                @print_func_name
-                                                async def renderDownloadBib():
-                                                    yield bibs
-                            "Download"
-                    
-        with ui.div(class_='content-container'):
-            with ui.div(class_='content-header'):
-                ui.span('Content starts below ...')
-
-                with ui.div(class_='d-flex gap-5 align-items-center'):
+                        ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}')
+                        ui.span('(Can be changed in the settings panel in the top-right corner)')
+                with ui.div(class_='col text-end'):
                     @render.express
                     @print_func_name
-                    def renderShowLitResearch():
-                        if input.text_outline().strip():
-                            ui.input_switch('switch_show_lit_research', 'Literature Search', value=(config_app.vector_db_collections_id_lit_search is not None))
-
-                    @render.express
-                    @print_func_name
-                    def renderRAGAndRefInfo():
-                        files, _ = getAttachedFiles()
-                        if not files: return
-                    
-                        with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                            ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
-                            with ui.div(class_='d-flex flex-column gap-2'):
-                                with ui.div():
-                                    for i, (_, file_name, file_type) in enumerate(files):
-                                        if file_type != vector_db_collections_type.UPLOADED_FILES.value: continue
-                                        with ui.div(class_='d-flex gap-1'):
-                                            with ui.div(class_='col-2 d-flex align-items-center'):
-                                                getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
-                                            with ui.div(class_='col d-flex align-items-center'):
-                                                with ui.tooltip():
-                                                    ui.span(file_name, class_='cut-text')
-                                                    file_name
-                                with ui.div(class_='text-end'):
-                                    with ui.tooltip():
-                                        ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
-                                        "De-attach documents"
-                            
-            with ui.div(class_='content outline'):
-                with ui.card(id='ctx_menu', style='display: none; position: absolute; z-index: 10; width: 250px; height: 75px'):
-                    ui.input_action_button(id='btn_regenerate_text', label='Regenerate paragraph')
-                with ui.div(id='content'):
-                    stream.ui(width='100%')
+                    def renderManageOutline():
+                        btn_label = ('Create' if not input.text_outline().strip() else 'Manage') + ' outline with AI'
+                        ui.input_action_button('btn_open_outline_manager', btn_label)
+                        
+            with ui.navset_underline(id="user_input_panel", selected="Query"):
+                with ui.nav_panel("Query"):
+                    ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
+                with ui.nav_panel("Structured Outline"):
+                    with ui.div(class_='col mt-2'):
+                        ui.input_checkbox('chk_use_example', 'Use example', value=False)
+                    ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+        with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
+            with ui.div(class_=class_name_controls):
                 @render.express
                 @print_func_name
-                def renderReferences():
-                    refs = references.get()
-                    if not refs: return
-                    with ui.div(class_='mt-4'):
-                        ui.h2('References')
-                        with ui.div(class_='d-flex flex-column gap-1 ms-3'):
-                            for i, ref in enumerate(refs):
-                                if 'http://' in ref:
-                                    with ui.div(class_='d-flex gap-1 flex-wrap'):
-                                        ui.HTML(re.sub(r'( https?://\S+)', r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', f'{i+1}. {ref}'))
-                                else:
-                                    ui.span(f'{i+1}. {ref}')
+                def renderOutlineControl():
+                    text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
+                    with ui.tooltip(placement="right"):
+                        ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
+                        text 
+                with ui.tooltip(placement="right"):
+                    ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
+                    "Write from the start"
+                with ui.tooltip(placement="right"):
+                    ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
+                    "Resume / Pause"
+                @render.express
+                @print_func_name
+                def renderDownloadButton():
+                    _ = reload_view_flag.get()
+                    if not config_app.file_name: return
+                    with ui.tooltip(placement="right"):
+                        with ui.div():
+                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                with ui.div(class_='d-flex flex-column gap-2'):
+                                    @render.express
+                                    @print_func_name
+                                    def renderDownloadOptions():
+                                        attached_files, file_info = applyGetVectorDBFiles()
+                                        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
+                                        if not outline_file_path.exists(): return
+                                        content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
+
+                                        @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.md')
+                                        @print_func_name
+                                        async def renderDownloadContentMD():
+                                            yield content_md
+
+                                        @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.docx')
+                                        @print_func_name
+                                        async def renderDownloadContentDocx():
+                                            docx_buffer = io.BytesIO()
+                                            content_docx.save(docx_buffer)
+                                            docx_buffer.seek(0)
+
+                                            yield docx_buffer.read()
+
+                                        @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.tex')
+                                        @print_func_name
+                                        async def renderDownloadContentTex():
+                                            yield content_tex
+                                                
+                                        if bibs:
+                                            @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.bib')
+                                            @print_func_name
+                                            async def renderDownloadBib():
+                                                yield bibs
+                        "Download"
+                
+    with ui.div(class_='content-container'):
+        with ui.div(class_='content-header'):
+            ui.span('Content starts below ...')
+            with ui.div(class_='d-flex gap-5 align-items-center'):
+                with ui.div(id='regenerate_text_controls', class_='border border-dark rounded p-2', style='display: None'):
+                    with ui.div(class_='d-flex gap-2 align-items-center'):
+                        ui.input_radio_buttons(id='radio_regeneration_type', label='', choices=['Expand', 'Rephrase', 'Remove'], inline=True)
+                        with ui.panel_conditional('input.radio_regeneration_type != "Remove"'):
+                            with ui.tooltip(placement='top'):
+                                with ui.div():
+                                    with ui.popover(id='popover_regen_instructions', placement='bottom'):
+                                        with ui.div():
+                                            @render.express
+                                            @print_func_name
+                                            def renderRegenInstuctionsButton():
+                                                ui.input_action_button(id='btn_regen_instructions', label='', icon=faicons.icon_svg('clipboard', style='solid' if regen_instructions.get() else 'regular'))
+                        
+                                        with ui.div(class_='d-flex flex-column align-items-end'):
+                                            @render.express
+                                            @print_func_name
+                                            def renderRegenInstuctionsText():
+                                                ui.input_text_area(id='txt_regen_instructions', label='', value=regen_instructions.get(), rows=10, cols=8)
+                                            with ui.div():
+                                                ui.input_action_button(id='btn_add_regen_instructions', label='Submit')
+                                "Instructions"
+                        ui.div(class_='vertical-divider')
+                        with ui.tooltip(placement="top"):
+                            ui.input_action_button(id='btn_regenerate_text', label='', icon=faicons.icon_svg("play"))
+                            "Regenerate"
+                    
+                @render.express
+                @print_func_name
+                def renderShowLitResearch():
+                    if input.text_outline().strip():
+                        ui.input_switch('switch_show_lit_research', 'Literature Search', value=(config_app.vector_db_collections_id_lit_search is not None))
+
+                @render.express
+                @print_func_name
+                def renderAttachedFiles():
+
+                    files, _ = getAttachedFiles()
+                    if not files: return
+                
+                    with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                        ui.input_action_link('dummy', 'Using context from attached documents', class_='text-link')
+                        with ui.div(class_='d-flex flex-column gap-2'):
+                            with ui.div():
+                                for i, (_, file_name, file_type) in enumerate(files):
+                                    if file_type != vector_db_collections_type.UPLOADED_FILES.value: continue
+                                    with ui.div(class_='d-flex gap-1'):
+                                        with ui.div(class_='col-2 d-flex align-items-center'):
+                                            getFileTypeIcon(f'icon_{i}', file_type=getFileType(file_name))
+                                        with ui.div(class_='col d-flex align-items-center'):
+                                            with ui.tooltip():
+                                                ui.span(file_name, class_='cut-text')
+                                                file_name
+                            with ui.div(class_='text-end'):
+                                with ui.tooltip():
+                                    ui.input_action_link(f'btn_delete_rag', '', icon=faicons.icon_svg('trash'))
+                                    "De-attach documents"
+
+                @render.express
+                @print_func_name
+                def renderConceptMapGeneration():
+                    _ = reload_view_flag.get()
+                    if config_app.generated_files_id is None: return
+                    ui.input_action_button(id='btn_show_concept_map', label="Concept map")
+
+                        
+        with ui.div(class_='content outline'):
+            with ui.div(id='content'):
+                stream.ui(width='100%')
+            @render.express
+            @print_func_name
+            def renderReferences():
+                refs = references.get()
+                if not refs: return
+                with ui.div(class_='mt-4'):
+                    ui.h2('References')
+                    with ui.div(class_='d-flex flex-column gap-1 ms-3'):
+                        for i, ref in enumerate(refs):
+                            if 'http://' in ref:
+                                with ui.div(class_='d-flex gap-1 flex-wrap'):
+                                    ui.HTML(re.sub(r'( https?://\S+)', r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', f'{i+1}. {ref}'))
+                            else:
+                                ui.span(f'{i+1}. {ref}')
 
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
+    ui.include_js(Config.DIR_HOME / "www" / "js" / "concept_map_graph.js")
     
     @reactive.effect
     @reactive.event(input.btn_new_file, ignore_init=True)
@@ -562,50 +598,90 @@ def mod_contents(input, output, session,
         return True
     
     @print_func_name
-    def resetContentPara(d_outline, section_list, paragraph_index):
+    def changeContentParaOutline(d_outline, section_list, index_paragraph, regeneration_type):
         '''
         Resets specified paragraph for regeneration within a section hierarchy
         '''
     
+        is_abstract = False
         if len(section_list) == 1:
             
             assert SpecialSectionTypes.CONTENT.value in d_outline[section_list[0]], 'Hierarchy does not contain content'
 
-            count_par = 0
-            for i, (content_type, content) in enumerate(d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value]):
+            current_section_content = d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value]
+
+            count_par, index_current_content_block = 0, -1
+
+            for i, (content_type, content) in enumerate(current_section_content):
+
+                if content_type == ContentTypes.IS_ABSTRACT.value: is_abstract = True
 
                 if content_type not in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_USER.value]:
                     continue
                 
                 # Detect the specified paragraph 
                 count_par += content.count('\n\n') + 1
-                if paragraph_index < count_par:
-                    break
-            
-            assert i < len(d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value]), 'Intended paragraph was not found for regeneration'
-            
-            # Reset the specified paragraph in the outline
-            pars = content.split('\n\n')
 
-            # The paragraph_index indicates the index based on the overall paragraph count.
-            # But internally, a paragraph can belong to either content_ai or content_user content block.
-            # Here we are finding the index of the paragraph within the current content block.
-            index_current_par = len(pars)-(count_par - paragraph_index)
+                # The index_paragraph indicates the index based on the overall paragraph count.
+                # But internally, a paragraph can belong to either content_ai or content_user content block.
+                # Here we are finding the index of the paragraph within the current content block.
+                if index_current_content_block < 0 and index_paragraph < count_par: 
+                    pars = content.split('\n\n')
+                    index_current_content_block = i
+                    index_current_par = len(pars)-(count_par - index_paragraph)
+
+            assert index_current_content_block >= 0, "Intended paragraph was not found for regeneration"
             
-            # A new ContentTypes.CONTENT_AI.value block is inserted to indicate the paragraph to be regenerated
-            previous_para_current_content, next_para_current_content = [], []
+            # Get previous and next paragraphs
+            previous_para, next_para = [], []
             if index_current_par > 0:
-                previous_para_current_content = [[d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value][i][0], '\n\n'.join(pars[:index_current_par])]]
+                prev_para_content = '\n\n'.join(pars[:index_current_par])
+                previous_para = [[current_section_content[index_current_content_block][0], prev_para_content]] if prev_para_content != '' else []
+            else:
+                prev_para_content = ''
             if index_current_par < len(pars)-1:
-                next_para_current_content = [[d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value][i][0], '\n\n'.join(pars[index_current_par+1:])]]
+                next_para_content = '\n\n'.join(pars[index_current_par+1:])
+                next_para = [[current_section_content[index_current_content_block][0], next_para_content]] if next_para_content != '' else []
+                
+            # If current para needs to be expanded on, keep the current content and add an empty ContentTypes.CONTENT_AI.value block to be written inside.
+            # If current para needs to be rephrased, remove the current paragraph and insert an empty ContentTypes.CONTENT_AI.value block to indicate the paragraph to be regenerated.
+            # If current para needs to be removed, do not add the new content tag
+            match regeneration_type:
+                case 'Expand':
+                    d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value] = (current_section_content[:index_current_content_block]
+                                                                                    + [[current_section_content[index_current_content_block][0], prev_para_content + pars[index_current_par]]]
+                                                                                    + [[ContentTypes.CONTENT_AI.value, '']]
+                                                                                    + next_para
+                                                                                    + current_section_content[index_current_content_block+1:])
+                case 'Rephrase':
+                    d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value] = (current_section_content[:index_current_content_block]
+                                                                                    + previous_para
+                                                                                    + [[ContentTypes.CONTENT_AI.value, '']]
+                                                                                    + next_para
+                                                                                    + current_section_content[index_current_content_block+1:])
+                case 'Remove':
+                    if count_par > 1:
+                        d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value] = (current_section_content[:index_current_content_block]
+                                                                                        + previous_para
+                                                                                        + next_para
+                                                                                        + current_section_content[index_current_content_block+1:])
+                    else:
+                        d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value] = (current_section_content[:index_current_content_block]
+                                                                                        + previous_para
+                                                                                        + [[ContentTypes.CONTENT_AI.value, '']]
+                                                                                        + next_para
+                                                                                        + current_section_content[index_current_content_block+1:])
+                    
+            return is_abstract
+        
+        return changeContentParaOutline(d_outline[section_list[0]], section_list[1:], index_paragraph, regeneration_type)
 
-            d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value] = (d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value][:i]
-                                                    + previous_para_current_content
-                                                    + [[ContentTypes.CONTENT_AI.value, '']]
-                                                    + next_para_current_content
-                                                    + d_outline[section_list[0]][SpecialSectionTypes.CONTENT.value][i+1:])
-        else:
-            resetContentPara(d_outline[section_list[0]], section_list[1:], paragraph_index)
+    @reactive.effect
+    @reactive.event(input.btn_add_regen_instructions)
+    @print_func_name
+    def addRegenerationInstructions():
+        regen_instructions.set(input.txt_regen_instructions())
+        ui.update_popover(id='popover_regen_instructions', show=False)
 
     @reactive.effect
     @reactive.event(input.btn_regenerate_text)
@@ -617,26 +693,36 @@ def mod_contents(input, output, session,
         
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
         
-        # Read outline
+        # Change outline
         with open(outline_file_path) as fp:
             d_outline = json.load(fp)
         
         *section_list, paragraph_index = hierarchy
+        regeneration_type = input.radio_regeneration_type()
         
-        resetContentPara(d_outline, section_list, paragraph_index)
+        is_abstract = changeContentParaOutline(d_outline, section_list, paragraph_index, regeneration_type)
 
-        # Reset outline
+        raw_outline = '\n'.join(getRawOutline(d_outline))
+        ui.update_text_area(id='text_outline', value=raw_outline)
+
         with open(outline_file_path, 'w') as fp:
             json.dump(d_outline, fp)
 
+        # Generate content
         references.set([])
         attached_references, _ = applyGetVectorDBFiles()
         loop = asyncio.get_event_loop()
         loop.create_task(stream.stream(generateResponse(d_outline, 
                                                         outline_file_path,
+                                                        content_gen_scope=ContentGenerationScope.GENERATE_IF_NEEDED.value if regeneration_type != 'Remove' else ContentGenerationScope.DO_NOT_GENERATE.value,
                                                         attached_references=attached_references,
-                                                        write_abstract_flag_value=not write_abstract_flag.get()), 
+                                                        write_abstract=is_abstract,
+                                                        write_abstract_flag_value=not write_abstract_flag.get(),
+                                                        instructions_additional=regen_instructions.get(),
+                                                        num_blocks_to_generate = 1), 
                                         clear=True))
+        
+        regen_instructions.set('')
 
     @print_func_name
     async def generateResponse(d_outline, 
@@ -645,7 +731,9 @@ def mod_contents(input, output, session,
                                attached_references=[], 
                                attached_files_reload_flag_val=True,
                                write_abstract=False,
-                               write_abstract_flag_value=None):
+                               write_abstract_flag_value=None,
+                               instructions_additional='',
+                               num_blocks_to_generate=None):
 
         @print_func_name
         def getHierarchy(d_outline, 
@@ -719,26 +807,52 @@ def mod_contents(input, output, session,
             return '\n\n'.join(section_text_lines)
         
         @print_func_name
-        def insertContent(d_outline, section_list, content_ai, content_pre_summary):
+        def insertContent(d_outline, section_list, content_ai, content_pre_summary, concept_map):
             '''
             Inserts the ai generated content to the appropriate position of the outline
             '''
 
+            def combineSimilarContentBlocks(content_block):
+
+                content_block_new = []
+                last_content_type, last_content = '', ''
+                for i, (content_type, content) in enumerate(content_block):
+                    if last_content_type == content_type:
+                        if content_type != ContentTypes.IS_ABSTRACT.value:
+                            last_content += ('\n\n' + content)
+                    else:
+                        if i != 0:
+                            content_block_new.append((last_content_type, last_content))
+                        last_content_type, last_content = content_type, content
+                    
+                    if i == len(content_block)-1:
+                        content_block_new.append((last_content_type, last_content))
+
+                return content_block_new
+
             if not len(section_list): return
             
             if len(section_list) == 1:
+                is_summary_found, is_concept_map_found = False, False
                 for i, (content_type, content) in enumerate(d_outline[SpecialSectionTypes.CONTENT.value]):
                     if content_type == ContentTypes.CONTENT_AI.value and content == '':
                         d_outline[SpecialSectionTypes.CONTENT.value][i][1] = content_ai
-                        for j, (content_type, _) in enumerate(d_outline[SpecialSectionTypes.CONTENT.value]):
-                            if content_type == ContentTypes.CONTENT_PRE_SUMMARY.value:
-                                d_outline[SpecialSectionTypes.CONTENT.value][j][1] = content_pre_summary
-                                break
-                        else:
-                            d_outline[SpecialSectionTypes.CONTENT.value].append([ContentTypes.CONTENT_PRE_SUMMARY.value, content_pre_summary])
-                        return
+                    elif content_type == ContentTypes.CONTENT_PRE_SUMMARY.value:
+                        d_outline[SpecialSectionTypes.CONTENT.value][i][1] = content_pre_summary
+                        is_summary_found = True
+                    elif content_type == ContentTypes.CONCEPT_MAP.value:
+                        d_outline[SpecialSectionTypes.CONTENT.value][i][1] = concept_map
+                        is_concept_map_found = True
+                                
+                if not is_summary_found:
+                    d_outline[SpecialSectionTypes.CONTENT.value].append([ContentTypes.CONTENT_PRE_SUMMARY.value, content_pre_summary])
+
+                if not is_concept_map_found:
+                    d_outline[SpecialSectionTypes.CONTENT.value].append([ContentTypes.CONCEPT_MAP.value, concept_map])
+
+                #d_outline[SpecialSectionTypes.CONTENT.value] = combineSimilarContentBlocks(d_outline[SpecialSectionTypes.CONTENT.value])
             else:
-                insertContent(d_outline[section_list[0]], section_list[1:], content_ai, content_pre_summary)
+                insertContent(d_outline[section_list[0]], section_list[1:], content_ai, content_pre_summary, concept_map)
             
         @print_func_name
         def getSanitizedReferences(references_ai, attached_references, attached_files_reload_flag_val):
@@ -801,10 +915,13 @@ def mod_contents(input, output, session,
         async def dummy(i=None):
             await asyncio.sleep(3)
             if i is None:
-                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.'}
+                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus. Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis. In sed volutpat elit, et vehicula urna. Mauris libero lectus, dignissim quis facilisis aliquam, facilisis et tortor. Proin finibus lacus lectus, nec sodales ex vulputate in. Integer congue condimentum tempus. Ut ut elit in tellus viverra ornare at at nisl. Nam tincidunt vulputate pretium. Morbi purus purus, convallis in fringilla in, rhoncus a nisi. Curabitur eu pretium ligula. Vestibulum ullamcorper elit sit amet feugiat rutrum. Aenean tempor massa risus, non pulvinar justo scelerisque et. Maecenas non aliquet risus. Maecenas ac sem ut lorem commodo tempus.\nDonec eleifend tristique erat, sit amet sodales arcu ullamcorper eu. Aliquam non dapibus mi. Donec pretium risus ipsum, eu porttitor lectus porta in. Nulla facilisi. Proin rhoncus lectus nulla, non egestas sapien suscipit non. Maecenas bibendum semper cursus. Praesent in velit ut tellus tincidunt cursus laoreet et dolor. Morbi maximus maximus nunc nec luctus. Aenean ut sapien euismod, lacinia justo id, vestibulum ipsum.',
+                        'content_pre': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis'}
             if i % 2:
-                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].'}
-            return {'content': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].'}
+                return {'content': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse id erat lectus [CITE(27)].',
+                        'content_pre': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis'}
+            return {'content': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis, lobortis justo sit amet, blandit libero. Suspendisse hendrerit sapien sit amet augue aliquam, at auctor purus mattis [CITE(28)].',
+                    'content_pre': 'Fusce gravida iaculis diam eget tincidunt. Donec vitae nisl iaculis'}
         
         @print_func_name
         def findAbstractSection(d_outline: dict) -> str:
@@ -854,6 +971,8 @@ def mod_contents(input, output, session,
 
         if write_abstract:
             ui.notification_show(f"Writing {abstract_section_header}", type="message")
+
+        is_first_section_to_generate = True
         
         while True:
 
@@ -874,6 +993,10 @@ def mod_contents(input, output, session,
 
                 agent = config_app.agent
 
+            if instructions_additional and is_first_section_to_generate:
+                instructions += f'\n- {instructions_additional}'
+                is_first_section_to_generate = False
+
             if content_pre_new is None:
                 content_pre_new = content_pre
             else:
@@ -889,8 +1012,9 @@ def mod_contents(input, output, session,
             len_last_content_pre = len(content_pre)
         
             yield sanitizeContent(content_pre_new)
-            
-            if not is_gen_needed: break
+     
+            # During regeneration, we need only a specified number blocks to regenerate. num_blocks_to_generate is needed for that.
+            if not (is_gen_needed and (num_blocks_to_generate is None or num_blocks_to_generate > 0)): break
         
             # if attached_references:
             #     response = await dummy(len(ref_list))  
@@ -904,12 +1028,12 @@ def mod_contents(input, output, session,
                                             'current_section': current_section,
                                             'content_specific_instructions': instructions})
             
-            content, content_pre_summary = response['content'], response['content_pre']
+            content, content_pre_summary, concept_map = response['content'], response['content_pre'], response.get('concept_map', {})
             
             attached_references_ai = response.get('references', {})
             attached_references, attached_files_reload_flag_val = getSanitizedReferences(attached_references_ai, attached_references, not attached_files_reload_flag_val)
 
-            insertContent(d_outline, current_section_list, content, content_pre_summary)
+            insertContent(d_outline, current_section_list, content, content_pre_summary, concept_map)
 
             if attached_references:
                 response_with_citations, ref_list = processCitation(content, ref_list, attached_references)
@@ -936,6 +1060,8 @@ def mod_contents(input, output, session,
 
             ui.notification_show("Progress saved", type="message")
 
+            if num_blocks_to_generate is not None: num_blocks_to_generate -= 1
+
         # Add abstract section if needed
         if (content_gen_scope == ContentGenerationScope.GENERATE_IF_NEEDED.value and
             abstract_section_header != '' and
@@ -959,7 +1085,8 @@ def mod_contents(input, output, session,
         await stream.stream(generateResponse(d_outline, 
                                              outline_file_path,
                                              attached_references=attached_references,
-                                             write_abstract=True), clear=True)
+                                             write_abstract=True), 
+                            clear=True)
             
     @print_func_name
     async def generate(regenerate):
@@ -1038,5 +1165,17 @@ def mod_contents(input, output, session,
             loop.create_task(session.send_custom_message('reload_content', {'ui_id': ui_id}))
 
         ui.update_action_button("btn_resume_pause", icon=faicons.icon_svg("pause" if stream_status == "running" else "play"))
+    
+    @reactive.effect
+    @reactive.event(input.btn_show_concept_map)
+    def showConceptMap():
 
-    return content
+        m = ui.modal(
+            mod_concept_map(id=getUIID('concept_map'), config_app=config_app),
+            title="",
+            easy_close=True,
+            footer=None,
+            size='xl'
+        )
+
+        ui.modal_show(m)

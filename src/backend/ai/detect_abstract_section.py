@@ -57,6 +57,6 @@ class DetectAbstractSection:
         return extractLLMResponse(task_name = 'Detect Abstract Section', 
                                   chain = self.detect_abstract_section_chain,
                                   kargs = {'section_header': state['current_section']},
-                                  key_to_find = 'is_abstract',
-                                  value_name = 'is_abstract')
+                                  keys_to_find = ['is_abstract'],
+                                  value_names = ['is_abstract'])
         

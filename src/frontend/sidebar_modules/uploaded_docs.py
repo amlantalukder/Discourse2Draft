@@ -139,6 +139,15 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
     ui.input_file("btn_upload_docs", "Choose Documents", accept=[".txt", ".docx", ".pdf"], multiple=True)
 
     with ui.div(class_='side-bar-docs-container'):
+
+        @render.express
+        @print_func_name
+        def renderSearchBar():
+            docs = getUploadedDocs()
+
+            if len(docs) <= 2: return
+            
+            ui.input_text(id='txt_search_uploaded_docs', label='', placeholder='Search')
         
         @render.express
         @print_func_name
@@ -149,6 +158,12 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
             if docs.empty:
                 ui.span('No uploaded documents')
                 return
+            
+            try:
+                file_name_prefix = input.txt_search_uploaded_docs()
+                docs = docs[docs['file_name'].str.startswith(file_name_prefix)]
+            except:
+                pass
 
             with ui.div(class_='d-flex gap-3'):
                 with ui.div(class_='col-auto d-flex align-items-center'):
@@ -274,6 +289,7 @@ def mod_uploaded_docs_view(input, output, session, config_app, reload_content_at
             p.set(message="Processing", detail="This may take a while...")
         
             vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
+
             loadFilesToVectorDBCollection(collection_name=vector_db_collection_name, file_paths=file_paths, progress=p)
         
         ai_architecture = generated_files_ai_architecture.RAG.value

@@ -1,6 +1,6 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
-from typing import List
+from typing import List, Dict
 from pydantic import BaseModel, Field
 from .common import (StateContentManager, extractLLMResponse, ReferenceSchema, 
                      GENERATE_CONTENT_INSTRUCTIONS, CITE_CONTEXT_INSTRUCTIONS)
@@ -15,6 +15,9 @@ class GenerateContentRAGSchema(BaseModel):
     '''
     content: str = Field(description='Content to fill the provided outline section')
     references: List[ReferenceSchema] = Field(description='A list references of the citations in the content')
+    concept_map: Dict[str, List[str]] = Field(description='''Unidirectional hierarchical concept flow map of generated content.\
+                                         The nodes are represented as the keys in the dictionary.
+                                         The edges of a key node are represented by a List of node names.''')
 
 # ---------------------------------------------------------------------------
 class GenerateContentRAG:
@@ -43,6 +46,7 @@ class GenerateContentRAG:
     - Read the Previous Content Summary.
     - Find the <content> tag in Current Section. 
     - Write output texts that will fit in the <content> tag position and that will maintain continuity and relevance with the text above and below it.
+    - Generate unidirectional hierarchical concept flow map of generated content.
     
     {CITE_CONTEXT_INSTRUCTIONS}
     
@@ -83,10 +87,9 @@ class GenerateContentRAG:
                                   kargs = {'content_pre': state['content_pre'],
                                            'current_section': state['current_section'],
                                            'rag_context': state['rag_context']},
-                                  key_to_find = 'content',
-                                  value_name = 'content',
+                                  keys_to_find = ['content', 'concept_map'],
+                                  value_names = ['content', 'concept_map'],
                                   return_response = True)
-    
         try:
             references = {ref.file_id: ref.file_name for ref in dict(response).get('references', [])}
         except:

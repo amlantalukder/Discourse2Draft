@@ -333,11 +333,11 @@ def getDocContent(file_id, attached_files=[], file_info={}):
 
         if not isinstance(d, dict):
             for k, v in d:
-                if k in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_USER.value]:
-                    content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
-                    content_md.append(content_text)
-                    content_docx.add_paragraph(content_text)
-                    content_tex.append(content_tex_text)
+                if k not in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_USER.value]: continue
+                content_text, content_tex_text, ref_list, used_files_info = processCitation(v, ref_list, used_files_info)
+                content_md.append(content_text)
+                content_docx.add_paragraph(content_text)
+                content_tex.append(content_tex_text)
         else:
             for k in d:
                 if k != SpecialSectionTypes.CONTENT.value:
@@ -449,7 +449,10 @@ def uploadFiles(files, email='', session_id=''):
         #                    field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
         # uploaded_file_id = ids[0]
             
-        with open(Config.DIR_CONTENTS / 'uploaded_docs' / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
+        dir_uploaded_files = Config.DIR_CONTENTS / 'uploaded_docs'
+        dir_uploaded_files.mkdir(parents=False, exist_ok=True)
+
+        with open(dir_uploaded_files / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
             with open(file['datapath'], 'rb') as fp_r:
                 fp.write(fp_r.read())
 
