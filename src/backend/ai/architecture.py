@@ -18,6 +18,7 @@ from .write_abstract import WriteAbstract
 from ..utils import Config
 from utils import print_func_name
 import logging
+from pathlib import Path
 
 # -----------------------------------------------------------------------
 @print_func_name
@@ -216,23 +217,28 @@ class AbstractWriterArchitecture(Architecture):
 class OutlineCreatorArchitecture(Architecture):
 
     @print_func_name
-    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions=''):
+    def __init__(self, model_name=Config.env_config['DEFAULT_AI_MODEL'], temperature=0, instructions='', dir_path_ref_files=None):
         
         super().__init__(model_name=model_name, temperature=temperature, instructions=instructions)
 
         logging.info(f'Using {model_name} with temperature {temperature} in OutlineCreatorArchitecture architecture\n')
 
-        self.createAgent()
+        self.createAgent(dir_path_ref_files=dir_path_ref_files)
 
     @print_func_name
-    def createAgent(self):
+    def createAgent(self, dir_path_ref_files=None):
 
         # Define a new graph
         workflow = StateGraph(state_schema=StateOutlineManager)
-
-        # Define the (single) node in the graph
+        
         workflow.add_node("Generate Outline", GenerateOutline(llm=self.llm, instructions=self.instructions))
-        workflow.add_edge(START, "Generate Outline")
+
+        if dir_path_ref_files:
+            workflow.add_node("Summarize", Summarize(llm=self.llm, output_field='reference_summary', dir_path_ref_files=dir_path_ref_files))
+            workflow.add_edge(START, "Summarize")
+            workflow.add_edge("Summarize", "Generate Outline")
+        else:
+            workflow.add_edge(START, "Generate Outline")
 
         self.agent = workflow.compile()
 

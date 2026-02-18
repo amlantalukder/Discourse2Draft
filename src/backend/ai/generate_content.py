@@ -12,8 +12,8 @@ class GenerateContentSchema(BaseModel):
     '''
     content: str = Field(description='Content to fill the provided outline section')
     concept_map: Dict[str, List[str]] = Field(description='''Unidirectional hierarchical concept flow map of generated content.\
-                                         The nodes are represented as the keys in the dictionary.
-                                         The edges of a key node are represented by a List of node names.''')
+                                         Each node will be a keyphrase and will represent a concept of the generated content. \
+                                         The nodes are represented as the keys in the dictionary. The edges of a key node are represented by a List of node names.''')
 
 # ---------------------------------------------------------------------------
 class GenerateContent:

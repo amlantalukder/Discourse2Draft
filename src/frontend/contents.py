@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import ui, render, module
+from shiny.types import FileInfo
 import faicons
 from utils import Config, getUIID, print_func_name
 from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
@@ -7,8 +8,8 @@ from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
                 generated_files_ai_architecture, \
                 vector_db_collections_type, \
                 vector_db_collections_status
-from .manage_outline import resetOutline, processOutline, generateOutlineByAI, processOutlineByAI, getRawOutline, mod_outline_manager, mod_ai_outline_creator
-from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection, getLiteraturesFromDB, formatCitations
+from .manage_outline import resetOutline, processOutline, generateOutlineByAI, processOutlineByAI, getRawOutline, mod_outline_manager
+from .common import getFileType, getFileTypeIcon, getVectorDBFiles, detachDocs, getDocContent, createVectorDBCollection, getLiteraturesFromDB, formatCitations, loadFilesToVectorDBCollection
 from .defaults import ContentGenerationScope, SpecialSectionTypes, ContentTypes
 from .concept_map import mod_concept_map
 import asyncio
@@ -18,6 +19,7 @@ import re
 from datetime import datetime
 import io
 import logging
+from pathlib import Path
 
 @module
 def mod_contents(input, output, session, 
@@ -39,98 +41,110 @@ def mod_contents(input, output, session,
     stream = ui.MarkdownStream("stream")
 
     
-    with ui.div(class_='row name-bar'):
+    with ui.div(class_='d-flex name-bar'):
         with ui.div(class_='col file-name'):
             ui.input_text('text_file_name', 'File Name', value=config_app.file_name),
             ui.input_action_button('btn_save_file_name', 'Save')
             with ui.tooltip(placement="top"):
                 ui.input_action_button('btn_new_file', '', icon=faicons.icon_svg("plus"))
                 "New File"
-    with ui.div(class_='row input'):
-        class_name_outline, class_name_controls = ('col', 'row flex-column gap-2') if show_outline.get() else ('col d-none', 'row flex-row gap-2')
-        with ui.div(class_=class_name_outline):
-            with ui.div(class_='row justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):            
-                with ui.div(class_='col'):
-                    ''
-                with ui.div(class_='d-flex flex-column col text-center'):
-                    @render.express
-                    @print_func_name
-                    def renderLLMandTemp():
-                        _ = reload_view_flag.get()
-                        ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}')
-                        ui.span('(Can be changed in the settings panel in the top-right corner)')
-                with ui.div(class_='col text-end'):
-                    @render.express
-                    @print_func_name
-                    def renderManageOutline():
-                        btn_label = ('Create' if not input.text_outline().strip() else 'Manage') + ' outline with AI'
-                        ui.input_action_button('btn_open_outline_manager', btn_label)
-                        
-            with ui.navset_underline(id="user_input_panel", selected="Query"):
-                with ui.nav_panel("Query"):
-                    ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
-                with ui.nav_panel("Structured Outline"):
-                    with ui.div(class_='col mt-2'):
-                        ui.input_checkbox('chk_use_example', 'Use example', value=False)
-                    ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
-        with ui.div(class_='col-auto d-flex justify-content-around align-items-end p-3'):
-            with ui.div(class_=class_name_controls):
+    with ui.div(class_='input ps-3 pe-3'):
+        with ui.div(class_='d-flex justify-content-between align-items-center pt-2 pb-2', style='font-size: 0.8em !important'):            
+            with ui.div(class_='col'):
+                ''
+            with ui.div(class_='d-flex flex-column col text-center'):
                 @render.express
                 @print_func_name
-                def renderOutlineControl():
-                    text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
-                    with ui.tooltip(placement="right"):
-                        ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
-                        text 
-                with ui.tooltip(placement="right"):
-                    ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
-                    "Write from the start"
-                with ui.tooltip(placement="right"):
-                    ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
-                    "Resume / Pause"
-                @render.express
-                @print_func_name
-                def renderDownloadButton():
+                def renderLLMandTemp():
                     _ = reload_view_flag.get()
-                    if not config_app.file_name: return
-                    with ui.tooltip(placement="right"):
-                        with ui.div():
-                            with ui.popover(placement='bottom', options={'trigger': 'focus'}):
-                                ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
-                                with ui.div(class_='d-flex flex-column gap-2'):
-                                    @render.express
-                                    @print_func_name
-                                    def renderDownloadOptions():
-                                        attached_files, file_info = applyGetVectorDBFiles()
-                                        outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
-                                        if not outline_file_path.exists(): return
-                                        content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
+                    ui.span(f'LLM: {config_app.llm}, Temperature: {config_app.temperature}')
+                    ui.span('(Can be changed in the settings panel in the top-right corner)')
 
-                                        @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.md')
-                                        @print_func_name
-                                        async def renderDownloadContentMD():
-                                            yield content_md
-
-                                        @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.docx')
-                                        @print_func_name
-                                        async def renderDownloadContentDocx():
-                                            docx_buffer = io.BytesIO()
-                                            content_docx.save(docx_buffer)
-                                            docx_buffer.seek(0)
-
-                                            yield docx_buffer.read()
-
-                                        @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.tex')
-                                        @print_func_name
-                                        async def renderDownloadContentTex():
-                                            yield content_tex
-                                                
-                                        if bibs:
-                                            @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.bib')
+            with ui.div(class_='col text-end'):
+                @render.express
+                @print_func_name
+                def renderManageOutline():
+                    if not input.text_outline().strip(): return
+                    with ui.tooltip(placement="top"):
+                        ui.input_action_button('btn_edit_outline', label='', icon=faicons.icon_svg("pen-to-square"))
+                        "Edit outline"
+        @render.express
+        @print_func_name
+        def renderInputBar():
+            class_name_outline, class_name_controls = ('col', 'd-flex flex-column gap-2 align-items-center') if show_outline.get() else ('col d-none', 'd-flex flex-row gap-2')
+            with ui.div(class_='d-flex gap-3'):
+                with ui.div(class_=class_name_outline):            
+                    with ui.navset_underline(id="user_input_panel", selected="Query"):
+                        with ui.nav_panel("Query"):
+                            ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
+                            ui.input_file("btn_upload_topic_desc", "Choose a reference document (optional)", accept=[".txt", ".pdf", ".docx"], multiple=False)
+                        with ui.nav_panel("Structured Outline"):
+                            with ui.div(class_='col mt-2'):
+                                ui.input_checkbox('chk_use_example', 'Use example', value=False)
+                            ui.input_text_area(id='text_outline', label='', placeholder='''Write an outline...''', rows=8, width='100%')
+                with ui.div(class_='col-auto d-flex justify-content-around align-items-start', style="padding-top: 40px"):
+                    with ui.div(class_=class_name_controls):
+                        @render.express
+                        @print_func_name
+                        def renderControlButtons():
+                            text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
+                            with ui.tooltip(placement="top"):
+                                ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
+                                text
+                            if input.user_input_panel() == "Query":
+                                with ui.tooltip(placement="top"):
+                                    ui.input_action_button('btn_create_outline', '', icon=faicons.icon_svg("list-ol"))
+                                    "Create outline"
+                            if input.text_outline().strip() != '':
+                                with ui.tooltip(placement="top"):
+                                    ui.input_action_button('btn_regenerate', '', icon=faicons.icon_svg("repeat"))
+                                    "Write from the start"
+                                with ui.tooltip(placement="top"):
+                                    ui.input_action_button('btn_resume_pause', '', icon=faicons.icon_svg("play"))
+                                    "Resume / Pause"
+                        @render.express
+                        @print_func_name
+                        def renderDownloadButton():
+                            _ = reload_view_flag.get()
+                            if not config_app.file_name: return
+                            with ui.tooltip(placement="right"):
+                                with ui.div():
+                                    with ui.popover(placement='bottom', options={'trigger': 'focus'}):
+                                        ui.input_action_button('btn_download', '', icon=faicons.icon_svg("download"))
+                                        with ui.div(class_='d-flex flex-column gap-2'):
+                                            @render.express
                                             @print_func_name
-                                            async def renderDownloadBib():
-                                                yield bibs
-                        "Download"
+                                            def renderDownloadOptions():
+                                                attached_files, file_info = applyGetVectorDBFiles()
+                                                outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
+                                                if not outline_file_path.exists(): return
+                                                content_md, content_docx, content_tex, bibs = getDocContent(file_id=config_app.generated_files_id, attached_files=attached_files, file_info=file_info)
+
+                                                @render.download(label=ui.div('Content (.md)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.md')
+                                                @print_func_name
+                                                async def renderDownloadContentMD():
+                                                    yield content_md
+
+                                                @render.download(label=ui.div('Content (.docx)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.docx')
+                                                @print_func_name
+                                                async def renderDownloadContentDocx():
+                                                    docx_buffer = io.BytesIO()
+                                                    content_docx.save(docx_buffer)
+                                                    docx_buffer.seek(0)
+
+                                                    yield docx_buffer.read()
+
+                                                @render.download(label=ui.div('Content (.tex)', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.tex')
+                                                @print_func_name
+                                                async def renderDownloadContentTex():
+                                                    yield content_tex
+                                                        
+                                                if bibs:
+                                                    @render.download(label=ui.div('Bibliography', faicons.icon_svg("download"), class_='d-flex justify-content-between align-items-center gap-1'), filename=f'{config_app.file_name}.bib')
+                                                    @print_func_name
+                                                    async def renderDownloadBib():
+                                                        yield bibs
+                                "Download"
                 
     with ui.div(class_='content-container'):
         with ui.div(class_='content-header'):
@@ -282,23 +296,12 @@ def mod_contents(input, output, session,
         
         ui.notification_show('File name saved.', type='message')
 
-    @reactive.effect
-    @reactive.event(input.btn_open_outline_manager)
-    @print_func_name
-    def openOutlineManager():
-        outline = input.text_outline().strip()
-        if outline == '':
-            outline_manager_view = mod_ai_outline_creator(getUIID('ai_outline_creator'),
-                                                          saved_outline=outline_from_outline_manager,
-                                                          config_app=config_app,
-                                                          reload_uploaded_docs_view_flag=reload_uploaded_docs_view_flag,
-                                                          close_fn=ui.modal_remove)
-        else:
+    def showOutlineEditor(outline):
 
-            outline_manager_view = mod_outline_manager(getUIID('outline_manager'), 
-                                                       outline=outline, 
-                                                       saved_outline=outline_from_outline_manager,
-                                                       close_fn=ui.modal_remove)
+        outline_manager_view = mod_outline_manager(getUIID('outline_manager'), 
+                                                    outline=outline, 
+                                                    saved_outline=outline_from_outline_manager,
+                                                    close_fn=ui.modal_remove)
 
         m = ui.modal(
             outline_manager_view,
@@ -312,10 +315,19 @@ def mod_contents(input, output, session,
         ui.modal_show(m)
 
     @reactive.effect
+    @reactive.event(input.btn_edit_outline)
+    @print_func_name
+    def editOutline():
+        outline = input.text_outline().strip()
+        if outline == '': return
+        showOutlineEditor(outline)
+
+    @reactive.effect
     @reactive.event(outline_from_outline_manager, ignore_init=True)
     @print_func_name
     def setOutlineFromOutlineManager():
         ui.update_text_area(id='text_outline', value=outline_from_outline_manager.get())
+        ui.update_navs(id='user_input_panel', selected='Structured Outline')
         
     @print_func_name
     def setContent(content):
@@ -329,7 +341,24 @@ def mod_contents(input, output, session,
         show_outline.set(not show_outline.get())
 
         if not config_app.file_name: return
+
+        # --------------------------------------
+        # Load query
+        # --------------------------------------
+        query_file_path = Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.txt'
+
+        if query_file_path.exists():
+            # Read query
+            with open(query_file_path) as fp:
+                query = fp.read()
+        else:
+            query = ''
+
+        ui.update_text_area(id='text_query', value=query)
         
+        # --------------------------------------
+        # Load outline
+        # --------------------------------------
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
 
         # Read outline
@@ -479,7 +508,7 @@ def mod_contents(input, output, session,
         raw_outline = '\n'.join(getRawOutline(d_outline))
 
         # Load query
-        query_file_path = Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.json'
+        query_file_path = Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.txt'
         if query_file_path.exists():
             with open(query_file_path) as fp:
                 query = fp.read()
@@ -536,6 +565,57 @@ def mod_contents(input, output, session,
 
         ui.update_text_area('text_outline', value=example)
 
+    @reactive.effect
+    @reactive.event(input.btn_upload_topic_desc)
+    @print_func_name
+    def uploadTopicDesc():
+
+        if config_app.file_name == '':
+            ui.notification_show("Please save a file name.", type="error")
+            return
+
+        files: list[FileInfo] | None = input.btn_upload_topic_desc()
+        
+        dir_temp_files = Config.DIR_CONTENTS / 'temp' / f'{config_app.generated_files_id}'
+        
+        # Remove previously uploaded files in temp if exist
+        if dir_temp_files.exists() and dir_temp_files.is_dir():
+            for f in dir_temp_files.iterdir():
+                f.unlink()
+        else:
+            dir_temp_files.mkdir(parents=True, exist_ok=True)
+        
+        for file in files:
+            with open(dir_temp_files / Path(file['datapath']).name, 'wb') as fp:
+                with open(file['datapath'], 'rb') as fp_r:
+                    fp.write(fp_r.read())
+
+    @reactive.effect
+    @reactive.event(input.btn_create_outline)
+    @print_func_name
+    def createOutlineByAI():
+        
+        if config_app.file_name == '':
+            ui.notification_show("Please save a file name.", type="error")
+            return
+        
+        query = input.text_query().strip()
+
+        if not query:
+            ui.notification_show("Please enter a query to create an outline.", type="error")
+            return
+        
+        with open(Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.txt', 'w') as fp:
+            fp.write(query)
+
+        dir_temp_files = Config.DIR_CONTENTS / 'temp' / f'{config_app.generated_files_id}'
+
+        ui.notification_show("Creating outline", type="message")
+
+        outline = generateOutlineByAI(query, dir_path_ref_files=dir_temp_files if dir_temp_files.exists() else None)
+
+        showOutlineEditor(outline)
+
     @print_func_name
     def saveOutline(regenerate=False):
         
@@ -547,42 +627,29 @@ def mod_contents(input, output, session,
         if not (records.empty or regenerate): return True
 
         outline = input.text_outline().strip()
-        query = input.text_query().strip()
-        active_input_panel = input.user_input_panel()
-
-        if ((active_input_panel == 'Query' and query == '') or 
-            (active_input_panel == 'Structured Outline' and outline == '')): return False
-
-        if active_input_panel == 'Query' and query != '':
-            ui.notification_show("Creating outline", type="message")
-            outline = generateOutlineByAI(query)
-            ui.update_text_area(id='text_outline', value=outline)
-            ui.notification_show("Outline created successfully.", type="message")
-            d_outline = processOutline(outline)
-        else:
-            invalid_formatting = False
-            if '<content>' in outline and '# ' in outline:
-                try:
-                    d_outline = processOutline(outline)
-                except Exception as exp:
-                    logging.error(f'Outline formatting is invalid: {exp}') 
-                    invalid_formatting = True
-            else:
-                invalid_formatting = True 
-                
-            if invalid_formatting:
-                try:
-                    outline = processOutlineByAI(outline)
-                    ui.update_text_area(id='text_outline', value=outline)
-                    ui.notification_show("The provided outline was reformatted to find the proper positions for AI to write in.", type="warning")
-                    d_outline = processOutline(outline)
-                except Exception as exp:
-                    logging.error(f'Failed to generate outline with AI: {exp}') 
-                    ui.notification_show("Outline formatting is invalid. Failed to fix it with AI. Please follow the outline format mentioned in docs.", type="error")
-                    return False
+        
+        if outline == '': return
             
-        with open(Config.DIR_CONTENTS / f'query_{config_app.generated_files_id}.json', 'w') as fp:
-            fp.write(query)
+        invalid_formatting = False
+        if '<content>' in outline and '# ' in outline:
+            try:
+                d_outline = processOutline(outline)
+            except Exception as exp:
+                logging.error(f'Outline formatting is invalid: {exp}') 
+                invalid_formatting = True
+        else:
+            invalid_formatting = True 
+            
+        if invalid_formatting:
+            try:
+                outline = processOutlineByAI(outline)
+                ui.update_text_area(id='text_outline', value=outline)
+                ui.notification_show("The provided outline was reformatted to find the proper positions for AI to write in.", type="warning")
+                d_outline = processOutline(outline)
+            except Exception as exp:
+                logging.error(f'Failed to generate outline with AI: {exp}') 
+                ui.notification_show("Outline formatting is invalid. Failed to fix it with AI. Please follow the outline format mentioned in docs.", type="error")
+                return False
 
         with open(Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json', 'w') as fp:
             json.dump(d_outline, fp)
@@ -960,6 +1027,8 @@ def mod_contents(input, output, session,
                 if content_type == ContentTypes.CONTENT_AI.value and content == '':
                     return False
             return True
+
+        if not d_outline: return
 
         title = next(iter(d_outline))
         abstract_section_header = findAbstractSection(d_outline)

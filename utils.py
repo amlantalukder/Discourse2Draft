@@ -6,8 +6,18 @@ from rich import print
 import logging
 from logging.handlers import RotatingFileHandler
 from src.backend.utils import Config as backend_config
+from enum import Enum
+
+class Versions(Enum):
+    """
+    Versions to restrict feature accessibility
+    """
+    DEVELOPMENT = "development"
+    PRODUCTION = "production"
 
 class Config:
+    
+    current_version = Versions.PRODUCTION.value
 
     DIR_HOME = Path(__file__).parent
     DIR_DATA = DIR_HOME / 'data'

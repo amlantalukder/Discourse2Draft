@@ -4,7 +4,7 @@ from langchain_openai import OpenAIEmbeddings
 import requests
 from pathlib import Path
 from ..utils import Config
-from utils import Config as config_base, print_func_name
+from utils import Config as config_base, print_func_name, Versions
 import logging
 
 import httpx
@@ -18,14 +18,17 @@ client = httpx.Client(verify=cert_path)
 
 # ---------------------------------------------------------------------------
 @print_func_name
-def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
+def extractAvailableLLMs() -> tuple[list, list]:
     """
     Extracts a list of available LLM names from LiteLLM proxy
 
     :return: list of available LLM names, list of available embedding model names
     """
 
-    available_llms, available_embeddings = [], []
+    if config_base.current_version == Versions.PRODUCTION.value:
+        return [Config.env_config['DEFAULT_AI_MODEL']]
+
+    available_llms = []
     litellm_api_key = Config.env_config['AI_API_KEY']
     try:
         response = requests.get(url=f'{Config.env_config.get("AI_BASE_URL")}/model/info',
@@ -39,12 +42,7 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
                     if 'litellm_provider' not in item['model_info'] or item['model_info']['litellm_provider'] == 'ollama': continue
                     if item['model_info']['mode'] == 'chat':
                         available_llms.append(item['model_name'])
-                    elif item['model_info']['mode'] == 'embedding':
-                        available_embeddings.append(item['model_name'])
-                
                 available_llms = sorted(available_llms)
-                available_embeddings = sorted(available_embeddings)
-
         else:
             logging.info(response.text)
 
@@ -58,11 +56,8 @@ def extractAvailableLLMs(return_embedding_models=False) -> tuple[list, list]:
             if category_filtered:
                 llms_filtered[category] = category_filtered
     available_llms = llms_filtered if llms_filtered else available_llms
-
-    if not return_embedding_models:
-        return available_llms
     
-    return available_llms, available_embeddings
+    return available_llms
 
 # ---------------------------------------------------------------------------
 @print_func_name

@@ -96,11 +96,12 @@ def processOutline(outline):
     return d_outline
 
 @print_func_name
-def generateOutlineByAI(query):
+def generateOutlineByAI(query, dir_path_ref_files=None):
     '''
     Use AI to generate outline from a given query
     '''
-    agent = OutlineCreatorArchitecture().agent
+
+    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files).agent
     
     response = agent.invoke({'query': query})
     outline = response['content']
@@ -158,7 +159,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                         ui.p('[Reserved for AI content]', class_='reserved-for-ai')
                     elif text_type == ContentTypes.INSTRUCTIONS.value:
                         ui.markdown(f'**Instructions:**\n\n{text}')
-                    elif text_type == ContentTypes.CONTENT_USER.value:
+                    else:
                         ui.markdown(text)
                     
                     with ui.div(class_='d-flex gap-2 align-items-center'):                                                                       

@@ -24,24 +24,37 @@ def mod_concept_map(input, output, session, config_app):
     @reactive.calc
     def getConceptMapData():
 
-        def extractConceptMapFromOutline(d_outline, current_node):
+        def extractConceptMapFromAIGeneratedMap(d_map, nodes, current_node, node_counter):
+
+            concept_map = {current_node: []}
+            for n in nodes:
+                concept_map[current_node].append(f'{n}#{node_counter}')
+                concept_map_part, node_counter = extractConceptMapFromAIGeneratedMap(d_map, d_map.get(n, []), f'{n}#{node_counter}', node_counter+1) 
+                concept_map |= concept_map_part
+            return concept_map, node_counter
+
+        def extractConceptMapFromOutline(d_outline, current_node, node_counter):
 
             concept_map = {current_node: []}
             for k, v in d_outline.items():
                 if k != SpecialSectionTypes.CONTENT.value:
-                    concept_map[current_node].append(k)
-                    concept_map |= extractConceptMapFromOutline(v, k)
+                    concept_map[current_node].append(f'{k}#{node_counter}')
+                    concept_map_part, node_counter = extractConceptMapFromOutline(v, f'{k}#{node_counter}', node_counter+1)
+                    concept_map |= concept_map_part
                 else:
-                    for i, [content_type, content_value] in enumerate(d_outline[k]):
+                    for content_type, content_value in d_outline[k]:
                         if content_type == ContentTypes.CONCEPT_MAP.value:
-                            # Find the nodes with no incoming, 
+                            # In the content_value dictionary, find the nodes with no incoming, 
                             # as only these nodes would be the children of the current_node
                             nodes_with_in_deg = set()
                             for _, n_nei in content_value.items():
                                 nodes_with_in_deg |= set(n_nei)
-                            concept_map[current_node] += list(set(content_value.keys())-nodes_with_in_deg)
-                            concept_map |= content_value
-            return concept_map
+                            nodes_with_no_in_deg = set(content_value.keys()) - nodes_with_in_deg
+                            for n in nodes_with_no_in_deg:
+                                concept_map[current_node].append(f'{n}#{node_counter}')
+                                concept_map_part, node_counter = extractConceptMapFromAIGeneratedMap(content_value, content_value[n], f'{n}#{node_counter}', node_counter+1) 
+                                concept_map |= concept_map_part
+            return concept_map, node_counter
 
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
 
@@ -51,8 +64,10 @@ def mod_concept_map(input, output, session, config_app):
             d_outline = json.load(fp)
             
         concept_map = {}
+        node_counter = 0
         for k, v in d_outline.items():
-            concept_map |= extractConceptMapFromOutline(v, k)
+            concept_map_part, node_counter = extractConceptMapFromOutline(v, f'{k}#{node_counter}', node_counter+1)
+            concept_map |= concept_map_part
         return concept_map
     
     @reactive.effect

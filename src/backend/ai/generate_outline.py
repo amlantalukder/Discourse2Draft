@@ -57,13 +57,17 @@ class GenerateOutline:
     '''
 
     generate_outline_human_prompt = lambda self, instructions: (f'''
+    <Reference>
+    {{reference_summary}}
+    </Reference>
+                                                                
     <Query>
     {{query}}
     </Query>
                                               
     <Instructions>
     {instructions}
-    
+    - Read the Query and Reference if provided.
     - Provide the output in the following format.
     {{format_instructions}}
     </Instructions>
@@ -90,10 +94,10 @@ class GenerateOutline:
                 logging.info(f'Response does not have <content> tag, response: {response}')
                 return False
             return True
-
+        
         return_vals = extractLLMResponse(task_name = 'Generate Outline', 
                                   chain = self.generate_outline_chain,
-                                  kargs = {'query': state['query']},
+                                  kargs = {'query': state['query'], 'reference_summary': state.get('reference_summary', '')},
                                   keys_to_find = ['content'],
                                   value_names = ['content'],
                                   additionalCheckingFunc=contentChecker)

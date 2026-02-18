@@ -9,7 +9,6 @@ print = logging.info
 # ---------------------------------------------------------------------------
 class Config:
 
-    llms_with_structured_output_support = {'azure-gpt-4o', 'claude-3-5-sonnet', 'gemini-1.5-pro'}
     llms_selected = {
         'OpenAI': {
             'azure-o1-mini': 'o1-mini', 

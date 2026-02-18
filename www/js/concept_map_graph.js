@@ -487,7 +487,7 @@ class InteractiveAncestorGraph {
         // Add all nodes and links
         Object.keys(dictData).forEach(parent => {
             if (!nodeSet.has(parent)) {
-                nodes.push({ id: parent, label: parent });
+                nodes.push({ id: parent, label: parent.split('#')[0] });
                 nodeSet.add(parent);
             }
 
@@ -495,7 +495,7 @@ class InteractiveAncestorGraph {
             if (Array.isArray(children)) {
                 children.forEach(child => {
                     if (!nodeSet.has(child)) {
-                        nodes.push({ id: child, label: child });
+                        nodes.push({ id: child, label: child.split('#')[0] });
                         nodeSet.add(child);
                     }
                     links.push({ source: parent, target: child });
