@@ -87,7 +87,7 @@ def mod_contents(input, output, session,
                         @render.express
                         @print_func_name
                         def renderControlButtons():
-                            text, ico = ('Hide outline', 'eye-slash') if show_outline.get() else ('Show outline', 'eye')
+                            text, ico = ('Hide Input Panel', 'eye-slash') if show_outline.get() else ('Show Input Panel', 'eye')
                             with ui.tooltip(placement="top"):
                                 ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
                                 text
