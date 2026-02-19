@@ -1,5 +1,6 @@
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import Command
+from langchain_openai import ChatOpenAI
 from typing import Literal
 from .common import StateContentManager, StateOutlineManager
 from .llms import getAIModel
@@ -18,17 +19,16 @@ from .write_abstract import WriteAbstract
 from ..utils import Config
 from utils import print_func_name
 import logging
-from pathlib import Path
 
 # -----------------------------------------------------------------------
 @print_func_name
-def checkIfSummaryNeededForPrevContent(state: StateContentManager) -> bool:
-    return len(state.get('content_pre').split()) > Config.NUM_TOKENS_SUMMARY
+def checkIfSummaryNeededForPrevContent(state: StateContentManager, llm: ChatOpenAI) -> bool:
+    return llm.get_num_tokens(state.get('content_pre')) > Config.NUM_TOKENS_SUMMARY
 
 # -----------------------------------------------------------------------        
 @print_func_name
-def checkIfSummaryNeededForGenContent(state: StateContentManager) -> Command:
-    if len(state.get('content').split()) > Config.NUM_TOKENS_SUMMARY:
+def checkIfSummaryNeededForGenContent(state: StateContentManager, llm: ChatOpenAI) -> Command:
+    if llm.get_num_tokens(state.get('content')) > Config.NUM_TOKENS_SUMMARY:
         return Command(goto="Summarize Generated Content")
     return Command(update={'content_summary': state.get('content')}, goto=END)
         
@@ -94,9 +94,9 @@ class ContentWriterArchitecture(Architecture):
         workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
         workflow.add_node("Generate Content", GenerateContent(llm=self.llm, instructions=self.instructions))
         workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
-        workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
+        workflow.add_node("Check If Summary Needed", lambda state: checkIfSummaryNeededForGenContent(state, self.llm))
 
-        workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Generate Content"})
+        workflow.add_conditional_edges(START, lambda state: checkIfSummaryNeededForPrevContent(state, self.llm), {True: "Summarize Previous Content", False: "Generate Content"})
         workflow.add_edge("Summarize Previous Content", "Generate Content")
         workflow.add_edge("Generate Content", "Check If Summary Needed")
     
@@ -122,9 +122,9 @@ class ContentWriterArchitecture(Architecture):
             workflow.add_node("Wait for the Other Branch", wait)
         workflow.add_node("Generate Content", GenerateContentRAG(llm=self.llm, instructions=self.instructions))
         workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
-        workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
+        workflow.add_node("Check If Summary Needed", lambda state: checkIfSummaryNeededForGenContent(state, self.llm))
 
-        workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Analyze Content Header"})
+        workflow.add_conditional_edges(START, lambda state: checkIfSummaryNeededForPrevContent(state, self.llm), {True: "Summarize Previous Content", False: "Analyze Content Header"})
         workflow.add_edge("Summarize Previous Content", "Analyze Content Header")
         if self.collection_name:
             workflow.add_edge("Analyze Content Header", "Gather Context from Documents")
@@ -155,9 +155,9 @@ class ContentWriterArchitecture(Architecture):
         workflow.add_node("Gather Context", GatherContextGraph(llm=self.llm, collection_name=self.collection_name))
         workflow.add_node("Generate Content", GenerateContentGraphRAG(llm=self.llm, instructions=self.instructions))
         workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
-        workflow.add_node("Check If Summary Needed", checkIfSummaryNeededForGenContent)
+        workflow.add_node("Check If Summary Needed", lambda state: checkIfSummaryNeededForGenContent(state, self.llm))
 
-        workflow.add_conditional_edges(START, checkIfSummaryNeededForPrevContent, {True: "Summarize Previous Content", False: "Analyze Content Header"})
+        workflow.add_conditional_edges(START, lambda state: checkIfSummaryNeededForPrevContent(state, self.llm), {True: "Summarize Previous Content", False: "Analyze Content Header"})
         workflow.add_edge("Summarize Previous Content", "Analyze Content Header")
         workflow.add_edge("Analyze Content Header", "Gather Context")
         workflow.add_edge("Gather Context", "Generate Content")
