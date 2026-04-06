@@ -13,7 +13,7 @@ _Discourse2Draft_ can be accessed without creating an account. But an user accou
 ### Topic and outline
 
 <div class="fig-container">
-<img src="../www/assets/outline_example_small.png" alt="Example of an outline" width="100%" />
+<img src="../www/assets/outline_example.png" alt="Example of an outline" width="100%" />
 
 <strong>Figure 1: </strong>&nbsp;Raw outline input format of content creation. The right panel shows the hierarchy of how the outline is processed from the raw text of the left panel.
 
@@ -32,7 +32,7 @@ _Discourse2Draft_ has the facility of uploading documents in "text (TXT)", "Micr
 ## Content generation
 
 <div class="fig-container">
-<img src="../www/assets/architectures_small.png" alt="ContentWriterArchitecture" width="100%" />
+<img src="../www/assets/workflows.png" alt="ContentWriterArchitecture" width="100%" />
 
 <strong>Figure 2: </strong>&nbsp;Behind-the-scene user input processing steps and different AI architectures.
 
@@ -74,7 +74,7 @@ _Discourse2Draft_ provides the facility to download the generated document and b
 In the current version of _Discourse2Draft_, o3, o3-mini, o1, o1-mini, GPT-4o (OpenAI), Claude 3.7 sonnet, Claude 3.5 sonnet (Anthropic), Gemini 1.5 Flash, Gemini 1.5 Pro (Google), Llama 3.3 70B, Llama 3.2 90B, Llama 3.1 405B, Llama 3.1 70B (Meta) and Mistral Large 2 (Mistral) are available to select as the underlying LLM. The LLM, temperature and instructions can be provided on the settings window by clicking the "gear" icon of the top right corner.
 
 <div class="fig-container">
-<img src="../www/assets/tech_stack_small.png" alt="Technology stack" width="80%"/>
+<img src="../www/assets/tech_stack.png" alt="Technology stack" width="80%"/>
 
 <strong>Figure 4: </strong>&nbsp;The technology stack used to develop the app.
 
