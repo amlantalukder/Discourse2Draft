@@ -91,7 +91,7 @@ def mod_contents(input, output, session,
                             with ui.tooltip(placement="top"):
                                 ui.input_action_button('btn_show_hide_outline', '', icon=faicons.icon_svg(ico))
                                 text
-                            if input.user_input_panel() == "Query":
+                            if input.user_input_panel() == "Query" and input.text_query().strip() != '':
                                 with ui.tooltip(placement="top"):
                                     ui.input_action_button('btn_create_outline', '', icon=faicons.icon_svg("list-ol"))
                                     "Create outline"
@@ -105,8 +105,7 @@ def mod_contents(input, output, session,
                         @render.express
                         @print_func_name
                         def renderDownloadButton():
-                            _ = reload_view_flag.get()
-                            if not config_app.file_name: return
+                            if not hasOutline(): return
                             with ui.tooltip(placement="right"):
                                 with ui.div():
                                     with ui.popover(placement='bottom', options={'trigger': 'focus'}):
@@ -149,7 +148,7 @@ def mod_contents(input, output, session,
     with ui.div(class_='content-container'):
         with ui.div(class_='content-header'):
             ui.span('Content starts below ...')
-            with ui.div(class_='d-flex gap-5 align-items-center'):
+            with ui.div(class_='d-flex justify-content-between align-items-center'):
                 with ui.div(id='regenerate_text_controls', class_='border border-dark rounded p-2', style='display: None'):
                     with ui.div(class_='d-flex gap-2 align-items-center'):
                         ui.input_radio_buttons(id='radio_regeneration_type', label='', choices=['Expand', 'Rephrase', 'Remove'], inline=True)
@@ -180,7 +179,8 @@ def mod_contents(input, output, session,
                 @print_func_name
                 def renderShowLitResearch():
                     if input.text_outline().strip():
-                        ui.input_switch('switch_show_lit_research', 'Literature Search', value=(config_app.vector_db_collections_id_lit_search is not None))
+                        with ui.div(class_='border border-dark rounded p-2 ms-2 me-2'):
+                            ui.input_switch('switch_show_lit_research', 'Literature Search', value=(config_app.vector_db_collections_id_lit_search is not None))
 
                 @render.express
                 @print_func_name
@@ -210,8 +210,7 @@ def mod_contents(input, output, session,
                 @render.express
                 @print_func_name
                 def renderConceptMapGeneration():
-                    _ = reload_view_flag.get()
-                    if config_app.generated_files_id is None: return
+                    if not hasOutline(): return
                     ui.input_action_button(id='btn_show_concept_map', label="Concept map")
 
                         
@@ -234,7 +233,6 @@ def mod_contents(input, output, session,
                                 ui.span(f'{i+1}. {ref}')
 
     ui.include_js(Config.DIR_HOME / "www" / "js" / "addon.js")
-    ui.include_js(Config.DIR_HOME / "www" / "js" / "concept_map_graph.js")
     
     @reactive.effect
     @reactive.event(input.btn_new_file, ignore_init=True)
@@ -326,7 +324,11 @@ def mod_contents(input, output, session,
     @reactive.event(outline_from_outline_manager, ignore_init=True)
     @print_func_name
     def setOutlineFromOutlineManager():
-        ui.update_text_area(id='text_outline', value=outline_from_outline_manager.get())
+        outline_txt = outline_from_outline_manager.get()
+        d_outline = processOutline(outline_txt)
+        with open(Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json', 'w') as fp:
+            json.dump(d_outline, fp)
+        ui.update_text_area(id='text_outline', value=outline_txt)
         ui.update_navs(id='user_input_panel', selected='Structured Outline')
         
     @print_func_name
@@ -500,10 +502,12 @@ def mod_contents(input, output, session,
         
         # Load outline
         outline_file_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
-        
-        # Read outline
-        with open(outline_file_path) as fp:
-            d_outline = json.load(fp)
+        if outline_file_path.exists():
+            # Read outline
+            with open(outline_file_path) as fp:
+                d_outline = json.load(fp)
+        else:
+            d_outline = {}
         
         raw_outline = '\n'.join(getRawOutline(d_outline))
 
@@ -565,6 +569,14 @@ def mod_contents(input, output, session,
 
         ui.update_text_area('text_outline', value=example)
 
+    @reactive.calc
+    @reactive.event(reload_view_flag)
+    @print_func_name
+    def hasOutline():
+        if not config_app.generated_files_id: return False
+        outline_path = Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json'
+        return outline_path.exists()
+    
     @reactive.effect
     @reactive.event(input.btn_upload_topic_desc)
     @print_func_name

@@ -17,7 +17,7 @@ class Versions(Enum):
 
 class Config:
     
-    current_version = Versions.PRODUCTION.value
+    current_version = Versions.DEVELOPMENT.value
 
     DIR_HOME = Path(__file__).parent
     DIR_DATA = DIR_HOME / 'data'

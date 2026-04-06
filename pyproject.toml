@@ -23,6 +23,7 @@ dependencies = [
     "langgraph>=0.3.34",
     "markdown>=3.10.1",
     "matplotlib>=3.10.3",
+    "nbformat>=5.10.4",
     "pandas>=2.2.3",
     "plotly>=6.5.2",
     "psycopg2-binary>=2.9.10",

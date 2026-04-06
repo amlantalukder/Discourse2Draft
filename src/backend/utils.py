@@ -23,8 +23,8 @@ class Config:
             'claude-3-5-sonnet': 'Claude 3.5 sonnet'
         }, 
         'Google': {
-            'gemini-1.5-flash': 'Gemini 1.5 Flash', 
-            'gemini-1.5-pro': 'Gemini 1.5 Pro'
+            'gemini-3.1-flash': 'Gemini 3.1 Flash', 
+            'gemini-3.1-pro': 'Gemini 3.1 Pro'
         }, 
         'Meta': {
                   'llama3-3-70b': 'Llama 3.3 70B',
