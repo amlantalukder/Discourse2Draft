@@ -116,9 +116,7 @@ div.title-bar {
   justify-content: space-between;
   align-items: center;
   background-color: #bfc0fd;
-  height: 60px;
-  padding-left: 20px;
-  padding-right: 20px;
+  padding: 10px 20px;
 }
 
 div.name-bar {

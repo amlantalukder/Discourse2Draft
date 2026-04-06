@@ -13,7 +13,7 @@ _Discourse2Draft_ can be accessed without creating an account. But an user accou
 ### Topic and outline
 
 <div class="fig-container">
-<img src="../www/assets/outline_example.png" alt="Example of an outline" width="100%" />
+<img src="../www/assets/outline_example_small.png" alt="Example of an outline" width="100%" />
 
 <strong>Figure 1: </strong>&nbsp;Raw outline input format of content creation. The right panel shows the hierarchy of how the outline is processed from the raw text of the left panel.
 
@@ -32,7 +32,7 @@ _Discourse2Draft_ has the facility of uploading documents in "text (TXT)", "Micr
 ## Content generation
 
 <div class="fig-container">
-<img src="../www/assets/workflows.png" alt="ContentWriterArchitecture" width="100%" />
+<img src="../www/assets/workflows_small.png" alt="ContentWriterArchitecture" width="100%" />
 
 <strong>Figure 2: </strong>&nbsp;Behind-the-scene user input processing steps and different AI architectures.
 
@@ -55,7 +55,7 @@ Discouse2Draft follows different architecture scenario based on user interaction
 **RAG + Literature:** This architecture, as the name suggests, merges both "RAG" and "Literature" architectures. Here each key-phrase, generated after analyzing the previous contents and the current section headers, will be used for both searching the _document collection_ and the _literature collection_ of the vector database to retrieve semantically similar text chunks from both sources. The text chunks are then passed to the LLM as context. The LLM considers the provided context from uploaded documents and literature search along with its training data to generate the final content.
 
 <div class="fig-container">
-<img src="../www/assets/app_screenshot.png" alt="Content generation widnow" width="100%"/>
+<img src="../www/assets/app_screenshot_small.png" alt="Content generation widnow" width="100%"/>
 
 <strong>Figure 3: </strong>&nbsp;Content generation window of the app. The top left and bottom left panels show the generated and user uploaded files. The top right panel contains the outline. The bottom right panel contains the generated content.
 
@@ -74,7 +74,7 @@ _Discourse2Draft_ provides the facility to download the generated document and b
 In the current version of _Discourse2Draft_, o3, o3-mini, o1, o1-mini, GPT-4o (OpenAI), Claude 3.7 sonnet, Claude 3.5 sonnet (Anthropic), Gemini 1.5 Flash, Gemini 1.5 Pro (Google), Llama 3.3 70B, Llama 3.2 90B, Llama 3.1 405B, Llama 3.1 70B (Meta) and Mistral Large 2 (Mistral) are available to select as the underlying LLM. The LLM, temperature and instructions can be provided on the settings window by clicking the "gear" icon of the top right corner.
 
 <div class="fig-container">
-<img src="../www/assets/tech_stack.png" alt="Technology stack" width="80%"/>
+<img src="../www/assets/tech_stack_small.png" alt="Technology stack" width="80%"/>
 
 <strong>Figure 4: </strong>&nbsp;The technology stack used to develop the app.
 
