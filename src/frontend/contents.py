@@ -76,7 +76,7 @@ def mod_contents(input, output, session,
                 with ui.div(class_=class_name_outline):            
                     with ui.navset_underline(id="user_input_panel", selected="Query"):
                         with ui.nav_panel("Query"):
-                            ui.input_text_area(id='text_query', label='', placeholder='''Write an query...''', rows=8, width='100%')
+                            ui.input_text_area(id='text_query', label='', placeholder='''Write a query.\n\nYou could start with something like "Write me a draft on quantum computing and its applications"''', rows=8, width='100%')
                             ui.input_file("btn_upload_topic_desc", "Choose a reference document (optional)", accept=[".txt", ".pdf", ".docx"], multiple=False)
                         with ui.nav_panel("Structured Outline"):
                             with ui.div(class_='col mt-2'):

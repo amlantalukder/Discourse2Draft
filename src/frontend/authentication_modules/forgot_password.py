@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 from utils import print_func_name, Config
 from .utils import validateField, FieldType
-from ...backend.db import updateDB, encryptPassword
+from ...backend.db import selectFromDB, updateDB, encryptPassword
 
 # -----------------------------------------------------------------------
 @module
@@ -77,6 +77,14 @@ def mod_forgot_password(input, output, session, changeView):
                 raise Exception(f"{response.status_code} {response.text}")
 
         email = input.text_email()
+
+        records = selectFromDB(table_name='credentials', field_names=['email'], field_values=[[email]])
+
+        if records.empty:
+            ui.notification_show(('Email address does not exist in database.' 
+                                 'Please create an account with this email address or '
+                                 'try again with a different email address.'), type='error', duration=10)
+            return
         
         if not email:
             ui.notification_show('Please enter your email', type='error')
@@ -144,7 +152,7 @@ def mod_forgot_password(input, output, session, changeView):
                  select_values=[[activation_code.get().get('email')]]
         )
 
-        ui.notification_show('Password reset successfully. Please log in with your new password.', type='message', duration=30)
+        ui.notification_show('Password reset successfully. Please log in with your new password.', type='message', duration=10)
         
         activation_code.set({})
         show_reset_password.set(False)
