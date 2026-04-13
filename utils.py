@@ -4,7 +4,7 @@ import functools
 import inspect
 from rich import print
 import logging
-from logging.handlers import RotatingFileHandler
+import dotenv
 from src.backend.utils import Config as backend_config
 from enum import Enum
 
@@ -16,7 +16,10 @@ class Versions(Enum):
     PRODUCTION = "production"
 
 class Config:
-    
+
+    # ----------------------------------------------------------
+    # Application configuration
+    # ----------------------------------------------------------    
     current_version = Versions.DEVELOPMENT.value
 
     DIR_HOME = Path(__file__).parent
@@ -24,6 +27,9 @@ class Config:
     APP_NAME = 'Discourse2Draft'
     APP_NAME_AS_PREFIX = 'discourse2draft'
 
+    # ----------------------------------------------------------
+    # Debug configuration
+    # ----------------------------------------------------------
     debug_config = {'print': True,
                     'print_func_call': True,
                     'detailed': False,
@@ -31,6 +37,11 @@ class Config:
     
     if debug_config['debug_ai']:
         backend_config.setEnvWithPrefix('LANGFUSE')
+
+    # ----------------------------------------------------------
+    # Environment variables
+    # ----------------------------------------------------------
+    env_config = dotenv.dotenv_values(Path(".env"))
 
     # ----------------------------------------------------------
     # Set up logging
