@@ -36,21 +36,22 @@ class Config:
             'mistral-large-2': 'Mistral Large 2'
         }
     }
+
     env_config = dotenv.dotenv_values(Path(".env"))
 
-    # Generation
-    NUM_TOKENS_SUMMARY = 500
+    # Number of attempts to call LLM on failure
     RETRY_COUNTER = 2
 
-    # RAG
-    MAX_CONTEXT_TOKENS = 2000
-    MAX_KEYPHRASES = 10
-    MAX_KEYPHRASES_LIT_SEARCH = 5
-    NUM_MAX_LITERATURE = 2
-    MAX_CONTENT_SIZE_PER_LITERATURE = 20000
-    SIMILARITY_METRIC = 'similarity_score_threshold'
-    NUM_DOCS_MAX = 5
-    SIMILARITY_THRESHOLD = 0.3
+    # Content Generation settings
+    NUM_TOKENS_SUMMARY = env_config.get("NUM_TOKENS_SUMMARY", 500)
+    MAX_CONTEXT_TOKENS = env_config.get("MAX_CONTEXT_TOKENS", 2000)
+    MAX_KEYPHRASES = env_config.get("MAX_KEYPHRASES", 10)
+    MAX_KEYPHRASES_LIT_SEARCH = env_config.get("MAX_KEYPHRASES_LIT_SEARCH", 5)
+    NUM_MAX_LITERATURE = env_config.get("NUM_MAX_LITERATURE", 2)
+    MAX_CONTENT_SIZE_PER_LITERATURE = env_config.get("MAX_CONTENT_SIZE_PER_LITERATURE", 20000)
+    SIMILARITY_METRIC = env_config.get("SIMILARITY_METRIC", 'similarity_score_threshold')
+    NUM_DOCS_MAX = env_config.get("NUM_DOCS_MAX", 5)
+    SIMILARITY_THRESHOLD = env_config.get("SIMILARITY_THRESHOLD", 0.3)
 
     @staticmethod
     def setEnvWithPrefix(prefix):

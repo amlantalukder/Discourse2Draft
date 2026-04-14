@@ -72,6 +72,34 @@ DATABASE=<Database name>
 
 # NCBI (Required for PubMed access)
 NCBI_API_KEY=<NCBI API key>
+
+# ----------------------------------------------------------------
+# Settings for content generation (Default)
+# ----------------------------------------------------------------
+
+# Maximum number of tokens allowed for previous contents summary of a section
+NUM_TOKENS_SUMMARY = 500
+
+# Number of tokens allowed in the context of a single LLM call
+MAX_CONTEXT_TOKENS = 2000
+
+# Maximum number of keyphrases to extract for RAG and Literature Search
+# from analyzing the previous contents summary and the current content header.
+MAX_KEYPHRASES = 10
+MAX_KEYPHRASES_LIT_SEARCH = 5
+
+# Maximum number of articles allowed for literature search
+NUM_MAX_LITERATURE = 2
+
+# Maximum number of content allowed from each article returned by the literature search
+MAX_CONTENT_SIZE_PER_LITERATURE = 20000
+
+# Similarity metric and threshold for retrieving relevant documents from the vector database (ChromaDB) for RAG and Literature Search
+SIMILARITY_METRIC = 'similarity_score_threshold'
+SIMILARITY_THRESHOLD = 0.3
+
+# Maximum number of relevant documents to retrieve from the vector database (ChromaDB) for RAG and Literature Search
+NUM_DOCS_MAX = 5
 ```
 
 ### Running app locally
