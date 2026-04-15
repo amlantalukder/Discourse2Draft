@@ -3152,7 +3152,7 @@ wheels = [
 ]
 
 [[package]]
-name = "word-processor-ai"
+name = "Discourse2Draft"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
