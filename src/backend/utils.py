@@ -43,15 +43,15 @@ class Config:
     RETRY_COUNTER = 2
 
     # Content Generation settings
-    NUM_TOKENS_SUMMARY = env_config.get("NUM_TOKENS_SUMMARY", 500)
-    MAX_CONTEXT_TOKENS = env_config.get("MAX_CONTEXT_TOKENS", 2000)
-    MAX_KEYPHRASES = env_config.get("MAX_KEYPHRASES", 10)
-    MAX_KEYPHRASES_LIT_SEARCH = env_config.get("MAX_KEYPHRASES_LIT_SEARCH", 5)
-    NUM_MAX_LITERATURE = env_config.get("NUM_MAX_LITERATURE", 2)
-    MAX_CONTENT_SIZE_PER_LITERATURE = env_config.get("MAX_CONTENT_SIZE_PER_LITERATURE", 20000)
+    NUM_TOKENS_SUMMARY = int(env_config.get("NUM_TOKENS_SUMMARY", 500))
+    MAX_CONTEXT_TOKENS = int(env_config.get("MAX_CONTEXT_TOKENS", 2000))
+    MAX_KEYPHRASES = int(env_config.get("MAX_KEYPHRASES", 10))
+    MAX_KEYPHRASES_LIT_SEARCH = int(env_config.get("MAX_KEYPHRASES_LIT_SEARCH", 5))
+    NUM_MAX_LITERATURE = int(env_config.get("NUM_MAX_LITERATURE", 2))
+    MAX_CONTENT_SIZE_PER_LITERATURE = int(env_config.get("MAX_CONTENT_SIZE_PER_LITERATURE", 20000))
     SIMILARITY_METRIC = env_config.get("SIMILARITY_METRIC", 'similarity_score_threshold')
-    NUM_DOCS_MAX = env_config.get("NUM_DOCS_MAX", 5)
-    SIMILARITY_THRESHOLD = env_config.get("SIMILARITY_THRESHOLD", 0.3)
+    NUM_DOCS_MAX = int(env_config.get("NUM_DOCS_MAX", 5))
+    SIMILARITY_THRESHOLD = float(env_config.get("SIMILARITY_THRESHOLD", 0.3))
 
     @staticmethod
     def setEnvWithPrefix(prefix):
