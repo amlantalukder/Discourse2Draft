@@ -28,7 +28,7 @@ class ConfigApp:
     email: str = ''
     session_id: str = ''
     settings_id: int | None = None
-    llm: str = 'azure-o1-mini'
+    llm: str = Config.env_config['DEFAULT_AI_MODEL']
     temperature: float = 0.0
     instructions: str = ''
     file_name: str = ''

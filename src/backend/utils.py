@@ -11,29 +11,24 @@ class Config:
 
     llms_selected = {
         'OpenAI': {
-            'azure-o1-mini': 'o1-mini', 
-            'azure-o1': 'o1', 
-            'azure-o3-mini': 'o3-mini', 
-            'azure-o3': 'o3', 
-            'azure-gpt-4o': 'GPT-4o',
-            'azure-gpt-5': 'GPT-5'
+            'azure-gpt-5': 'GPT-5', 
+            'azure-o3': 'o3',
+            'azure-o1-mini': 'o1-mini'
         }, 
-        'Anthropic': {
-            'claude-3-7-sonnet': 'Claude 3.7 sonnet', 
-            'claude-3-5-sonnet': 'Claude 3.5 sonnet'
-        }, 
+        # 'Anthropic': {
+        #     'claude-3-7-sonnet': 'Claude 3.7 sonnet', 
+        #     'claude-3-5-sonnet': 'Claude 3.5 sonnet'
+        # }, 
         'Google': {
-            'gemini-3.1-flash': 'Gemini 3.1 Flash', 
-            'gemini-3.1-pro': 'Gemini 3.1 Pro'
+            'gemini-3-pro': 'Gemini 3 Pro', 
+            'gemini-3-flash': 'Gemini 3 Flash',
         }, 
         'Meta': {
-                  'llama3-3-70b': 'Llama 3.3 70B',
-                 'llama3-2-90b': 'Llama 3.2 90B', 
-                 'llama3-1-405b': 'Llama 3.1 405B', 
-                 'llama3-1-70b': 'Llama 3.1 70B'
+                 'llama4-scout-17b-instruct': 'Llama 4 scout 17B instruct',
+                 'llama3-3-70b': 'Llama 3.3 70B'
         },
         'Mistral': {
-            'mistral-large-2': 'Mistral Large 2'
+            'mistral-large-3': 'Mistral Large 3'
         }
     }
 
