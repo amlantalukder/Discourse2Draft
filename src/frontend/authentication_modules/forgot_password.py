@@ -94,7 +94,7 @@ def mod_forgot_password(input, output, session, changeView):
         
         try:
             send_simple_message(email=email, code=code)
-            ui.notification_show('Code sent successfully', type='message')
+            ui.notification_show('Code sent successfully. If you don\'t receive it, please check your spam folder. Otherwise click "Resend Code".', type='message')
             activation_code.set({'code': code, 'email': email, 'timestamp': time.time()})
         except Exception as exp:
             logging.error(f'Error sending activation code to user {email}: {str(exp)}') 
