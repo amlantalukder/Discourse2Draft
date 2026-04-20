@@ -30,6 +30,8 @@ langchain-openai==0.3.28
     # via discourse2draft (pyproject.toml)
 langchain-unstructured==0.1.6
     # via discourse2draft (pyproject.toml)
+langfuse==4.3.1
+    # via discourse2draft (pyproject.toml)
 langgraph==0.5.3
     # via discourse2draft (pyproject.toml)
 markdown==3.10.2
