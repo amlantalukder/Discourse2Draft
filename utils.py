@@ -5,8 +5,12 @@ import inspect
 from rich import print
 import logging
 import dotenv
-from src.backend.utils import Config as backend_config
 from enum import Enum
+from langfuse.langchain import CallbackHandler
+from langfuse import Langfuse
+import httpx
+import truststore
+import ssl
 
 class Versions(Enum):
     """
@@ -32,16 +36,39 @@ class Config:
     # ----------------------------------------------------------
     debug_config = {'print': True,
                     'print_func_call': True,
-                    'detailed': False,
-                    'debug_ai': False}
+                    'detailed': False}
     
-    if debug_config['debug_ai']:
-        backend_config.setEnvWithPrefix('LANGFUSE')
+    # ----------------------------------------------------------
+    # Certificates configuration for secure connections
+    # ----------------------------------------------------------
+    truststore.inject_into_ssl()
+    cert_path = DIR_HOME / 'certs/NIH-FULL.pem'
+    if cert_path.exists():
+        httpx_client = httpx.Client(verify=ssl.create_default_context(cafile=cert_path))
+    else:
+        httpx_client = None
 
     # ----------------------------------------------------------
     # Environment variables
     # ----------------------------------------------------------
     env_config = dotenv.dotenv_values(Path(".env"))
+
+    # ----------------------------------------------------------
+    # Langfuse Tracing configuration
+    # ----------------------------------------------------------
+    langfuse_handler = None
+    
+    if bool(env_config.get("LANGFUSE_TRACING", False)):
+        try:
+            langfuse = Langfuse(
+                public_key=env_config["LANGFUSE_PUBLIC_KEY"],
+                secret_key=env_config["LANGFUSE_SECRET_KEY"],
+                host=env_config["LANGFUSE_BASE_URL"],
+                httpx_client=httpx_client
+            )
+            langfuse_handler = CallbackHandler()    
+        except Exception as exp:
+            logging.error(exp)
 
     # ----------------------------------------------------------
     # Set up logging
@@ -64,7 +91,7 @@ class Config:
     # ----------------------------------------------------------
     # Ensure data directory exists
     # ----------------------------------------------------------
-    DIR_CONTENTS = DIR_DATA / backend_config.env_config['HOST'] / backend_config.env_config['DATABASE']
+    DIR_CONTENTS = DIR_DATA / env_config['HOST'] / env_config['DATABASE']
     DIR_CONTENTS.mkdir(parents=True, exist_ok=True)
 
 def print_func_name(func):

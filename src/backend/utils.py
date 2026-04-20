@@ -3,6 +3,7 @@ import dotenv
 from pathlib import Path
 import os
 import logging
+import traceback
 
 print = logging.info
 
@@ -53,3 +54,7 @@ class Config:
         for k, v in Config.env_config.items():
             if k.startswith(prefix):
                 os.environ[k] = v
+
+# ---------------------------------------------------------------------------
+def traceError(exp):
+    return f'Line number: {exp.__traceback__.tb_lineno}, Description: {exp}\n\n{traceback.format_exc()}'

@@ -101,7 +101,7 @@ def generateOutlineByAI(query, dir_path_ref_files=None):
     Use AI to generate outline from a given query
     '''
 
-    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files).agent
+    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files)
     
     response = agent.invoke({'query': query})
     outline = response['content']
@@ -113,7 +113,7 @@ def processOutlineByAI(outline):
     '''
     Use AI to process outline into structured format
     '''
-    agent = OutlineFormatterArchitecture().agent
+    agent = OutlineFormatterArchitecture()
     
     response = agent.invoke({'outline_unstructured': outline})
     outline_structured = response['content']
@@ -192,7 +192,7 @@ def mod_outline_manager(input, output, session, outline, saved_outline, close_fn
                             with ui.tooltip():
                                 ui.input_action_link('btn_remove', '', icon=faicons.icon_svg("xmark"))
                                 'Remove'                 
-                        if not show_text.get() and text != '[Reserved for AI content]':
+                        if not show_text.get() and text_type != ContentTypes.CONTENT_AI.value:
                             with ui.tooltip():
                                 ui.input_action_link('btn_edit', '', icon=faicons.icon_svg("pen"))
                                 'Edit'
@@ -538,7 +538,7 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
         temperature = input.slide_temp()
         instructions = input.text_instructions()
 
-        agent = OutlineCreatorArchitecture(llm, temperature=temperature, instructions=instructions).agent
+        agent = OutlineCreatorArchitecture(llm, temperature=temperature, instructions=instructions)
 
         if not topic_desc.get():
             return generateOutline(agent, topic_name.get())

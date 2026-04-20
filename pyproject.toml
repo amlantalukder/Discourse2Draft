@@ -20,6 +20,7 @@ dependencies = [
     "langchain-graph-retriever[chroma]>=0.8.0",
     "langchain-openai>=0.3.27",
     "langchain-unstructured>=0.1.6",
+    "langfuse>=4.3.1",
     "langgraph>=0.3.34",
     "markdown>=3.10.1",
     "matplotlib>=3.10.3",

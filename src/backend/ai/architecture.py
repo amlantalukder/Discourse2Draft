@@ -16,8 +16,8 @@ from .format_outline import FormatOutline
 from .add_literature import AddLiterature
 from .detect_abstract_section import DetectAbstractSection
 from .write_abstract import WriteAbstract
-from ..utils import Config
-from utils import print_func_name
+from ..utils import Config, traceError
+from utils import print_func_name, Config as config_base
 import logging
 
 # -----------------------------------------------------------------------
@@ -48,6 +48,35 @@ class Architecture:
 
     def createAgent(self):
         raise NotImplementedError
+    
+    # -----------------------------------------------------------------------
+    def invoke(self, input: dict) -> dict:
+
+        try:
+            if config_base.langfuse_handler:
+                response = self.agent.invoke(input=input, config={"callbacks": [config_base.langfuse_handler]})
+            response = self.agent.invoke(input=input)
+        except Exception as exp:
+            error = traceError(exp)
+            logging.error(error)
+            raise Exception('A problem occurred connecting to the AI model. Please contact support if the problem persists.')
+        
+        return response
+        
+    # -----------------------------------------------------------------------
+    async def ainvoke(self, input: dict) -> dict:
+
+        try:
+            if config_base.langfuse_handler:
+                response = await self.agent.ainvoke(input=input, config={"callbacks": [config_base.langfuse_handler]})
+            response = await self.agent.ainvoke(input=input)
+        except Exception as exp:
+            error = traceError(exp)
+            logging.error(error)
+            raise Exception('A problem occurred connecting to the AI model. Please contact support if the problem persists.')
+        
+        return response
+
 
 # -----------------------------------------------------------------------
 class ContentWriterArchitecture(Architecture):

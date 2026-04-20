@@ -71,10 +71,10 @@ class ConfigApp:
                                         instructions=self.instructions, 
                                         type=ai_architecture,
                                         collection_name= vector_db_collection_name,
-                                        collection_name_lit_search=vector_db_collection_name_lit_search).agent
+                                        collection_name_lit_search=vector_db_collection_name_lit_search)
         
-        self.agent_abstract_detector = AbstractSectionDetectorArchitecture().agent
-        self.agent_abstract_writer = AbstractWriterArchitecture().agent
+        self.agent_abstract_detector = AbstractSectionDetectorArchitecture()
+        self.agent_abstract_writer = AbstractWriterArchitecture()
         
     def __repr__(self):
         return f'''ConfigApp(email={self.email}, 
