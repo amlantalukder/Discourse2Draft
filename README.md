@@ -54,6 +54,9 @@ Refer to the example.env file for the required environment variables. Create a .
 AI_BASE_URL=<URL to AI service>
 AI_API_KEY=<API key for AI service>
 
+# Default AI Model (Can be replaced by the model id of the preferred LLM)
+DEFAULT_AI_MODEL='azure-o3'
+
 # Langfuse (Optional, used for debugging)
 LANGFUSE_SECRET_KEY=<Secret key for Langfuse>
 LANGFUSE_PUBLIC_KEY=<Public key for Langfuse>
@@ -70,8 +73,12 @@ PASSWORD=<Database password>
 PORT=<Database port>
 DATABASE=<Database name>
 
-# NCBI (Required for PubMed access)
+# NCBI (Optional, required for access of higher number of articles from PubMed)
 NCBI_API_KEY=<NCBI API key>
+
+# Mail service (Mailgun) (Optional, required for password retrieval during authentication)
+MAILGUN_DOMAIN=<Mailgun domain>
+MAILGUN_API_KEY=<Mailgun API key>
 
 # ----------------------------------------------------------------
 # Settings for content generation (Default)

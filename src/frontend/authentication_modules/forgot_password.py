@@ -56,14 +56,25 @@ def mod_forgot_password(input, output, session, changeView):
 
     # -----------------------------------------------------------------------
     @reactive.effect
+    @print_func_name
+    def checkEnvVarSettings():
+
+        if not (Config.env_config['MAILGUN_DOMAIN'] and Config.env_config['MAILGUN_API_KEY']):
+            ui.notification_show('The information required to send an email are not set up.', type='error')
+
+    # -----------------------------------------------------------------------
+    @reactive.effect
     @reactive.event(input.btn_send_code)
     @print_func_name
     def forgotPasswordSendLink():
 
-        import requests
+        if not (Config.env_config['MAILGUN_DOMAIN'] and Config.env_config['MAILGUN_API_KEY']):
+            ui.notification_show('The information required to send an email are not set up.', type='error')
+            return
 
         def send_simple_message(email, code):
             
+            import requests
 
             response = requests.post(
                             f"https://api.mailgun.net/v3/{Config.env_config['MAILGUN_DOMAIN']}/messages",
