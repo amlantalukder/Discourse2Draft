@@ -11,6 +11,7 @@ dependencies = [
     "google-auth>=2.40.3",
     "google-auth-httplib2>=0.3.0",
     "google-auth-oauthlib>=1.2.3",
+    "gunicorn>=25.3.0",
     "ipykernel>=6.29.5",
     "langchain>=0.3.26",
     "langchain-chroma==0.2.5",
@@ -35,5 +36,6 @@ dependencies = [
     "shinywidgets>=0.5.2",
     "truststore>=0.10.1",
     "unstructured[docx]>=0.17.2",
+    "uvicorn>=0.34.2",
     "xmltodict>=0.14.2",
 ]

@@ -7,15 +7,6 @@ from ..utils import Config
 from utils import Config as config_base, print_func_name, Versions
 import logging
 
-import httpx
-import truststore
-import ssl
-truststore.inject_into_ssl()
-cert_path = str(Path(config_base.DIR_HOME / 'certs/NIH-FULL.pem'))
-ctx = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-ssl_context = ssl.create_default_context()
-client = httpx.Client(verify=cert_path)
-
 # ---------------------------------------------------------------------------
 @print_func_name
 def extractAvailableLLMs() -> tuple[list, list]:
@@ -33,7 +24,7 @@ def extractAvailableLLMs() -> tuple[list, list]:
     try:
         response = requests.get(url=f'{Config.env_config.get("AI_BASE_URL")}/model/info',
                                 headers={'API-Key': litellm_api_key},
-                                verify=cert_path)
+                                verify=config_base.cert_path)
         if response.ok:
             response_d = response.json()
             if response_d and ('data' in response_d):
@@ -83,7 +74,7 @@ def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> Cha
             timeout=None,
             max_retries=2,
             seed=1000,
-            http_client=client
+            http_client=config_base.httpx_client
         )
     
     return OpenAIEmbeddings(
@@ -92,5 +83,5 @@ def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> Cha
         api_key=Config.env_config['AI_API_KEY'],
         request_timeout=None,
         max_retries=2,
-        http_client=client,
+        http_client=config_base.httpx_client,
     )

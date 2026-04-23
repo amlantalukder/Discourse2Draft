@@ -47,7 +47,7 @@ Backend contains agents developed by Langgraph architecture. The graph starts wi
 
 ### Setting up environment variables
 
-Refer to the example.env file for the required environment variables. Create a .env file in the root directory of the project and add the required credentials. Below is an example of the .env file structure:
+Refer to the example.env file for the required environment variables. Create a .env file in the root directory of the project and add the required credentials. Below is the template of the .env file (also provided in the example.env file):
 
 ```yaml
 # AI (Required for content generation)
@@ -109,11 +109,9 @@ SIMILARITY_THRESHOLD = 0.3
 NUM_DOCS_MAX = 5
 ```
 
-### Running app locally
+**Set up**
 
-**Using uv**
-
-Use the following steps to run the app with uv:
+Use the following steps to set up the app environment with uv:
 
 - Create python environment.\
   - `pip install uv`
@@ -121,12 +119,28 @@ Use the following steps to run the app with uv:
 - Create ".env" file with the required credentials, following "example.env" file.
   - `cp example.env .env`
   - Add the credentials in ".env" file.
-- Run the app\
-   `uv run shiny run app.py`
 
-  or
+### Running app locally
 
-  `uv run shiny run app.py -p <port>`
+**Using uv**
+
+`uv run shiny run app.py`
+
+or
+
+`uv run shiny run app.py -p <port>`
+
+**Using gunicorn**
+
+- Stop the already running app instance
+
+  `ps aux | grep "/Discourse2Draft/.venv/bin/gunicorn" | grep -v grep`
+
+  `pkill -f /Discourse2Draft/.venv/bin/gunicorn`
+
+- Run the app in detached mode using gunicorn
+
+  `uv run gunicorn -k workers.MyUvicornWorker -b <hostname>:<port> main:app --daemon`
 
 **Using Docker**
 
