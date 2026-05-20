@@ -109,6 +109,21 @@ SIMILARITY_THRESHOLD = 0.3
 NUM_DOCS_MAX = 5
 ```
 
+To set up with docker container the following variables must be set with the assigned values
+
+```yaml
+# ChromaDB (Required for RAG pipeline)
+CHROMA_HOST="localhost"
+CHROMA_PORT="8000"
+
+# PostgreSQL Database (Required for backend storage)
+DB_NAME = 'discourse2draft-db'
+DB_HOST = 'localhost'
+DB_USER = 'postgres'
+DB_PASSWORD = 'root'
+DB_PORT = 5432
+```
+
 ### Running app locally
 
 **Using uv**
@@ -132,7 +147,7 @@ Use the following steps to run the app with uv:
 
 Use the following command to run the app with Docker:
 
-`docker compose up --build`
+`docker compose up -d`
 
 # Contact
 

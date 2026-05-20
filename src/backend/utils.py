@@ -20,17 +20,17 @@ class Config:
         #     'claude-3-7-sonnet': 'Claude 3.7 sonnet', 
         #     'claude-3-5-sonnet': 'Claude 3.5 sonnet'
         # }, 
-        'Google': {
-            'gemini-3-pro': 'Gemini 3 Pro', 
-            'gemini-3-flash': 'Gemini 3 Flash',
-        }, 
-        'Meta': {
-                 'llama4-scout-17b-instruct': 'Llama 4 scout 17B instruct',
-                 'llama3-3-70b': 'Llama 3.3 70B'
-        },
-        'Mistral': {
-            'mistral-large-3': 'Mistral Large 3'
-        }
+        # 'Google': {
+        #     'gemini-3-pro': 'Gemini 3 Pro', 
+        #     'gemini-3-flash': 'Gemini 3 Flash',
+        # }, 
+        # 'Meta': {
+        #          'llama4-scout-17b-instruct': 'Llama 4 scout 17B instruct',
+        #          'llama3-3-70b': 'Llama 3.3 70B'
+        # },
+        # 'Mistral': {
+        #     'mistral-large-3': 'Mistral Large 3'
+        # }
     }
 
     env_config = dotenv.dotenv_values(Path(".env"))

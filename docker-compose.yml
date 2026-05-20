@@ -1,11 +1,64 @@
 services:
-  discourse2draft:
-    container_name: Discourse2Draft
+  discourse2draft-db:
+    container_name: db
+    image: postgres:17.9
+    restart: always
+    expose:
+      - "5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - autonomous
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER}"]
+
+  chroma-db:
+    container_name: chroma-db
+    image: ghcr.io/chroma-core/chroma:1.3.0
+    restart: always
+    expose:
+      - "8000"
+    volumes:
+      - chroma-data:/data
+    networks:
+      - autonomous
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/bin/bash",
+          "-c",
+          "cat < /dev/null > /dev/tcp/${CHROMA_HOST}/${CHROMA_PORT}",
+        ]
+      interval: 30s
+      timeout: 3600s
+      retries: 5
+
+  web-app:
+    container_name: web-app
     build: .
     ports:
       - "8011:8011"
+    networks:
+      - autonomous
+    depends_on:
+      discourse2draft-db:
+        condition: service_healthy
+      chroma-db:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
 
 volumes:
   data:
+  db-data:
+  chroma-data:
+
+networks:
+  autonomous:
+    driver: bridge

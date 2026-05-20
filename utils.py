@@ -91,7 +91,7 @@ class Config:
     # ----------------------------------------------------------
     # Ensure data directory exists
     # ----------------------------------------------------------
-    DIR_CONTENTS = DIR_DATA / env_config['HOST'] / env_config['DATABASE']
+    DIR_CONTENTS = DIR_DATA / env_config['DB_HOST'] / env_config['DB_NAME']
     DIR_CONTENTS.mkdir(parents=True, exist_ok=True)
 
 def print_func_name(func):

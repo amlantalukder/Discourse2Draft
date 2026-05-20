@@ -5,6 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import DateTime
 from sqlalchemy.orm import mapped_column, Mapped, Session
+from sqlalchemy_utils import database_exists, create_database
 from datetime import datetime
 from typing import Literal, List, Optional
 import dotenv
@@ -226,10 +227,20 @@ class VectorDBCollectionFiles(Base):
 
 # -----------------------------------------------------------------------
 try:
-    engine = sa.create_engine(f'postgresql://{Config.env_config["USER"]}:{Config.env_config["PASSWORD"]}@{Config.env_config["HOST"]}/{Config.env_config["DATABASE"]}')
+
+    connection_string = f'postgresql://{Config.env_config["DB_USER"]}:{Config.env_config["DB_PASSWORD"]}@discourse2draft-db:{Config.env_config["DB_PORT"]}/{Config.env_config["DB_NAME"]}'
+    logging.info(f'Connection string: {connection_string}')
+    engine = sa.create_engine(connection_string)
+
+    if not database_exists(engine.url):
+        create_database(engine.url)
+        logging.info(f'Database {engine.url} was created succesfully')
+
     Base.metadata.create_all(engine)
+
 except Exception as exp:
-    logging.error(exp)
+   logging.error(exp)
+
 
 # -----------------------------------------------------------------------
 tables = {'credentials': Credentials, 

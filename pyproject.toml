@@ -33,6 +33,7 @@ dependencies = [
     "rich>=14.0.0",
     "shiny>=1.4.0",
     "shinywidgets>=0.5.2",
+    "sqlalchemy-utils>=0.42.1",
     "truststore>=0.10.1",
     "unstructured[docx]>=0.17.2",
     "xmltodict>=0.14.2",
