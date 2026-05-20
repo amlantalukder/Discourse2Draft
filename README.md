@@ -113,12 +113,12 @@ To set up with docker container the following variables must be set with the ass
 
 ```yaml
 # ChromaDB (Required for RAG pipeline)
-CHROMA_HOST="localhost"
+CHROMA_HOST="chroma-db"
 CHROMA_PORT="8000"
 
 # PostgreSQL Database (Required for backend storage)
 DB_NAME = 'discourse2draft-db'
-DB_HOST = 'localhost'
+DB_HOST = 'discourse2draft-db'
 DB_USER = 'postgres'
 DB_PASSWORD = 'root'
 DB_PORT = 5432

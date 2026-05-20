@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui, render
+import faicons
 import logging
 import uuid
 import time
@@ -26,8 +27,17 @@ def mod_forgot_password(input, output, session, changeView):
             def renderActivationCode():
                 if show_reset_password.get():
                     with ui.div(class_='row gap-2'):
-                        ui.input_password('text_password', 'Password')
-                        ui.input_password('text_confirm_password', 'Confirm password')
+                        with ui.div(class_='password-field flex-fill'):
+                            ui.input_password('text_password', 'Password')
+                            with ui.tags.button(type='button', class_='password-toggle-button', title='Show password', **{'aria-label': 'Show password'}):
+                                ui.tags.span(faicons.icon_svg('eye'), class_='password-toggle-icon password-toggle-icon-show')
+                                ui.tags.span(faicons.icon_svg('eye-slash'), class_='password-toggle-icon password-toggle-icon-hide')
+                        with ui.div(class_='password-field flex-fill'):
+                            ui.input_password('text_confirm_password', 'Confirm password')
+                            with ui.tags.button(type='button', class_='password-toggle-button', title='Show password', **{'aria-label': 'Show password'}):
+                                ui.tags.span(faicons.icon_svg('eye'), class_='password-toggle-icon password-toggle-icon-show')
+                                ui.tags.span(faicons.icon_svg('eye-slash'), class_='password-toggle-icon password-toggle-icon-hide')
+                    with ui.div(class_='row'):
                         ui.help_text("Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?\":{{}}|<>).")
                     with ui.div(class_='row justify-content-between mt-3'):
                         with ui.div(class_='col-auto'):

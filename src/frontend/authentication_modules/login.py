@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui
+import faicons
 from ...backend.db import selectFromDB, insertIntoDB, encryptPassword
 from .utils import validateField, FieldType
 from utils import print_func_name
@@ -19,8 +20,12 @@ def mod_login(input, output, session, config_app, changeView, changeLoginStatus)
             with ui.div(class_='row'):
                 ui.input_text('text_email', 'Email')
             with ui.div(class_='row'):
-                ui.input_password('text_password', 'Password')
-            with ui.div(class_='row justify-content-between'):
+                with ui.div(class_='password-field flex-fill'):
+                    ui.input_password('text_password', 'Password')
+                    with ui.tags.button(type='button', class_='password-toggle-button', title='Show password', **{'aria-label': 'Show password'}):
+                        ui.tags.span(faicons.icon_svg('eye'), class_='password-toggle-icon password-toggle-icon-show')
+                        ui.tags.span(faicons.icon_svg('eye-slash'), class_='password-toggle-icon password-toggle-icon-hide')
+            with ui.div(class_='row justify-content-between mt-4'):
                 with ui.div(class_='col-auto'):
                     ui.input_action_button('btn_login', 'Login'),
                 with ui.div(class_='col-auto'):

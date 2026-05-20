@@ -15,7 +15,10 @@ services:
       - autonomous
     healthcheck:
       test:
-        ["CMD-SHELL", "pg_isready -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER}"]
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USER} -d ${DB_NAME}",
+        ]
 
   chroma-db:
     container_name: chroma-db
@@ -29,12 +32,7 @@ services:
       - autonomous
     healthcheck:
       test:
-        [
-          "CMD",
-          "/bin/bash",
-          "-c",
-          "cat < /dev/null > /dev/tcp/${CHROMA_HOST}/${CHROMA_PORT}",
-        ]
+        ["CMD", "/bin/bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8000"]
       interval: 30s
       timeout: 3600s
       retries: 5
@@ -53,6 +51,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      - ./.env:/app/.env:ro
 
 volumes:
   data:

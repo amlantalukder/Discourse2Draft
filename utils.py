@@ -34,8 +34,8 @@ class Config:
     # ----------------------------------------------------------
     # Debug configuration
     # ----------------------------------------------------------
-    debug_config = {'print': True,
-                    'print_func_call': True,
+    debug_config = {'print_log_messages': True,
+                    'print_func_call': False,
                     'detailed': False}
     
     # ----------------------------------------------------------
@@ -83,7 +83,7 @@ class Config:
         handlers=[
             logging.StreamHandler(),
             logging.FileHandler(log_file_path)
-        ] if debug_config['print'] else [
+        ] if debug_config['print_log_messages'] else [
             logging.FileHandler(log_file_path)
         ],
     )

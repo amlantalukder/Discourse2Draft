@@ -1,5 +1,6 @@
 from shiny import reactive
 from shiny.express import module, ui
+import faicons
 from ...backend.db import selectFromDB, insertIntoDB, encryptPassword
 from utils import print_func_name
 from datetime import datetime
@@ -20,8 +21,17 @@ def mod_create_account(input, output, session, config_app, changeView):
             with ui.div(class_='row'):
                 ui.input_text('text_email', 'Email')
             with ui.div(class_='row gap-2'):
-                ui.input_password('text_password', 'Password')
-                ui.input_password('text_confirm_password', 'Confirm password')
+                with ui.div(class_='password-field flex-fill'):
+                    ui.input_password('text_password', 'Password')
+                    with ui.tags.button(type='button', class_='password-toggle-button', title='Show password', **{'aria-label': 'Show password'}):
+                        ui.tags.span(faicons.icon_svg('eye'), class_='password-toggle-icon password-toggle-icon-show')
+                        ui.tags.span(faicons.icon_svg('eye-slash'), class_='password-toggle-icon password-toggle-icon-hide')
+                with ui.div(class_='password-field flex-fill'):
+                    ui.input_password('text_confirm_password', 'Confirm password')
+                    with ui.tags.button(type='button', class_='password-toggle-button', title='Show password', **{'aria-label': 'Show password'}):
+                        ui.tags.span(faicons.icon_svg('eye'), class_='password-toggle-icon password-toggle-icon-show')
+                        ui.tags.span(faicons.icon_svg('eye-slash'), class_='password-toggle-icon password-toggle-icon-hide')
+            with ui.div(class_='row'):
                 ui.help_text("Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?\":{{}}|<>).")
             with ui.div(class_='row justify-content-between mt-3'):
                 with ui.div(class_='col-auto'):

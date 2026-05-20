@@ -20,7 +20,7 @@ truststore.inject_into_ssl()
 class ChromaDB:
 
     def __init__(self, embedding: str = 'text-embedding-3-large'):
-
+        logging.info(f"Initializing ChromaDB with host: {Config.env_config['CHROMA_HOST']}, port: {Config.env_config['CHROMA_PORT']}")
         self.client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
 
         self.embedding = getAIModel(model_name=embedding, is_embedding=True)
