@@ -3,8 +3,9 @@ name = "Discourse2Draft"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = "==3.12.10"
+requires-python = "==3.12.4"
 dependencies = [
+    "aiohttp==3.13.5",
     "certifi>=2025.4.26",
     "faicons>=0.2.2",
     "google-api-python-client>=2.187.0",
@@ -12,6 +13,7 @@ dependencies = [
     "google-auth-httplib2>=0.3.0",
     "google-auth-oauthlib>=1.2.3",
     "gunicorn>=25.3.0",
+    "htmltools==0.6.0",
     "ipykernel>=6.29.5",
     "langchain>=0.3.26",
     "langchain-chroma==0.2.5",

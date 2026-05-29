@@ -144,11 +144,15 @@ div.account-container {
   border: 0;
   background: transparent;
   color: #495057;
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 0;
   cursor: pointer;
+}
+
+.password-field.has-password .password-toggle-button {
+  display: inline-flex;
 }
 
 .password-toggle-button:hover,

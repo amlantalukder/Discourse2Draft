@@ -28,6 +28,6 @@ def validateField(field_name: str, field_value: Any, type: FieldType, allow_empt
             if len(field_value) < 8: 
                 return False, 'Password must be at least 8 characters long'
             if not re.search(r"[A-Za-z]", field_value) or not re.search(r"\d", field_value) or not re.search(r"[!_@#$%^&*(),.?\":{}|<>]", field_value):
-                return False, 'Password must contain at least one letter, one number, and one special character (!_@#$%^&*(),.?\":\{\}|<>)'
+                return False, 'Password must contain at least one letter, one number, and one special character (!_@#$%^&*(),.?\":{}|<>)'
     
     return True, 'Validation successful'
