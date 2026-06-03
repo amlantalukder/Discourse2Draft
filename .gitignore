@@ -1,10 +1,5 @@
-**node_modules/**
-**__pycache__/**
-**dist/**
-**build/**
+node_modules/
+__pycache__/
 .env
-**.DS_Store**
-**.vscode/**
-**.idea/**
-**.pytest_cache/**
-**.mypy_cache/**
+.DS_Store
+.vscode/
