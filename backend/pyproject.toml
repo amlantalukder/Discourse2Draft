@@ -1,0 +1,42 @@
+[project]
+name = "Discourse2Draft"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "==3.12.4"
+dependencies = [
+    "aiohttp==3.13.5",
+    "certifi>=2025.4.26",
+    "fastapi[standard]>=0.136.3",
+    "google-api-python-client>=2.187.0",
+    "google-auth>=2.40.3",
+    "google-auth-httplib2>=0.3.0",
+    "google-auth-oauthlib>=1.2.3",
+    "gunicorn>=25.3.0",
+    "htmltools==0.6.0",
+    "ipykernel>=6.29.5",
+    "langchain>=0.3.26",
+    "langchain-chroma==0.2.5",
+    "langchain-community>=0.3.22",
+    "langchain-core>=0.3.56",
+    "langchain-experimental>=0.3.4",
+    "langchain-graph-retriever[chroma]>=0.8.0",
+    "langchain-openai>=0.3.27",
+    "langchain-unstructured>=0.1.6",
+    "langfuse>=4.3.1",
+    "markdown>=3.10.1",
+    "matplotlib>=3.10.3",
+    "nbformat>=5.10.4",
+    "pandas>=2.2.3",
+    "plotly>=6.5.2",
+    "psycopg2-binary>=2.9.10",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.30",
+    "pyvis>=0.3.2",
+    "rich>=14.0.0",
+    "sqlalchemy-utils>=0.42.1",
+    "truststore>=0.10.1",
+    "unstructured[docx]>=0.17.2",
+    "uvicorn>=0.34.2",
+    "xmltodict>=0.14.2",
+]

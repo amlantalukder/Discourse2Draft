@@ -1,0 +1,847 @@
+2026-06-02 09:47:09 [ERROR] 'DB_NAME'
+2026-06-02 09:47:09 [ERROR] Unable to authenticate user
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 351, in login
+    credential = _credential_by_email(email)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 261, in _credential_by_email
+    df = db.selectFromDB(table_name="credentials", field_names=["email"], field_values=[[email]], limit=1)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/utils.py", line 179, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/db.py", line 263, in selectFromDB
+    with Session(engine) as session:
+                 ^^^^^^
+NameError: name 'engine' is not defined
+2026-06-02 09:47:35 [ERROR] Unable to authenticate user
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 351, in login
+    credential = _credential_by_email(email)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 261, in _credential_by_email
+    df = db.selectFromDB(table_name="credentials", field_names=["email"], field_values=[[email]], limit=1)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/utils.py", line 179, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/db.py", line 263, in selectFromDB
+    with Session(engine) as session:
+                 ^^^^^^
+NameError: name 'engine' is not defined
+2026-06-02 09:50:01 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 09:53:06 [INFO] 1 change detected
+2026-06-02 09:53:07 [INFO] 4 changes detected
+2026-06-02 09:53:13 [INFO] 1 change detected
+2026-06-02 09:53:14 [INFO] 3 changes detected
+2026-06-02 09:53:18 [INFO] 1 change detected
+2026-06-02 09:53:19 [INFO] 3 changes detected
+2026-06-02 09:53:46 [INFO] 6 changes detected
+2026-06-02 09:53:59 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 09:58:01 [INFO] 1 change detected
+2026-06-02 09:58:02 [INFO] 4 changes detected
+2026-06-02 09:58:09 [INFO] 1 change detected
+2026-06-02 09:58:10 [INFO] 3 changes detected
+2026-06-02 09:58:13 [INFO] 1 change detected
+2026-06-02 09:58:13 [INFO] 3 changes detected
+2026-06-02 09:58:36 [INFO] 6 changes detected
+2026-06-02 09:59:08 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 10:02:11 [INFO] 1 change detected
+2026-06-02 10:02:11 [INFO] 4 changes detected
+2026-06-02 10:02:17 [INFO] 1 change detected
+2026-06-02 10:02:18 [INFO] 3 changes detected
+2026-06-02 10:02:42 [INFO] 1 change detected
+2026-06-02 10:02:43 [INFO] 3 changes detected
+2026-06-02 10:04:19 [INFO] 3 changes detected
+2026-06-02 10:04:40 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 10:09:04 [INFO] 1 change detected
+2026-06-02 10:09:23 [INFO] 1 change detected
+2026-06-02 10:10:06 [INFO] 1 change detected
+2026-06-02 10:10:31 [INFO] 1 change detected
+2026-06-02 10:11:21 [INFO] 1 change detected
+2026-06-02 10:11:41 [INFO] 2 changes detected
+2026-06-02 10:13:11 [INFO] 1 change detected
+2026-06-02 10:13:17 [INFO] 1 change detected
+2026-06-02 10:14:19 [INFO] 1 change detected
+2026-06-02 10:14:20 [INFO] 4 changes detected
+2026-06-02 10:14:39 [INFO] 1 change detected
+2026-06-02 10:14:53 [INFO] 1 change detected
+2026-06-02 10:14:53 [INFO] 3 changes detected
+2026-06-02 10:15:19 [INFO] 1 change detected
+2026-06-02 10:15:20 [INFO] 3 changes detected
+2026-06-02 10:15:35 [INFO] 1 change detected
+2026-06-02 10:15:35 [INFO] 3 changes detected
+2026-06-02 10:16:25 [INFO] 1 change detected
+2026-06-02 10:16:31 [INFO] 3 changes detected
+2026-06-02 10:16:36 [INFO] 1 change detected
+2026-06-02 10:16:36 [INFO] 3 changes detected
+2026-06-02 10:16:41 [INFO] 2 changes detected
+2026-06-02 10:16:44 [INFO] 2 changes detected
+2026-06-02 10:17:15 [INFO] 1 change detected
+2026-06-02 10:17:16 [INFO] 3 changes detected
+2026-06-02 10:18:03 [INFO] 1 change detected
+2026-06-02 10:18:04 [INFO] 3 changes detected
+2026-06-02 10:18:12 [INFO] 1 change detected
+2026-06-02 10:26:35 [INFO] 1 change detected
+2026-06-02 10:27:34 [INFO] 1 change detected
+2026-06-02 10:28:36 [INFO] 1 change detected
+2026-06-02 10:28:37 [INFO] 3 changes detected
+2026-06-02 10:28:45 [INFO] 1 change detected
+2026-06-02 10:28:45 [INFO] 3 changes detected
+2026-06-02 10:28:53 [INFO] 3 changes detected
+2026-06-02 10:31:04 [INFO] 3 changes detected
+2026-06-02 10:31:25 [INFO] 1 change detected
+2026-06-02 10:31:26 [INFO] 1 change detected
+2026-06-02 10:31:26 [INFO] 97 changes detected
+2026-06-02 10:31:30 [INFO] 148 changes detected
+2026-06-02 10:31:30 [INFO] 211 changes detected
+2026-06-02 10:31:31 [INFO] Started server process [5998]
+2026-06-02 10:31:31 [INFO] Waiting for application startup.
+2026-06-02 10:31:31 [INFO] Application startup complete.
+2026-06-02 10:31:31 [INFO] Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-06-02 10:32:09 [INFO] 1 change detected
+2026-06-02 10:32:11 [INFO] Shutting down
+2026-06-02 10:32:12 [INFO] Waiting for application shutdown.
+2026-06-02 10:32:12 [INFO] Application shutdown complete.
+2026-06-02 10:32:12 [INFO] Finished server process [5998]
+2026-06-02 10:32:12 [INFO] 1 change detected
+2026-06-02 10:32:16 [INFO] 242 changes detected
+2026-06-02 10:33:04 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 10:33:04 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 10:33:04 [INFO] Started reloader process [8373] using WatchFiles
+2026-06-02 10:33:05 [INFO] Started server process [8376]
+2026-06-02 10:33:05 [INFO] Waiting for application startup.
+2026-06-02 10:33:05 [INFO] Application startup complete.
+2026-06-02 10:34:10 [INFO] 1 change detected
+2026-06-02 10:34:10 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:34:10 [INFO] 1 change detected
+2026-06-02 10:34:10 [INFO] Shutting down
+2026-06-02 10:34:11 [INFO] Waiting for application shutdown.
+2026-06-02 10:34:11 [INFO] Application shutdown complete.
+2026-06-02 10:34:11 [INFO] Finished server process [8376]
+2026-06-02 10:34:11 [INFO] 4 changes detected
+2026-06-02 10:34:11 [INFO] 4 changes detected
+2026-06-02 10:34:11 [INFO] Started server process [9636]
+2026-06-02 10:34:11 [INFO] Waiting for application startup.
+2026-06-02 10:34:11 [INFO] Application startup complete.
+2026-06-02 10:34:35 [INFO] 1 change detected
+2026-06-02 10:34:35 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:34:35 [INFO] Shutting down
+2026-06-02 10:34:35 [INFO] 1 change detected
+2026-06-02 10:34:35 [INFO] Waiting for application shutdown.
+2026-06-02 10:34:35 [INFO] Application shutdown complete.
+2026-06-02 10:34:35 [INFO] Finished server process [9636]
+2026-06-02 10:34:36 [INFO] 4 changes detected
+2026-06-02 10:34:36 [INFO] 4 changes detected
+2026-06-02 10:34:36 [INFO] Started server process [10119]
+2026-06-02 10:34:36 [INFO] Waiting for application startup.
+2026-06-02 10:34:36 [INFO] Application startup complete.
+2026-06-02 10:35:21 [INFO] 1 change detected
+2026-06-02 10:35:21 [INFO] 1 change detected
+2026-06-02 10:35:21 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:35:21 [INFO] Shutting down
+2026-06-02 10:35:21 [INFO] Waiting for application shutdown.
+2026-06-02 10:35:21 [INFO] Application shutdown complete.
+2026-06-02 10:35:21 [INFO] Finished server process [10119]
+2026-06-02 10:35:21 [INFO] 4 changes detected
+2026-06-02 10:35:21 [INFO] 4 changes detected
+2026-06-02 10:35:22 [INFO] Started server process [10936]
+2026-06-02 10:35:22 [INFO] Waiting for application startup.
+2026-06-02 10:35:22 [INFO] Application startup complete.
+2026-06-02 10:35:26 [INFO] 1 change detected
+2026-06-02 10:35:26 [INFO] 1 change detected
+2026-06-02 10:35:26 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 10:35:26 [INFO] Shutting down
+2026-06-02 10:35:26 [INFO] Waiting for application shutdown.
+2026-06-02 10:35:26 [INFO] Application shutdown complete.
+2026-06-02 10:35:26 [INFO] Finished server process [10936]
+2026-06-02 10:35:26 [INFO] 1 change detected
+2026-06-02 10:35:26 [INFO] 1 change detected
+2026-06-02 10:35:27 [INFO] Started server process [11080]
+2026-06-02 10:35:27 [INFO] Waiting for application startup.
+2026-06-02 10:35:27 [INFO] Application startup complete.
+2026-06-02 10:35:47 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 10:36:03 [INFO] 1 change detected
+2026-06-02 10:36:03 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:36:03 [INFO] Shutting down
+2026-06-02 10:36:03 [INFO] 1 change detected
+2026-06-02 10:36:03 [INFO] Waiting for application shutdown.
+2026-06-02 10:36:03 [INFO] Application shutdown complete.
+2026-06-02 10:36:03 [INFO] Finished server process [11080]
+2026-06-02 10:36:04 [INFO] 4 changes detected
+2026-06-02 10:36:04 [INFO] Started server process [11813]
+2026-06-02 10:36:04 [INFO] Waiting for application startup.
+2026-06-02 10:36:04 [INFO] Application startup complete.
+2026-06-02 10:36:09 [INFO] 1 change detected
+2026-06-02 10:36:09 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:36:09 [INFO] Shutting down
+2026-06-02 10:36:10 [INFO] Waiting for application shutdown.
+2026-06-02 10:36:10 [INFO] Application shutdown complete.
+2026-06-02 10:36:10 [INFO] Finished server process [11813]
+2026-06-02 10:36:10 [INFO] 4 changes detected
+2026-06-02 10:36:10 [INFO] Started server process [11913]
+2026-06-02 10:36:10 [INFO] Waiting for application startup.
+2026-06-02 10:36:10 [INFO] Application startup complete.
+2026-06-02 10:36:28 [INFO] 3 changes detected
+2026-06-02 10:36:39 [INFO] 3 changes detected
+2026-06-02 10:36:40 [INFO] 1 change detected
+2026-06-02 10:38:59 [INFO] 1 change detected
+2026-06-02 10:38:59 [INFO] 1 change detected
+2026-06-02 10:39:12 [INFO] Shutting down
+2026-06-02 10:39:12 [INFO] Waiting for application shutdown.
+2026-06-02 10:39:12 [INFO] Application shutdown complete.
+2026-06-02 10:39:12 [INFO] Finished server process [11913]
+2026-06-02 10:39:12 [INFO] Stopping reloader process [8373]
+2026-06-02 10:39:12 [INFO] 1 change detected
+2026-06-02 10:39:13 [INFO] 1 change detected
+2026-06-02 10:39:16 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 10:39:16 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 10:39:16 [INFO] Started reloader process [15409] using WatchFiles
+2026-06-02 10:39:17 [INFO] Started server process [15441]
+2026-06-02 10:39:17 [INFO] Waiting for application startup.
+2026-06-02 10:39:17 [INFO] Application startup complete.
+2026-06-02 10:43:05 [INFO] 1 change detected
+2026-06-02 10:43:05 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:43:05 [INFO] 1 change detected
+2026-06-02 10:43:06 [INFO] Shutting down
+2026-06-02 10:43:06 [INFO] Waiting for application shutdown.
+2026-06-02 10:43:06 [INFO] Application shutdown complete.
+2026-06-02 10:43:06 [INFO] Finished server process [15441]
+2026-06-02 10:43:06 [INFO] 4 changes detected
+2026-06-02 10:43:06 [INFO] 4 changes detected
+2026-06-02 10:43:07 [INFO] Started server process [19515]
+2026-06-02 10:43:07 [INFO] Waiting for application startup.
+2026-06-02 10:43:07 [INFO] Application startup complete.
+2026-06-02 10:43:12 [INFO] 1 change detected
+2026-06-02 10:43:12 [INFO] 1 change detected
+2026-06-02 10:43:12 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:43:12 [INFO] Shutting down
+2026-06-02 10:43:12 [INFO] Waiting for application shutdown.
+2026-06-02 10:43:12 [INFO] Application shutdown complete.
+2026-06-02 10:43:12 [INFO] Finished server process [19515]
+2026-06-02 10:43:12 [INFO] 4 changes detected
+2026-06-02 10:43:12 [INFO] 4 changes detected
+2026-06-02 10:43:13 [INFO] Started server process [19617]
+2026-06-02 10:43:13 [INFO] Waiting for application startup.
+2026-06-02 10:43:13 [INFO] Application startup complete.
+2026-06-02 10:43:33 [INFO] 1 change detected
+2026-06-02 10:43:33 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:43:33 [INFO] Shutting down
+2026-06-02 10:43:33 [INFO] 1 change detected
+2026-06-02 10:43:33 [INFO] Waiting for application shutdown.
+2026-06-02 10:43:33 [INFO] Application shutdown complete.
+2026-06-02 10:43:33 [INFO] Finished server process [19617]
+2026-06-02 10:43:33 [INFO] 4 changes detected
+2026-06-02 10:43:33 [INFO] 4 changes detected
+2026-06-02 10:43:34 [INFO] Started server process [20015]
+2026-06-02 10:43:34 [INFO] Waiting for application startup.
+2026-06-02 10:43:34 [INFO] Application startup complete.
+2026-06-02 10:43:38 [INFO] 3 changes detected
+2026-06-02 10:43:38 [INFO] 3 changes detected
+2026-06-02 10:46:36 [INFO] 1 change detected
+2026-06-02 10:46:36 [INFO] 1 change detected
+2026-06-02 10:46:36 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 10:46:36 [INFO] Shutting down
+2026-06-02 10:46:36 [INFO] Waiting for application shutdown.
+2026-06-02 10:46:36 [INFO] Application shutdown complete.
+2026-06-02 10:46:36 [INFO] Finished server process [20015]
+2026-06-02 10:46:36 [INFO] 1 change detected
+2026-06-02 10:46:36 [INFO] 1 change detected
+2026-06-02 10:46:37 [INFO] Started server process [23359]
+2026-06-02 10:46:37 [INFO] Waiting for application startup.
+2026-06-02 10:46:37 [INFO] Application startup complete.
+2026-06-02 10:46:37 [INFO] 1 change detected
+2026-06-02 10:46:37 [INFO] 1 change detected
+2026-06-02 10:46:37 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 10:46:37 [INFO] Shutting down
+2026-06-02 10:46:37 [INFO] Waiting for application shutdown.
+2026-06-02 10:46:37 [INFO] Application shutdown complete.
+2026-06-02 10:46:37 [INFO] Finished server process [23359]
+2026-06-02 10:46:37 [INFO] 1 change detected
+2026-06-02 10:46:37 [INFO] 1 change detected
+2026-06-02 10:46:38 [INFO] Started server process [23403]
+2026-06-02 10:46:38 [INFO] Waiting for application startup.
+2026-06-02 10:46:38 [INFO] Application startup complete.
+2026-06-02 10:56:02 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 10:56:02 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 10:56:02 [INFO] Started reloader process [65350] using WatchFiles
+2026-06-02 10:56:03 [INFO] Started server process [65367]
+2026-06-02 10:56:03 [INFO] Waiting for application startup.
+2026-06-02 10:56:03 [INFO] Application startup complete.
+2026-06-02 10:56:19 [INFO] 1 change detected
+2026-06-02 10:56:19 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 10:56:19 [INFO] Shutting down
+2026-06-02 10:56:20 [INFO] Waiting for application shutdown.
+2026-06-02 10:56:20 [INFO] Application shutdown complete.
+2026-06-02 10:56:20 [INFO] Finished server process [65367]
+2026-06-02 10:56:20 [INFO] 1 change detected
+2026-06-02 10:56:21 [INFO] Started server process [65739]
+2026-06-02 10:56:21 [INFO] Waiting for application startup.
+2026-06-02 10:56:21 [INFO] Application startup complete.
+2026-06-02 10:57:14 [INFO] 1109 changes detected
+2026-06-02 10:57:14 [WARNING] WatchFiles detected changes in '.venv/lib/python3.12/site-packages/dns/inet.py', '.venv/lib/python3.12/site-packages/dns/rrset.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/opentelemetry/span_processor.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/templates.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/cli.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/DNSKEY.py', '.venv/lib/python3.12/site-packages/dns/edns.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/starlite.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/middleware.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/sentry.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/__init__.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/socket.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/TSIG.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/utils.py', '.venv/lib/python3.12/site-packages/rich_toolkit/element.py', '.venv/lib/python3.12/site-packages/email_validator/deliverability.py', '.venv/lib/python3.12/site-packages/fastapi_cli/cli.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/modules/caches.py', '.venv/lib/python3.12/site-packages/rich_toolkit/_input_handler.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/minimal.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/monitoring.py', '.venv/lib/python3.12/site-packages/sentry_sdk/logger.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/ecdsa.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/google_genai/consts.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/api.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/executing.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_log_batcher.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/IPSECKEY.py', '.venv/lib/python3.12/site-packages/dns/dnssectypes.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/unlink.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/strawberry.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/runner.py', '.venv/lib/python3.12/site-packages/dns/tokenizer.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/DSYNC.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/mongo_object_id.py', '.venv/lib/python3.12/site-packages/dns/_features.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CDNSKEY.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/semver.py', '.venv/lib/python3.12/site-packages/dns/reversename.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/transactions.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/HTTPS.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/language_code.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/setup_ci.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/gnu_backtrace.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/rust_tracing.py', '.venv/lib/python3.12/site-packages/dns/ipv6.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/SPF.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/RT.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/consts.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/login.py', '.venv/lib/python3.12/site-packages/sentry_sdk/scrubber.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/handoff.py', '.venv/lib/python3.12/site-packages/dns/dnssec.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/logout.py', '.venv/lib/python3.12/site-packages/sentry_sdk/tracing.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/SMIMEA.py', '.venv/lib/python3.12/site-packages/dns/win32util.py', '.venv/lib/python3.12/site-packages/dns/quic/_common.py', 'src/ai/llms.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/tornado.py', '.venv/lib/python3.12/site-packages/dns/rdatatype.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/currency_code.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/consts.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/server.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/NSAP.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/celery/__init__.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/dsn.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_werkzeug.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_queue.py', '.venv/lib/python3.12/site-packages/rich_toolkit/utils/__init__.py', '.venv/lib/python3.12/site-packages/dns/rcode.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/stdlib.py', '.venv/lib/python3.12/site-packages/sentry_sdk/attachments.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/whoami.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/dedupe.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CNAME.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/sqlalchemy.py', '.venv/lib/python3.12/site-packages/dns/wire.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/LOC.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/cohere.py', '.venv/lib/python3.12/site-packages/dns/_tls_util.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/apps.py', '.venv/lib/python3.12/site-packages/rich_toolkit/progress.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NID.py', '.venv/lib/python3.12/site-packages/sentry_sdk/tracing_utils.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/color.py', '.venv/lib/python3.12/site-packages/dns/update.py', '.venv/lib/python3.12/site-packages/fastapi_cli/__main__.py', '.venv/lib/python3.12/site-packages/dns/asyncresolver.py', '.venv/lib/python3.12/site-packages/dns/set.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/fancy.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/consts.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/mxbase.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/threading.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/ai_client.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/tools.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NSEC.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/serverless.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/domain.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/HIP.py', '.venv/lib/python3.12/site-packages/sentry_sdk/crons/api.py', '.venv/lib/python3.12/site-packages/dns/_no_ssl.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/SOA.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/bottle.py', '.venv/lib/python3.12/site-packages/dns/quic/_sync.py', '.venv/lib/python3.12/site-packages/dns/version.py', '.venv/lib/python3.12/site-packages/fastapi_cli/utils/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/serializer.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/gcp.py', '.venv/lib/python3.12/site-packages/sentry_sdk/scope.py', '.venv/lib/python3.12/site-packages/dns/rdataclass.py', '.venv/lib/python3.12/site-packages/rich_toolkit/spacer.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/patches/agent_run.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/eddsa.py', '.venv/lib/python3.12/site-packages/rich_toolkit/container.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/iban.py', '.venv/lib/python3.12/site-packages/sentry_sdk/spotlight.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/X25.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/s3.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/__init__.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/link.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/models.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/spans/utils.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/google_genai/__init__.py', '.venv/lib/python3.12/site-packages/dns/ttl.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/euibase.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/svcbbase.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/cli.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/excepthook.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/NAPTR.py', '.venv/lib/python3.12/site-packages/dns/opcode.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/profiler/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/_asgi_common.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/L64.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/asyncpg.py', '.venv/lib/python3.12/site-packages/email_validator/version.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/modules/queries.py', '.venv/lib/python3.12/site-packages/rich_toolkit/__init__.py', '.venv/lib/python3.12/site-packages/dns/btreezone.py', '.venv/lib/python3.12/site-packages/sentry_sdk/utils.py', '.venv/lib/python3.12/site-packages/dns/nameserver.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_span_batcher.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/httpx.py', '.venv/lib/python3.12/site-packages/email_validator/__init__.py', '.venv/lib/python3.12/site-packages/detect_installer/_detect.py', '.venv/lib/python3.12/site-packages/detect_installer/_test.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/TXT.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/dsa.py', '.venv/lib/python3.12/site-packages/sentry_sdk/metrics.py', '.venv/lib/python3.12/site-packages/dns/message.py', '.venv/lib/python3.12/site-packages/sentry_sdk/monitor.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/statsig.py', '.venv/lib/python3.12/site-packages/rich_toolkit/button.py', '.venv/lib/python3.12/site-packages/dns/tsigkeyring.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/wsgi.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/rb.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/langgraph.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/__init__.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/config.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/RRSIG.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/OPT.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/HINFO.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/env.py', '.venv/lib/python3.12/site-packages/rignore/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/__main__.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/base.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/EUI64.py', '.venv/lib/python3.12/site-packages/dns/quic/__init__.py', 'src/ai/architecture.py', '.venv/lib/python3.12/site-packages/dns/flags.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/rsa.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/clickhouse_driver.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/__init__.py', '.venv/lib/python3.12/site-packages/dns/grange.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/utils.py', '.venv/lib/python3.12/site-packages/rich_toolkit/_rich_components.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/MX.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/gql.py', '.venv/lib/python3.12/site-packages/email_validator/rfc_constants.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/config.py', '.venv/lib/python3.12/site-packages/dns/versioned.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/LP.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/cron.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CSYNC.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/asgi.py', '.venv/lib/python3.12/site-packages/sentry_sdk/profiler/transaction_profiler.py', '.venv/lib/python3.12/site-packages/sentry_sdk/traces.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_lru_cache.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/rq.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/patches/tools.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/unleash.py', '.venv/lib/python3.12/site-packages/dns/entropy.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/huggingface_hub.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CAA.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/auth.py', '.venv/lib/python3.12/site-packages/fastapi_cli/discover.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/atexit.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/txtbase.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/google_genai/streaming.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/_openai_responses_api.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/spark/spark_driver.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/flask.py', '.venv/lib/python3.12/site-packages/sentry_sdk/crons/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/DS.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/sys_exit.py', '.venv/lib/python3.12/site-packages/dns/asyncquery.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/anthropic.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/URI.py', '.venv/lib/python3.12/site-packages/dns/name.py', '.venv/lib/python3.12/site-packages/email_validator/exceptions.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/__init__.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/base.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/patches/graph_nodes.py', '.venv/lib/python3.12/site-packages/dns/rdataset.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/routing_number.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/celery/utils.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/mac_address.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NS.py', '.venv/lib/python3.12/site-packages/sentry_sdk/feature_flags.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/DLV.py', '.venv/lib/python3.12/site-packages/dns/_immutable_ctx.py', '.venv/lib/python3.12/site-packages/rich_toolkit/input.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/TKEY.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/L32.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pymongo.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/dramatiq.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pure_eval.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/logging.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/AMTRELAY.py', '.venv/lib/python3.12/site-packages/rich_toolkit/menu.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/DHCID.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/consts.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/cryptography.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/quart.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/PX.py', '.venv/lib/python3.12/site-packages/dns/_trio_backend.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/redis_py_cluster_legacy.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/fastapi.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pyramid.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/opentelemetry/consts.py', '.venv/lib/python3.12/site-packages/dns/zonefile.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/redis.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/OPENPGPKEY.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pyreqwest.py', '.venv/lib/python3.12/site-packages/dns/_asyncio_backend.py', '.venv/lib/python3.12/site-packages/dns/asyncbackend.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/progress_file.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_batcher.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/version_check.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/epoch.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/unraisablehook.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/asgi.py', '.venv/lib/python3.12/site-packages/dns/ipv4.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/falcon.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/opentelemetry/integration.py', '.venv/lib/python3.12/site-packages/dns/e164.py', '.venv/lib/python3.12/site-packages/dns/node.py', '.venv/lib/python3.12/site-packages/sentry_sdk/api.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/tasks.py', '.venv/lib/python3.12/site-packages/rich_toolkit/utils/colors.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_compat.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/spans/execute_tool.py', '.venv/lib/python3.12/site-packages/dns/zonetypes.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/modules.py', 'sample_data.py', '.venv/lib/python3.12/site-packages/dns/btree.py', '.venv/lib/python3.12/site-packages/sentry_sdk/worker.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/ISDN.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/country.py', '.venv/lib/python3.12/site-packages/sentry_sdk/debug.py', '.venv/lib/python3.12/site-packages/rich_toolkit/form.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/NSAP_PTR.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/payment.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/env.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/PTR.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/WKS.py', '.venv/lib/python3.12/site-packages/email_validator/types.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/__init__.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/deploy.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/sanic.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/mime_types.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/DNAME.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/patches/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/profiler/continuous_profiler.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/redis_cluster.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/litellm.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/phone_numbers.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/langchain.py', 'app.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/spans/invoke_agent.py', '.venv/lib/python3.12/site-packages/dns/rdata.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/aio/client.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NSEC3PARAM.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/A.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/cloud_resource_context.py', '.venv/lib/python3.12/site-packages/dns/query.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_init_implementation.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/chalice.py', '.venv/lib/python3.12/site-packages/fastapi_cli/logging.py', '.venv/lib/python3.12/site-packages/dns/exception.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/execute_tool.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/spark/__init__.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/border.py', '.venv/lib/python3.12/site-packages/fastapi_cli/exceptions.py', '.venv/lib/python3.12/site-packages/dns/_ddr.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/modules/__init__.py', '.venv/lib/python3.12/site-packages/dns/quic/_trio.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/_wsgi_common.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/SVCB.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/nsbase.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/AFSDB.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/SSHFP.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/util.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/_async_common.py', '.venv/lib/python3.12/site-packages/sentry_sdk/crons/consts.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/commands/logs.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/views.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/RESINFO.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/aws_lambda.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/script_code.py', '.venv/lib/python3.12/site-packages/sentry_sdk/session.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/opentelemetry/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/consts.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/caching.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/TLSA.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/semantic_version.py', '.venv/lib/python3.12/site-packages/dns/renderer.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/django/signals_handlers.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/ZONEMD.py', '.venv/lib/python3.12/site-packages/dns/serial.py', '.venv/lib/python3.12/site-packages/sentry_sdk/transport.py', '.venv/lib/python3.12/site-packages/email_validator/__main__.py', '.venv/lib/python3.12/site-packages/dns/dnssecalgs/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/agent_run.py', '.venv/lib/python3.12/site-packages/detect_installer/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/typer.py', '.venv/lib/python3.12/site-packages/sentry_sdk/sessions.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/celery/beat.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/AVC.py', '.venv/lib/python3.12/site-packages/rich_toolkit/_getchar.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/CH/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/KX.py', '.venv/lib/python3.12/site-packages/dns/__init__.py', '.venv/lib/python3.12/site-packages/dns/_asyncbackend.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/argv.py', '.venv/lib/python3.12/site-packages/fastapi_cli/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/loguru.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/trytond.py', '.venv/lib/python3.12/site-packages/dns/tsig.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/_openai_completions_api.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/boto3.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/dsbase.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/isbn.py', '.venv/lib/python3.12/site-packages/sentry_sdk/envelope.py', '.venv/lib/python3.12/site-packages/fastar/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/agent_workflow.py', '.venv/lib/python3.12/site-packages/sentry_sdk/__init__.py', '.venv/lib/python3.12/site-packages/dns/namedict.py', '.venv/lib/python3.12/site-packages/fastapi_cli/utils/cli.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/uuid_types.py', '.venv/lib/python3.12/site-packages/sentry_sdk/profiler/utils.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/path.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/WALLET.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/redis/_sync_common.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/dnskeybase.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/utils.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/spans/invoke_agent.py', 'src/utils.py', '.venv/lib/python3.12/site-packages/sentry_sdk/hub.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/launchdarkly.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/aiohttp.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/GPOS.py', '.venv/lib/python3.12/site-packages/dns/enum.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_metrics_batcher.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/ulid.py', '.venv/lib/python3.12/site-packages/sentry_sdk/crons/decorator.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/logging.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/litestar.py', '.venv/lib/python3.12/site-packages/rich_toolkit/toolkit.py', '.venv/lib/python3.12/site-packages/sentry_sdk/types.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/SRV.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/beam.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openfeature.py', '.venv/lib/python3.12/site-packages/rich_toolkit/styles/tagged.py', '.venv/lib/python3.12/site-packages/sentry_sdk/ai/utils.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/spans/ai_client.py', '.venv/lib/python3.12/site-packages/sentry_sdk/consts.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NSEC3.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/spark/spark_worker.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/AAAA.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/opentelemetry/propagator.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/pydantic_ai/spans/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/tlsabase.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/CH/A.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/pendulum_dt.py', '.venv/lib/python3.12/site-packages/sentry_sdk/client.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/IN/APL.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/ariadne.py', '.venv/lib/python3.12/site-packages/dns/xfr.py', '.venv/lib/python3.12/site-packages/fastapi_cloud_cli/utils/dates.py', '.venv/lib/python3.12/site-packages/rich_toolkit/utils/map_range.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/client.py', '.venv/lib/python3.12/site-packages/email_validator/syntax.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/graphene.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/arq.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CERT.py', '.venv/lib/python3.12/site-packages/dns/quic/_asyncio.py', '.venv/lib/python3.12/site-packages/fastapi_cli/config.py', '.venv/lib/python3.12/site-packages/email_validator/validate_email.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/timezone_name.py', '.venv/lib/python3.12/site-packages/dns/immutable.py', '.venv/lib/python3.12/site-packages/dns/transaction.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/NINFO.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/ray.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/EUI48.py', '.venv/lib/python3.12/site-packages/dns/resolver.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/otlp.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/mcp.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/patches/error_tracing.py', '.venv/lib/python3.12/site-packages/sentry_sdk/_types.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/aio/__init__.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/openai_agents/__init__.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/CDS.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/grpc/aio/server.py', '.venv/lib/python3.12/site-packages/dns/zone.py', '.venv/lib/python3.12/site-packages/dns/rdtypes/ANY/RP.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/asyncio.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/google_genai/utils.py', '.venv/lib/python3.12/site-packages/sentry_sdk/integrations/huey.py', '.venv/lib/python3.12/site-packages/pydantic_extra_types/coordinate.py'. Reloading...
+2026-06-02 10:57:14 [INFO] Shutting down
+2026-06-02 10:57:14 [INFO] Waiting for application shutdown.
+2026-06-02 10:57:14 [INFO] Application shutdown complete.
+2026-06-02 10:57:14 [INFO] Finished server process [65739]
+2026-06-02 10:57:15 [INFO] 1 change detected
+2026-06-02 10:57:15 [INFO] Started server process [66972]
+2026-06-02 10:57:15 [INFO] Waiting for application startup.
+2026-06-02 10:57:15 [INFO] Application startup complete.
+2026-06-02 10:57:55 [INFO] 1 change detected
+2026-06-02 10:57:55 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 10:57:55 [INFO] Shutting down
+2026-06-02 10:57:55 [INFO] Waiting for application shutdown.
+2026-06-02 10:57:55 [INFO] Application shutdown complete.
+2026-06-02 10:57:55 [INFO] Finished server process [66972]
+2026-06-02 10:57:56 [INFO] 4 changes detected
+2026-06-02 10:57:56 [INFO] Started server process [67785]
+2026-06-02 10:57:56 [INFO] Waiting for application startup.
+2026-06-02 10:57:56 [INFO] Application startup complete.
+2026-06-02 11:01:17 [INFO] 1 change detected
+2026-06-02 11:01:17 [WARNING] WatchFiles detected changes in 'app.py'. Reloading...
+2026-06-02 11:01:18 [INFO] Shutting down
+2026-06-02 11:01:18 [INFO] Waiting for application shutdown.
+2026-06-02 11:01:18 [INFO] Application shutdown complete.
+2026-06-02 11:01:18 [INFO] Finished server process [67785]
+2026-06-02 11:01:18 [INFO] 4 changes detected
+2026-06-02 11:01:19 [INFO] Started server process [71507]
+2026-06-02 11:01:19 [INFO] Waiting for application startup.
+2026-06-02 11:01:19 [INFO] Application startup complete.
+2026-06-02 11:01:28 [INFO] 3 changes detected
+2026-06-02 11:02:04 [INFO] 3 changes detected
+2026-06-02 11:02:04 [INFO] 3 changes detected
+2026-06-02 11:02:44 [INFO] 1 change detected
+2026-06-02 11:02:44 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 11:02:44 [INFO] 1 change detected
+2026-06-02 11:02:44 [INFO] Shutting down
+2026-06-02 11:02:44 [INFO] Waiting for application shutdown.
+2026-06-02 11:02:44 [INFO] Application shutdown complete.
+2026-06-02 11:02:44 [INFO] Finished server process [71507]
+2026-06-02 11:02:45 [INFO] 1 change detected
+2026-06-02 11:02:45 [INFO] 1 change detected
+2026-06-02 11:02:45 [INFO] Started server process [73119]
+2026-06-02 11:02:45 [INFO] Waiting for application startup.
+2026-06-02 11:02:45 [INFO] Application startup complete.
+2026-06-02 11:02:59 [INFO] 3 changes detected
+2026-06-02 11:02:59 [INFO] 3 changes detected
+2026-06-02 11:03:55 [INFO] 1 change detected
+2026-06-02 11:03:55 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 11:03:55 [INFO] 1 change detected
+2026-06-02 11:03:55 [INFO] Shutting down
+2026-06-02 11:03:55 [INFO] Waiting for application shutdown.
+2026-06-02 11:03:55 [INFO] Application shutdown complete.
+2026-06-02 11:03:55 [INFO] Finished server process [73119]
+2026-06-02 11:03:55 [INFO] 1 change detected
+2026-06-02 11:03:55 [INFO] 1 change detected
+2026-06-02 11:03:56 [INFO] Started server process [74478]
+2026-06-02 11:03:56 [INFO] Waiting for application startup.
+2026-06-02 11:03:56 [INFO] Application startup complete.
+2026-06-02 11:03:59 [INFO] 3 changes detected
+2026-06-02 11:03:59 [INFO] 3 changes detected
+2026-06-02 11:04:12 [INFO] 1 change detected
+2026-06-02 11:04:12 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 11:04:13 [INFO] 1 change detected
+2026-06-02 11:04:13 [INFO] Shutting down
+2026-06-02 11:04:13 [INFO] Waiting for application shutdown.
+2026-06-02 11:04:13 [INFO] Application shutdown complete.
+2026-06-02 11:04:13 [INFO] Finished server process [74478]
+2026-06-02 11:04:13 [INFO] 1 change detected
+2026-06-02 11:04:13 [INFO] Started server process [74807]
+2026-06-02 11:04:13 [INFO] Waiting for application startup.
+2026-06-02 11:04:13 [INFO] Application startup complete.
+2026-06-02 11:06:37 [INFO] 3 changes detected
+2026-06-02 11:07:28 [INFO] 1 change detected
+2026-06-02 11:08:31 [INFO] 3 changes detected
+2026-06-02 11:08:31 [INFO] 3 changes detected
+2026-06-02 11:09:31 [INFO] Shutting down
+2026-06-02 11:09:31 [INFO] Waiting for application shutdown.
+2026-06-02 11:09:31 [INFO] Application shutdown complete.
+2026-06-02 11:09:31 [INFO] Finished server process [74807]
+2026-06-02 11:09:31 [INFO] Stopping reloader process [65350]
+2026-06-02 11:09:31 [INFO] 1 change detected
+2026-06-02 11:09:32 [INFO] 1 change detected
+2026-06-02 11:09:33 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 11:09:33 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:09:33 [INFO] Started reloader process [80780] using WatchFiles
+2026-06-02 11:09:34 [INFO] Started server process [80814]
+2026-06-02 11:09:34 [INFO] Waiting for application startup.
+2026-06-02 11:09:34 [INFO] Application startup complete.
+2026-06-02 11:14:28 [INFO] 1 change detected
+2026-06-02 11:14:28 [INFO] 1 change detected
+2026-06-02 11:16:35 [INFO] Shutting down
+2026-06-02 11:16:35 [INFO] Waiting for application shutdown.
+2026-06-02 11:16:35 [INFO] Application shutdown complete.
+2026-06-02 11:16:35 [INFO] Finished server process [80814]
+2026-06-02 11:16:35 [INFO] Stopping reloader process [80780]
+2026-06-02 11:16:35 [INFO] 1 change detected
+2026-06-02 11:16:37 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 11:16:37 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:16:37 [INFO] Started reloader process [88542] using WatchFiles
+2026-06-02 11:16:38 [INFO] Started server process [88574]
+2026-06-02 11:16:38 [INFO] Waiting for application startup.
+2026-06-02 11:16:38 [INFO] Application startup complete.
+2026-06-02 11:17:58 [INFO] 1 change detected
+2026-06-02 11:17:58 [INFO] 1 change detected
+2026-06-02 11:20:35 [INFO] Shutting down
+2026-06-02 11:20:36 [INFO] Waiting for application shutdown.
+2026-06-02 11:20:36 [INFO] Application shutdown complete.
+2026-06-02 11:20:36 [INFO] Finished server process [88574]
+2026-06-02 11:20:36 [INFO] Stopping reloader process [88542]
+2026-06-02 11:20:36 [INFO] 1 change detected
+2026-06-02 11:20:36 [INFO] 1 change detected
+2026-06-02 11:20:38 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 11:20:38 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:20:38 [INFO] Started reloader process [93064] using WatchFiles
+2026-06-02 11:20:39 [INFO] Started server process [93066]
+2026-06-02 11:20:39 [INFO] Waiting for application startup.
+2026-06-02 11:20:39 [INFO] Application startup complete.
+2026-06-02 11:22:13 [INFO] 1 change detected
+2026-06-02 11:22:13 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 11:22:13 [INFO] 1 change detected
+2026-06-02 11:22:13 [INFO] Shutting down
+2026-06-02 11:22:13 [INFO] Waiting for application shutdown.
+2026-06-02 11:22:13 [INFO] Application shutdown complete.
+2026-06-02 11:22:13 [INFO] Finished server process [93066]
+2026-06-02 11:22:13 [INFO] 1 change detected
+2026-06-02 11:22:13 [INFO] 1 change detected
+2026-06-02 11:22:14 [INFO] Started server process [94766]
+2026-06-02 11:22:14 [INFO] Waiting for application startup.
+2026-06-02 11:22:14 [INFO] Application startup complete.
+2026-06-02 11:22:27 [INFO] 3 changes detected
+2026-06-02 11:22:27 [INFO] 3 changes detected
+2026-06-02 11:22:49 [INFO] 1 change detected
+2026-06-02 11:22:49 [INFO] 1 change detected
+2026-06-02 11:22:49 [WARNING] WatchFiles detected changes in 'src/ai/llms.py'. Reloading...
+2026-06-02 11:22:49 [INFO] Shutting down
+2026-06-02 11:22:49 [INFO] Waiting for application shutdown.
+2026-06-02 11:22:49 [INFO] Application shutdown complete.
+2026-06-02 11:22:49 [INFO] Finished server process [94766]
+2026-06-02 11:22:49 [INFO] 1 change detected
+2026-06-02 11:22:50 [INFO] Started server process [95395]
+2026-06-02 11:22:50 [INFO] Waiting for application startup.
+2026-06-02 11:22:50 [INFO] Application startup complete.
+2026-06-02 11:23:11 [INFO] Shutting down
+2026-06-02 11:23:11 [INFO] Waiting for application shutdown.
+2026-06-02 11:23:11 [INFO] Application shutdown complete.
+2026-06-02 11:23:11 [INFO] Finished server process [95395]
+2026-06-02 11:23:11 [INFO] Stopping reloader process [93064]
+2026-06-02 11:23:13 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 11:23:13 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:23:13 [INFO] Started reloader process [96027] using WatchFiles
+2026-06-02 11:23:14 [INFO] Started server process [96059]
+2026-06-02 11:23:14 [INFO] Waiting for application startup.
+2026-06-02 11:23:14 [INFO] Application startup complete.
+2026-06-02 11:23:59 [INFO] Shutting down
+2026-06-02 11:23:59 [INFO] Waiting for application shutdown.
+2026-06-02 11:23:59 [INFO] Application shutdown complete.
+2026-06-02 11:23:59 [INFO] Finished server process [96059]
+2026-06-02 11:23:59 [INFO] Stopping reloader process [96027]
+2026-06-02 11:24:01 [INFO] Will watch for changes in these directories: ['/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend']
+2026-06-02 11:24:01 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:24:01 [INFO] Started reloader process [96997] using WatchFiles
+2026-06-02 11:24:02 [INFO] Started server process [96999]
+2026-06-02 11:24:02 [INFO] Waiting for application startup.
+2026-06-02 11:24:02 [INFO] Application startup complete.
+2026-06-02 11:25:32 [INFO] Shutting down
+2026-06-02 11:25:32 [INFO] Waiting for application shutdown.
+2026-06-02 11:25:32 [INFO] Application shutdown complete.
+2026-06-02 11:25:32 [INFO] Finished server process [96999]
+2026-06-02 11:25:32 [INFO] Stopping reloader process [96997]
+2026-06-02 11:25:38 [INFO] Started server process [98860]
+2026-06-02 11:25:38 [INFO] Waiting for application startup.
+2026-06-02 11:25:38 [INFO] Application startup complete.
+2026-06-02 11:25:38 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:31:00 [INFO] Shutting down
+2026-06-02 11:31:00 [INFO] Waiting for application shutdown.
+2026-06-02 11:31:00 [INFO] Application shutdown complete.
+2026-06-02 11:31:00 [INFO] Finished server process [98860]
+2026-06-02 11:31:48 [INFO] Started server process [6566]
+2026-06-02 11:31:48 [INFO] Waiting for application startup.
+2026-06-02 11:31:48 [INFO] Application startup complete.
+2026-06-02 11:31:48 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:36:57 [ERROR] 'DB_NAME'
+2026-06-02 11:36:57 [ERROR] Unable to authenticate user
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 462, in login
+    credential = _credential_by_email(email)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 277, in _credential_by_email
+    df = db.selectFromDB(table_name="credentials", field_names=["email"], field_values=[[email]], limit=1)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/utils.py", line 155, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/db.py", line 263, in selectFromDB
+    with Session(engine) as session:
+                 ^^^^^^
+NameError: name 'engine' is not defined
+2026-06-02 11:38:20 [INFO] Shutting down
+2026-06-02 11:38:20 [INFO] Waiting for application shutdown.
+2026-06-02 11:38:20 [INFO] Application shutdown complete.
+2026-06-02 11:38:20 [INFO] Finished server process [6566]
+2026-06-02 11:38:21 [INFO] Started server process [13692]
+2026-06-02 11:38:21 [INFO] Waiting for application startup.
+2026-06-02 11:38:21 [INFO] Application startup complete.
+2026-06-02 11:38:21 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:38:34 [ERROR] 'DB_NAME'
+2026-06-02 11:38:34 [ERROR] Unable to authenticate user
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 462, in login
+    credential = _credential_by_email(email)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 277, in _credential_by_email
+    df = db.selectFromDB(table_name="credentials", field_names=["email"], field_values=[[email]], limit=1)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/utils.py", line 156, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/db.py", line 263, in selectFromDB
+    with Session(engine) as session:
+                 ^^^^^^
+NameError: name 'engine' is not defined
+2026-06-02 11:42:10 [INFO] Shutting down
+2026-06-02 11:42:11 [INFO] Waiting for application shutdown.
+2026-06-02 11:42:11 [INFO] Application shutdown complete.
+2026-06-02 11:42:11 [INFO] Finished server process [13692]
+2026-06-02 11:42:12 [INFO] Started server process [18069]
+2026-06-02 11:42:12 [INFO] Waiting for application startup.
+2026-06-02 11:42:12 [INFO] Application startup complete.
+2026-06-02 11:42:12 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:42:26 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 11:49:33 [INFO] Shutting down
+2026-06-02 11:49:33 [INFO] Waiting for application shutdown.
+2026-06-02 11:49:33 [INFO] Application shutdown complete.
+2026-06-02 11:49:33 [INFO] Finished server process [18069]
+2026-06-02 11:49:35 [INFO] Started server process [26155]
+2026-06-02 11:49:35 [INFO] Waiting for application startup.
+2026-06-02 11:49:35 [INFO] Application startup complete.
+2026-06-02 11:49:35 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 11:50:05 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 11:57:21 [INFO] Shutting down
+2026-06-02 11:57:21 [INFO] Waiting for application shutdown.
+2026-06-02 11:57:21 [INFO] Application shutdown complete.
+2026-06-02 11:57:21 [INFO] Finished server process [26155]
+2026-06-02 11:57:23 [INFO] Started server process [34702]
+2026-06-02 11:57:23 [INFO] Waiting for application startup.
+2026-06-02 11:57:23 [INFO] Application startup complete.
+2026-06-02 11:57:23 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:03:31 [INFO] Shutting down
+2026-06-02 12:03:31 [INFO] Waiting for application shutdown.
+2026-06-02 12:03:31 [INFO] Application shutdown complete.
+2026-06-02 12:03:31 [INFO] Finished server process [34702]
+2026-06-02 12:03:32 [INFO] Started server process [41454]
+2026-06-02 12:03:32 [INFO] Waiting for application startup.
+2026-06-02 12:03:32 [INFO] Application startup complete.
+2026-06-02 12:03:32 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:07:58 [INFO] Shutting down
+2026-06-02 12:07:58 [INFO] Waiting for application shutdown.
+2026-06-02 12:07:58 [INFO] Application shutdown complete.
+2026-06-02 12:07:58 [INFO] Finished server process [41454]
+2026-06-02 12:08:00 [INFO] Started server process [46346]
+2026-06-02 12:08:00 [INFO] Waiting for application startup.
+2026-06-02 12:08:00 [INFO] Application startup complete.
+2026-06-02 12:08:00 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:10:35 [INFO] Shutting down
+2026-06-02 12:10:36 [INFO] Waiting for application shutdown.
+2026-06-02 12:10:36 [INFO] Application shutdown complete.
+2026-06-02 12:10:36 [INFO] Finished server process [46346]
+2026-06-02 12:10:37 [INFO] Started server process [49227]
+2026-06-02 12:10:37 [INFO] Waiting for application startup.
+2026-06-02 12:10:37 [INFO] Application startup complete.
+2026-06-02 12:10:37 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:12:51 [INFO] Shutting down
+2026-06-02 12:12:51 [INFO] Waiting for application shutdown.
+2026-06-02 12:12:51 [INFO] Application shutdown complete.
+2026-06-02 12:12:51 [INFO] Finished server process [49227]
+2026-06-02 12:12:58 [INFO] Started server process [51895]
+2026-06-02 12:12:58 [INFO] Waiting for application startup.
+2026-06-02 12:12:58 [INFO] Application startup complete.
+2026-06-02 12:12:58 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:14:37 [INFO] Shutting down
+2026-06-02 12:14:37 [INFO] Waiting for application shutdown.
+2026-06-02 12:14:37 [INFO] Application shutdown complete.
+2026-06-02 12:14:37 [INFO] Finished server process [51895]
+2026-06-02 12:14:39 [INFO] Started server process [53866]
+2026-06-02 12:14:39 [INFO] Waiting for application startup.
+2026-06-02 12:14:39 [INFO] Application startup complete.
+2026-06-02 12:14:39 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:21:02 [INFO] Shutting down
+2026-06-02 12:21:02 [INFO] Waiting for application shutdown.
+2026-06-02 12:21:02 [INFO] Application shutdown complete.
+2026-06-02 12:21:02 [INFO] Finished server process [53866]
+2026-06-02 12:21:04 [INFO] Started server process [60795]
+2026-06-02 12:21:04 [INFO] Waiting for application startup.
+2026-06-02 12:21:04 [INFO] Application startup complete.
+2026-06-02 12:21:04 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:23:29 [INFO] Shutting down
+2026-06-02 12:23:29 [INFO] Waiting for application shutdown.
+2026-06-02 12:23:29 [INFO] Application shutdown complete.
+2026-06-02 12:23:29 [INFO] Finished server process [60795]
+2026-06-02 12:23:31 [INFO] Started server process [63715]
+2026-06-02 12:23:31 [INFO] Waiting for application startup.
+2026-06-02 12:23:31 [INFO] Application startup complete.
+2026-06-02 12:23:31 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:23:47 [INFO] Shutting down
+2026-06-02 12:23:47 [INFO] Waiting for application shutdown.
+2026-06-02 12:23:47 [INFO] Application shutdown complete.
+2026-06-02 12:23:47 [INFO] Finished server process [63715]
+2026-06-02 12:23:51 [INFO] Started server process [64259]
+2026-06-02 12:23:51 [INFO] Waiting for application startup.
+2026-06-02 12:23:51 [INFO] Application startup complete.
+2026-06-02 12:23:51 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:26:39 [INFO] Shutting down
+2026-06-02 12:26:40 [INFO] Waiting for application shutdown.
+2026-06-02 12:26:40 [INFO] Application shutdown complete.
+2026-06-02 12:26:40 [INFO] Finished server process [64259]
+2026-06-02 12:26:46 [INFO] Started server process [67952]
+2026-06-02 12:26:46 [INFO] Waiting for application startup.
+2026-06-02 12:26:46 [INFO] Application startup complete.
+2026-06-02 12:26:46 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:40:12 [INFO] Shutting down
+2026-06-02 12:40:12 [INFO] Waiting for application shutdown.
+2026-06-02 12:40:12 [INFO] Application shutdown complete.
+2026-06-02 12:40:12 [INFO] Finished server process [67952]
+2026-06-02 12:40:15 [INFO] Started server process [46733]
+2026-06-02 12:40:15 [INFO] Waiting for application startup.
+2026-06-02 12:40:15 [INFO] Application startup complete.
+2026-06-02 12:40:15 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:48:22 [INFO] Shutting down
+2026-06-02 12:48:23 [INFO] Waiting for application shutdown.
+2026-06-02 12:48:23 [INFO] Application shutdown complete.
+2026-06-02 12:48:23 [INFO] Finished server process [46733]
+2026-06-02 12:48:25 [INFO] Started server process [56652]
+2026-06-02 12:48:25 [INFO] Waiting for application startup.
+2026-06-02 12:48:25 [INFO] Application startup complete.
+2026-06-02 12:48:25 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 12:48:44 [INFO] Shutting down
+2026-06-02 12:48:44 [INFO] Waiting for application shutdown.
+2026-06-02 12:48:44 [INFO] Application shutdown complete.
+2026-06-02 12:48:44 [INFO] Finished server process [56652]
+2026-06-02 12:49:09 [INFO] Started server process [57772]
+2026-06-02 12:49:09 [INFO] Waiting for application startup.
+2026-06-02 12:49:09 [INFO] Application startup complete.
+2026-06-02 12:49:09 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 15:21:06 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 15:21:06 [ERROR] (psycopg2.OperationalError) could not translate host name "ehsdtt031535.niehs.nih.gov" to address: nodename nor servname provided, or not known
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-06-02 15:21:06 [ERROR] Unable to authenticate user
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 144, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3319, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py", line 178, in _do_get
+    with util.safe_reraise():
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py", line 176, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 389, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.OperationalError: could not translate host name "ehsdtt031535.niehs.nih.gov" to address: nodename nor servname provided, or not known
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 462, in login
+    if isinstance(item, (list, tuple)) and len(item) >= 2:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 277, in _credential_by_email
+    df = db.selectFromDB(table_name="credentials", field_names=["email"], field_values=[[email]], limit=1)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/utils.py", line 156, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/db.py", line 261, in selectFromDB
+    df = pd.DataFrame([c.__dict__ for c in cursor.all()])
+                                           ^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2864, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2372, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2260, in _execute_internal
+    conn = self._connection_for_bind(bind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2112, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 1191, in _connection_for_bind
+    conn = bind.connect()
+           ^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3295, in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2450, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 144, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3319, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py", line 178, in _do_get
+    with util.safe_reraise():
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/impl.py", line 176, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 389, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not translate host name "ehsdtt031535.niehs.nih.gov" to address: nodename nor servname provided, or not known
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-06-02 16:39:23 [INFO] Shutting down
+2026-06-02 16:39:23 [INFO] Waiting for application shutdown.
+2026-06-02 16:39:23 [INFO] Application shutdown complete.
+2026-06-02 16:39:23 [INFO] Finished server process [57772]
+2026-06-02 16:40:07 [INFO] Started server process [13617]
+2026-06-02 16:40:07 [INFO] Waiting for application startup.
+2026-06-02 16:40:07 [INFO] Application startup complete.
+2026-06-02 16:40:07 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 18:52:24 [INFO] Shutting down
+2026-06-02 18:52:24 [INFO] Waiting for application shutdown.
+2026-06-02 18:52:24 [INFO] Application shutdown complete.
+2026-06-02 18:52:24 [INFO] Finished server process [13617]
+2026-06-02 18:52:30 [INFO] Started server process [12372]
+2026-06-02 18:52:30 [INFO] Waiting for application startup.
+2026-06-02 18:52:30 [INFO] Application startup complete.
+2026-06-02 18:52:30 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 22:53:16 [INFO] Shutting down
+2026-06-02 22:53:16 [INFO] Waiting for application shutdown.
+2026-06-02 22:53:16 [INFO] Application shutdown complete.
+2026-06-02 22:53:16 [INFO] Finished server process [12372]
+2026-06-02 22:53:19 [INFO] Started server process [28278]
+2026-06-02 22:53:19 [INFO] Waiting for application startup.
+2026-06-02 22:53:19 [INFO] Application startup complete.
+2026-06-02 22:53:19 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 22:55:21 [INFO] Shutting down
+2026-06-02 22:55:21 [INFO] Waiting for application shutdown.
+2026-06-02 22:55:21 [INFO] Application shutdown complete.
+2026-06-02 22:55:21 [INFO] Finished server process [28278]
+2026-06-02 22:55:23 [INFO] Started server process [31580]
+2026-06-02 22:55:23 [INFO] Waiting for application startup.
+2026-06-02 22:55:23 [INFO] Application startup complete.
+2026-06-02 22:55:23 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 22:56:16 [INFO] Shutting down
+2026-06-02 22:56:16 [INFO] Waiting for application shutdown.
+2026-06-02 22:56:16 [INFO] Application shutdown complete.
+2026-06-02 22:56:16 [INFO] Finished server process [31580]
+2026-06-02 22:56:26 [INFO] Started server process [32799]
+2026-06-02 22:56:26 [INFO] Waiting for application startup.
+2026-06-02 22:56:26 [INFO] Application startup complete.
+2026-06-02 22:56:26 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 23:03:05 [INFO] Shutting down
+2026-06-02 23:03:05 [INFO] Waiting for application shutdown.
+2026-06-02 23:03:05 [INFO] Application shutdown complete.
+2026-06-02 23:03:05 [INFO] Finished server process [32799]
+2026-06-02 23:03:08 [INFO] Started server process [40229]
+2026-06-02 23:03:08 [INFO] Waiting for application startup.
+2026-06-02 23:03:08 [INFO] Application startup complete.
+2026-06-02 23:03:08 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
+2026-06-02 23:03:17 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-02 23:03:40 [ERROR] Unable to save structured outline
+Traceback (most recent call last):
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/app.py", line 859, in save_generated_file_outline
+    from src.manage_outline import processOutline
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/manage_outline.py", line 6, in <module>
+    from .ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/ai/architecture.py", line 9, in <module>
+    from .gather_context_graph import GatherContextGraph
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/src/ai/gather_context_graph.py", line 12, in <module>
+    nest_asyncio.apply()
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/nest_asyncio.py", line 19, in apply
+    _patch_loop(loop)
+  File "/Users/talukdera2/Desktop/projects/ods/Discourse2Draft-new/backend/.venv/lib/python3.12/site-packages/nest_asyncio.py", line 193, in _patch_loop
+    raise ValueError('Can\'t patch loop of type %s' % type(loop))
+ValueError: Can't patch loop of type <class 'uvloop.Loop'>
+2026-06-02 23:06:15 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-03 12:42:17 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-03 12:45:14 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-03 12:46:16 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-03 12:46:28 [INFO] Connection string: postgresql://dtt_admin:N0f1YzOn3..!?@ehsdtt031535.niehs.nih.gov:5432/discourse2draft-db
+2026-06-03 12:48:35 [INFO] Started server process [87064]
+2026-06-03 12:48:35 [INFO] Waiting for application startup.
+2026-06-03 12:48:35 [INFO] Application startup complete.
+2026-06-03 12:48:35 [INFO] Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-06-03 12:48:37 [INFO] Shutting down
+2026-06-03 12:48:38 [INFO] Waiting for application shutdown.
+2026-06-03 12:48:38 [INFO] Application shutdown complete.
+2026-06-03 12:48:38 [INFO] Finished server process [87064]
+2026-06-03 12:49:09 [INFO] Started server process [87823]
+2026-06-03 12:49:09 [INFO] Waiting for application startup.
+2026-06-03 12:49:09 [INFO] Application startup complete.
+2026-06-03 12:49:09 [INFO] Uvicorn running on http://127.0.0.1:8012 (Press CTRL+C to quit)
