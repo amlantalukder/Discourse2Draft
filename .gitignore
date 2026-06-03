@@ -1,1 +1,10 @@
-frontend/node_modules/
+**node_modules/**
+**__pycache__/**
+**dist/**
+**build/**
+.env
+**.DS_Store**
+**.vscode/**
+**.idea/**
+**.pytest_cache/**
+**.mypy_cache/**
