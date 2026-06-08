@@ -1,7 +1,7 @@
 import { Plus, Save, SlidersHorizontal } from "lucide-react";
 import { IconButton } from "./IconButton";
 
-export function WorkspaceHeader({ fileName, setFileName, onSave, isSaving = false, settings, onOpenSettings }) {
+export function WorkspaceHeader({ fileName, setFileName, onSave, onNewDocument, isSaving = false, settings, onOpenSettings }) {
   return (
     <section className="workspace-header">
       <div className="document-control">
@@ -13,7 +13,7 @@ export function WorkspaceHeader({ fileName, setFileName, onSave, isSaving = fals
           <Save size={15} />
           <span>{isSaving ? "Saving" : "Save"}</span>
         </button>
-        <IconButton label="New document">
+        <IconButton label="New document" type="button" onClick={onNewDocument}>
           <Plus size={19} />
         </IconButton>
       </div>

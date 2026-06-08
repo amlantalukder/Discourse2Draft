@@ -1,9 +1,32 @@
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { getJSON, postJSON } from "../api/client";
 import { AboutPage } from "./AboutPage";
 import { TopBar } from "./TopBar";
 
 const PASSWORD_RULE = 'Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?"{}[]|<>).';
+
+function PasswordInput({ value, onChange, autoComplete, label }) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <label className="auth-field">
+      <span>{label}</span>
+      <span className="password-input-wrap">
+        <input type={isVisible ? "text" : "password"} autoComplete={autoComplete} required value={value} onChange={onChange} />
+        <button
+          aria-label={isVisible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          className="password-toggle"
+          onClick={() => setIsVisible((current) => !current)}
+          title={isVisible ? "Hide password" : "Show password"}
+          type="button"
+        >
+          {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </span>
+    </label>
+  );
+}
 
 export function LoginPage({ onContinue }) {
   const [authView, setAuthView] = useState("login");
@@ -124,10 +147,7 @@ export function LoginPage({ onContinue }) {
           <input type="email" autoComplete="email" required value={loginForm.email} onChange={updateForm(setLoginForm, "email")} />
         </label>
 
-        <label className="auth-field">
-          <span>Password</span>
-          <input type="password" autoComplete="current-password" required value={loginForm.password} onChange={updateForm(setLoginForm, "password")} />
-        </label>
+        <PasswordInput label="Password" autoComplete="current-password" value={loginForm.password} onChange={updateForm(setLoginForm, "password")} />
 
         <div className="auth-actions auth-actions-login">
           <button className="tool-button" type="submit" disabled={isSubmitting}>
@@ -172,15 +192,9 @@ export function LoginPage({ onContinue }) {
           <input type="email" autoComplete="email" required value={createForm.email} onChange={updateForm(setCreateForm, "email")} />
         </label>
 
-        <label className="auth-field">
-          <span>Password</span>
-          <input type="password" autoComplete="new-password" required value={createForm.password} onChange={updateForm(setCreateForm, "password")} />
-        </label>
+        <PasswordInput label="Password" autoComplete="new-password" value={createForm.password} onChange={updateForm(setCreateForm, "password")} />
 
-        <label className="auth-field">
-          <span>Confirm password</span>
-          <input type="password" autoComplete="new-password" required value={createForm.confirm_password} onChange={updateForm(setCreateForm, "confirm_password")} />
-        </label>
+        <PasswordInput label="Confirm password" autoComplete="new-password" value={createForm.confirm_password} onChange={updateForm(setCreateForm, "confirm_password")} />
 
         <p className="auth-note">{PASSWORD_RULE}</p>
 

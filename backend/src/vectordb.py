@@ -90,6 +90,9 @@ class ChromaDB:
 @print_func_name
 def getLoader(file_path: Path):
 
+    def formatMetadata(doc: Document):
+        return Document(page_content=doc.page_content, metadata={k: str(v) for k, v in doc.metadata.items()})
+
     assert file_path.suffix in [".csv", ".json", ".pdf", ".epub", ".doc", ".docx", ".txt", ".xlsm"], \
     'Provided file type is not supported. Only the following file types are supported, ".csv", ".json", ".pdf", ".epub", ".doc", ".docx", ".txt"'
         
@@ -103,7 +106,7 @@ def getLoader(file_path: Path):
         case _:
             loader = UnstructuredLoader(file_path=file_path)
 
-    return loader.lazy_load()
+    return [formatMetadata(doc) for doc in loader.lazy_load()]
 
 @print_func_name
 def deleteCollection(collection_name: str):

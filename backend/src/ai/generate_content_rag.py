@@ -91,6 +91,7 @@ class GenerateContentRAG:
                                   keys_to_find = ['content', 'concept_map'],
                                   value_names = ['content', 'concept_map'],
                                   return_response = True)
+
         try:
             references = {ref.file_id: ref.file_name for ref in dict(response).get('references', [])}
         except:

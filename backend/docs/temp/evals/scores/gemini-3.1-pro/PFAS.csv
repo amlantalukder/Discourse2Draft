@@ -1,0 +1,13 @@
+,# Title,## Abstract:,## Introduction & Chemical Background:,## Exposure Pathways & Toxicokinetics:,## System-Specific Health Impacts (The Core Analysis):,## Mechanisms of Action:,"## The ""GenX"" Problem:",## Regulatory Context & Knowledge Gaps:,## Conclusion:,## References
+chatgpt_deepresearch relevance,100,100,100,100,100,100,100,100,100,100
+chatgpt_deepresearch continuity,100,100,100,100,100,95,100,100,100,100
+chatgpt_deepresearch non_repetitiveness,100,100,90,95,95,85,95,95,85,100
+chatgpt_deepresearch specificity,100,100,100,100,95,95,100,98,100,100
+manus_ai relevance,100,100,100,100,100,100,100,100,100,100
+manus_ai continuity,100,100,100,100,100,100,100,100,100,100
+manus_ai non_repetitiveness,100,100,95,100,95,95,95,95,90,100
+manus_ai specificity,100,100,100,100,100,100,100,100,100,100
+discourse2draft relevance,100,100,100,100,95,95,95,100,100,100
+discourse2draft continuity,100,100,95,100,90,90,90,100,100,100
+discourse2draft non_repetitiveness,100,100,100,95,85,60,85,90,90,100
+discourse2draft specificity,100,95,100,100,90,90,95,95,100,100

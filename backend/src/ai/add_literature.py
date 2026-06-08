@@ -10,7 +10,7 @@ from ..vectordb import ChromaDB
 from ..db import selectFromDB, insertIntoDB
 from ..utils import Config, print_func_name
 
-nest_asyncio.apply()
+#nest_asyncio.apply()
 
 class AddLiterature:
 

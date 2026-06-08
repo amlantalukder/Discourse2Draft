@@ -105,11 +105,9 @@ GENERATE_CONTENT_INSTRUCTIONS = '''\
 CITE_CONTEXT_INSTRUCTIONS = '''\
 <Adding text from context>
     - The context is provided with RAG Context under file_id tags. Each file_id tag contains the reference and content.
-    - In your writing, take context from the RAG Context whenever possible.
-    - At the end of your writing from the context, cite the RAG context with the file_id within "[" and "]" in the following format: [CITE(file_id)].
-    - If the context of a line is taken from the RAG context of multiple file_id's, you can cite all the file_ids in a comma separated string within "[" and "]" in the following format: [CITE(file_id1, file_id2)]. 
-    - Do not put the citation after texts if the written texts are not from the RAG context.
-    - If the written texts from RAG context is divided into multiple paragraphs, put citation at the end of each of the paragraphs.
+    - In your writing, take context from the RAG Context whenever possible **strictly maintaining the following rules**.
+    - A citation must be enclosed within "[CITE()]", example: [CITE(ref1)]. Multiple citations must be comma ", " separated, example: "[CITE(ref1, ref2)]".
+    - Cite a reference only if the preceding line(s) is from the reference. If multiple lines are from the same reference put the citation after the last line.
     - You must put the citation before the ending "." of the corresponding line.
 </Adding text from context>\
 '''

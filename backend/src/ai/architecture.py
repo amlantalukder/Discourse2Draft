@@ -1,16 +1,13 @@
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import Command
 from langchain_openai import ChatOpenAI
-from typing import Literal
 from .common import StateContentManager, StateOutlineManager
 from .llms import getAIModel
 from .analyze_content_header import AnalyzeContentHeader
 from .gather_context import GatherContext
-from .gather_context_graph import GatherContextGraph
 from .summarize import Summarize
 from .generate_content import GenerateContent
 from .generate_content_rag import GenerateContentRAG
-from .generate_content_graphrag import GenerateContentGraphRAG
 from .generate_outline import GenerateOutline
 from .format_outline import FormatOutline
 from .add_literature import AddLiterature
@@ -105,8 +102,6 @@ class ContentWriterArchitecture(Architecture):
         match self.type:
             case 'rag':
                 workflow = self.createRAGWorkflow()
-            case 'graphrag':
-                workflow = self.createGraphRAGWorkflow()
             case _:
                 workflow = self.createBaseWorkflow()
 
@@ -165,30 +160,6 @@ class ContentWriterArchitecture(Architecture):
             workflow.add_edge("Analyze Content Header", "Add Literature")
             workflow.add_edge("Add Literature", "Gather Context from Literature")
             workflow.add_edge("Gather Context from Literature", "Generate Content")
-        workflow.add_edge("Generate Content", "Check If Summary Needed")
-
-        return workflow
-
-    @print_func_name
-    def createGraphRAGWorkflow(self):
-
-        assert self.collection_name != '', f'collection_name must be provided, found {self.collection_name}'
-
-        # Define a new graph
-        workflow = StateGraph(state_schema=StateContentManager)
-
-        # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
-        workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
-        workflow.add_node("Gather Context", GatherContextGraph(llm=self.llm, collection_name=self.collection_name))
-        workflow.add_node("Generate Content", GenerateContentGraphRAG(llm=self.llm, instructions=self.instructions))
-        workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
-        workflow.add_node("Check If Summary Needed", lambda state: checkIfSummaryNeededForGenContent(state, self.llm))
-
-        workflow.add_conditional_edges(START, lambda state: checkIfSummaryNeededForPrevContent(state, self.llm), {True: "Summarize Previous Content", False: "Analyze Content Header"})
-        workflow.add_edge("Summarize Previous Content", "Analyze Content Header")
-        workflow.add_edge("Analyze Content Header", "Gather Context")
-        workflow.add_edge("Gather Context", "Generate Content")
         workflow.add_edge("Generate Content", "Check If Summary Needed")
 
         return workflow

@@ -1,16 +1,31 @@
 import json
 import re
 import logging
-import datetime
-from pathlib import Path
 from docx import Document
 
 from .utils import Config, print_func_name
 from .manage_outline import SpecialSectionTypes, ContentTypes
-from .db import selectFromDB, insertIntoDB, updateDB, uploaded_files_status
+from .vectordb import ChromaDB
+from .db import selectFromDB, vector_db_collections_status, vector_db_collections_type
+from .ai.tools.search_pubmed import formatAPA
 
 @print_func_name
-def getDocContent(file_id, attached_files=[], file_info={}):
+def formatCitations(text):
+    '''
+    Convert [CITE(abc), CITE(bcd), CITE(cde)] to [CITE(abc, bcd, cde)]
+    '''
+    pattern = r'\[(?:CITE\([^)]+\)(?:,\s*)?)+\]'
+    
+    def replace_func(match):
+        # Extract all citations
+        citations = re.findall(r'CITE\(([^)]+)\)', match.group(0))
+        # Rebuild as single CITE with all arguments
+        return f'[CITE({", ".join(citations)})]'
+    
+    return re.sub(pattern, replace_func, text)
+
+@print_func_name
+def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_collections_id_literature):
 
     @print_func_name
     def processCitation(content, ref_list=[], used_files_info={}):
@@ -139,10 +154,12 @@ def getDocContent(file_id, attached_files=[], file_info={}):
     with open(outline_file_path) as fp:
         d_outline = json.load(fp)
 
-    attached_references = {str(k): v for k, v, _ in attached_files}
+    attached_references, file_info = getAttachedRefs(vector_db_collections_id_uploaded_files, vector_db_collections_id_literature)
+
+    attached_references = {str(k): v for k, v, _ in attached_references}
     content_md, content_docx, content_tex, ref_list, used_files_info= extractContentFromOutline(d_outline)
     
-    if attached_files:
+    if attached_references:
         content_md.append('## References')
         content_docx.add_heading('References', level=2)
         for i, ref in enumerate(ref_list):
@@ -158,68 +175,82 @@ def getDocContent(file_id, attached_files=[], file_info={}):
     return content_md, content_docx, content_tex, bibs
 
 @print_func_name
-def uploadFiles(files, email='', session_id=''):
+def createVectorDBCollection(collection_name: str, replace_collection: bool=True):
 
-    for file in files:
+    db = ChromaDB()
+    if replace_collection: 
+        db.create(collection_name=collection_name, delete_if_exists=True)
+    else:
+        db.get(collection_name=collection_name)
 
-        current_time = datetime.now()
-        
-        if email != '':
-            records = selectFromDB(table_name='uploaded_files', 
-                            field_names=['email', 'file_name', 'status'],
-                            field_values=[[email], [file['name']], [uploaded_files_status.UPLOADED.value]])
-        else:
-            records = selectFromDB(table_name='uploaded_files', 
-                            field_names=['session', 'file_name', 'status'],
-                            field_values=[[session_id], [file['name']], [uploaded_files_status.UPLOADED.value]])
-        
-        if records.empty:
-
-            ids = insertIntoDB(table_name='uploaded_files', 
-                        field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
-                        field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
-            uploaded_file_id = int(ids[0])
-            
-        else:
-            updateDB(table_name='uploaded_files', 
-                    update_fields=['status', 'update_date'], 
-                    update_values=[uploaded_files_status.UPLOADED.value, current_time], 
-                    select_fields=['id'], 
-                    select_values=[list(map(int, records.id.values))])
-            uploaded_file_id = int(records.iloc[0].id)
-
-        # ids = insertIntoDB(table_name='uploaded_files', 
-        #                    field_names=['email', 'session', 'file_name', 'status', 'create_date', 'update_date'], 
-        #                    field_values=[[email], [session_id], [file['name']], [uploaded_files_status.UPLOADED.value], [current_time], [current_time]])
-        # uploaded_file_id = ids[0]
-            
-        dir_uploaded_files = Config.DIR_CONTENTS / 'uploaded_docs'
-        dir_uploaded_files.mkdir(parents=False, exist_ok=True)
-
-        with open(dir_uploaded_files / f'{uploaded_file_id}{Path(file['datapath']).suffix}', 'wb') as fp:
-            with open(file['datapath'], 'rb') as fp_r:
-                fp.write(fp_r.read())
+    return db
 
 @print_func_name
-def unMarkdownText(text):
+def getLiteraturesFromDB(literature_id_list):
 
-    from bs4 import BeautifulSoup
-    from markdown import markdown
+    literature_records = selectFromDB(table_name='literature',
+                                    field_names=['id'],
+                                    field_values=[literature_id_list])
+    
+    literature_records['authors'] = literature_records['authors'].map(eval)
+    literature_records['reference'] = literature_records.apply(lambda x: formatAPA(dict(x[['authors', 'title', 'year', 'journal', 'volume', 'issue', 'pages', 'doi', 'pmid']])), axis=1)
+    literature_records['type'] = vector_db_collections_type.LITERATURE.value
+    
+    literature_info = list(literature_records[['id', 'reference', 'type']].values)
 
-    html = markdown(text)
-    return ''.join(BeautifulSoup(html).findAll(text=True))
+    literature_records['doi'] = literature_records['id']
+    file_info = literature_records[['id', 'authors', 'title', 'journal', 'volume', 'issue', 'pages', 'year', 'doi']].set_index('id').T.to_dict()
+
+    return literature_info, file_info
 
 @print_func_name
-def formatCitations(text):
-    '''
-    Convert [CITE(abc), CITE(bcd), CITE(cde)] to [CITE(abc, bcd, cde)]
-    '''
-    pattern = r'\[(?:CITE\([^)]+\)(?:,\s*)?)+\]'
+def getVectorDBFiles(vector_db_collections_id):
+
+    if not vector_db_collections_id: return [], {}
+
+    vector_db_collection_records = selectFromDB(table_name='vector_db_collections', 
+                                                field_names=['id', 'status'], 
+                                                field_values=[[vector_db_collections_id], [vector_db_collections_status.ACTIVE.value]])
     
-    def replace_func(match):
-        # Extract all citations
-        citations = re.findall(r'CITE\(([^)]+)\)', match.group(0))
-        # Rebuild as single CITE with all arguments
-        return f'[CITE({", ".join(citations)})]'
+    if vector_db_collection_records.empty: return [], {}
     
-    return re.sub(pattern, replace_func, text)
+    vector_db_collection_files_records = selectFromDB(table_name='vector_db_collection_files', 
+                                                field_names=['vector_db_collections_id'], 
+                                                field_values=[[vector_db_collections_id]])
+    
+    if vector_db_collection_files_records.empty: return [], {}
+
+    uploaded_files_id_list = list(map(int, vector_db_collection_files_records['uploaded_files_id'].dropna().values))
+
+    if uploaded_files_id_list: 
+
+        uploaded_files_records = selectFromDB(table_name='uploaded_files',
+                                            field_names=['id'],
+                                            field_values=[uploaded_files_id_list])
+        
+        uploaded_files_records['type'] = vector_db_collections_type.UPLOADED_FILES.value
+        
+        uploaded_files_info = list(uploaded_files_records[['id', 'file_name', 'type']].values)
+
+        uploaded_files_records['id'] = uploaded_files_records['id'].map(str)
+        uploaded_files_records['title'] = uploaded_files_records['file_name']
+
+        file_info = uploaded_files_records[['id', 'title']].set_index('id').T.to_dict()
+
+        return uploaded_files_info, file_info 
+
+    literature_id_list = list(vector_db_collection_files_records['literature_id'].dropna().values)
+
+    if literature_id_list:
+    
+        return getLiteraturesFromDB(literature_id_list)
+    
+    return [], {}
+
+@print_func_name
+def getAttachedRefs(vector_db_collections_id_uploaded_files, vector_db_collections_id_literature):
+
+    files_attached, file_info_attached = getVectorDBFiles(vector_db_collections_id_uploaded_files)
+    files_lit, file_info_lit = getVectorDBFiles(vector_db_collections_id_literature)
+    
+    return files_attached + files_lit, file_info_attached | file_info_lit

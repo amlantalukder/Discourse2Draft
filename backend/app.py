@@ -3,20 +3,24 @@ from enum import Enum
 import asyncio
 import importlib
 import ast
+from copy import deepcopy
+from io import BytesIO
 import json
 import logging
 from pathlib import Path
 import re
 import shutil
 import sys
-import tempfile
+import threading
 import types
 from typing import Any, Literal
 from uuid import uuid4
+import zipfile
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from src.utils import Config
@@ -94,16 +98,6 @@ class OutlineFormatRequest(AIRequestBase):
     query: str = ""
 
 
-class AbstractDetectorRequest(AIRequestBase):
-    current_section: str
-
-
-class AbstractWriterRequest(AIRequestBase):
-    content_pre: str = ""
-    current_section: str
-    content_specific_instructions: str = ""
-
-
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -133,71 +127,46 @@ class GeneratedFileUpdateRequest(BaseModel):
     file_name: str
 
 
-class GeneratedFileOutlineRequest(BaseModel):
-    outline: str
+class GeneratedFileLiteratureSearchRequest(BaseModel):
     email: str | None = None
     session: str | None = None
+
+
+class GeneratedFileAttachUploadedFilesRequest(BaseModel):
+    uploaded_file_ids: list[int] = Field(default_factory=list)
+    email: str | None = None
+    session: str | None = None
+    mode: Literal["ask", "append", "replace"] = "ask"
 
 
 class GeneratedFileGenerateRequest(AIRequestBase):
     outline: str
     email: str | None = None
     session: str | None = None
+    mode: Literal["remaining", "restart"] = "remaining"
     architecture_type: Literal["base", "rag", "graphrag"] | None = None
     collection_name: str = ""
     collection_name_lit_search: str = ""
     attached_references: dict[str, str] = Field(default_factory=dict)
 
 
+class GeneratedFileParagraphUpdateRequest(AIRequestBase):
+    section_path: list[str] = Field(default_factory=list)
+    section_heading: str = ""
+    paragraph_index: int = Field(ge=0)
+    raw_paragraph: str
+    action: Literal["Expand", "Rephrase", "Remove"]
+    email: str | None = None
+    session: str | None = None
+
+
+DownloadFormat = Literal["md", "docx", "latex"]
+
+
 class SettingsUpdateRequest(BaseModel):
     llm: str
     temperature: float = Field(ge=0, le=2)
     instructions: str = ""
-
-
-class DBSelectRequest(BaseModel):
-    table_name: str
-    field_names: list[str] = Field(default_factory=list)
-    field_values: list[list[Any]] = Field(default_factory=list)
-    order_by_field_names: list[str] = Field(default_factory=list)
-    order_by_types: list[Literal["ASC", "DESC"]] = Field(default_factory=list)
-    limit: int | None = None
-
-
-class DBInsertRequest(BaseModel):
-    table_name: str
-    field_names: list[str]
-    field_values: list[list[Any]]
-
-
-class DBUpdateRequest(BaseModel):
-    table_name: str
-    update_fields: list[str]
-    update_values: list[Any]
-    select_fields: list[str]
-    select_values: list[list[Any]]
-
-
-class VectorCollectionRequest(BaseModel):
-    collection_name: str
-    embedding: str = "text-embedding-3-large"
-    delete_if_exists: bool = False
-
-
-class VectorQueryRequest(BaseModel):
-    collection_name: str
-    query: str
-    embedding: str = "text-embedding-3-large"
-    is_graph: bool = False
-
-
-class VectorPathIngestRequest(BaseModel):
-    collection_name: str
-    file_paths: list[str]
-    embedding: str = "text-embedding-3-large"
-    chunk_size: int = 1000
-    chunk_overlap: int = 200
-    is_graph: bool = False
 
 
 def _required_default_model() -> str:
@@ -214,9 +183,100 @@ def _model_name(model_name: str | None) -> str:
     return model_name or _required_default_model()
 
 
+def _exception_chain(exp: Exception) -> list[BaseException]:
+    chain: list[BaseException] = []
+    current: BaseException | None = exp
+    while current is not None and current not in chain:
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _is_database_error(exp: Exception) -> bool:
+    database_tokens = ("sqlalchemy", "psycopg", "database", "operationalerror", "dbapierror")
+    for current in _exception_chain(exp):
+        current_type = type(current)
+        type_text = f"{current_type.__module__}.{current_type.__name__}".lower()
+        if any(token in type_text for token in database_tokens):
+            return True
+    return False
+
+
+def _friendly_error_detail(action: str, exp: Exception) -> tuple[int, str]:
+    if _is_database_error(exp):
+        return 503, "The database is temporarily unavailable. Please try again in a moment."
+    return 500, f"Unable to {action}. Please try again."
+
+
 def _api_error(action: str, exp: Exception) -> HTTPException:
     logger.exception("Unable to %s", action)
-    return HTTPException(status_code=500, detail=f"Unable to {action}: {exp}")
+    status_code, detail = _friendly_error_detail(action, exp)
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _service_health(status: str, label: str, message: str) -> dict[str, str]:
+    return {
+        "status": status,
+        "label": label,
+        "message": message,
+    }
+
+
+def _check_ai_model_health() -> dict[str, str]:
+    model_name = Config.env_config.get("DEFAULT_AI_MODEL")
+    missing = [
+        name
+        for name, value in (
+            ("DEFAULT_AI_MODEL", model_name),
+            ("AI_BASE_URL", Config.env_config.get("AI_BASE_URL")),
+            ("AI_API_KEY", Config.env_config.get("AI_API_KEY")),
+        )
+        if not value
+    ]
+    if missing:
+        return _service_health("error", "AI Model", f"Missing configuration: {', '.join(missing)}.")
+
+    try:
+        from src.ai.llms import getAIModel
+
+        getAIModel(model_name=str(model_name), temperature=0)
+        return _service_health("ok", "AI Model", f"{model_name} is configured.")
+    except Exception:
+        logger.exception("AI model health check failed")
+        return _service_health("error", "AI Model", "The AI model client could not be initialized.")
+
+
+def _check_chroma_health() -> dict[str, str]:
+    host = Config.env_config.get("CHROMA_HOST")
+    port = Config.env_config.get("CHROMA_PORT")
+    if not host or not port:
+        return _service_health("error", "Chroma DB", "Chroma host or port is not configured.")
+
+    try:
+        from chromadb import HttpClient
+
+        client = HttpClient(host=host, port=port)
+        client.heartbeat()
+        return _service_health("ok", "Chroma DB", f"Chroma is reachable at {host}:{port}.")
+    except Exception:
+        logger.exception("Chroma DB health check failed")
+        return _service_health("error", "Chroma DB", "Chroma DB is not reachable.")
+
+
+def _check_postgres_health() -> dict[str, str]:
+    try:
+        import sqlalchemy as sa
+        from src import db
+
+        if not hasattr(db, "engine"):
+            return _service_health("error", "Postgres", "Postgres engine is not initialized.")
+
+        with db.engine.connect() as connection:
+            connection.execute(sa.text("SELECT 1"))
+        return _service_health("ok", "Postgres", "Postgres database is reachable.")
+    except Exception:
+        logger.exception("Postgres health check failed")
+        return _service_health("error", "Postgres", "Postgres database is not reachable.")
 
 
 def _jsonable(value: Any) -> Any:
@@ -425,6 +485,70 @@ def _generated_document(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _settings_for_generated_file(record: dict[str, Any]) -> dict[str, Any] | None:
+    settings_id = record.get("settings_id")
+    if settings_id is None:
+        return None
+
+    from src import db
+
+    df = db.selectFromDB(
+        table_name="settings",
+        field_names=["id"],
+        field_values=[[int(settings_id)]],
+        limit=1,
+    )
+    records = _records_from_dataframe(df)
+    return _settings_record(records[0]) if records else None
+
+
+def _settings_summary(settings: dict[str, Any] | None) -> str:
+    if not settings:
+        return "Session defaults"
+
+    llm = str(settings.get("llm") or "Default model")
+    temperature = settings.get("temperature")
+    if temperature is None:
+        return llm
+    return f"{llm} | Temp {temperature}"
+
+
+def _generated_document_detail(record: dict[str, Any]) -> dict[str, Any]:
+    settings = _settings_for_generated_file(record)
+    attached_documents = _attached_uploaded_documents(int(record["id"])) if record.get("id") is not None else []
+    return {
+        **_generated_document(record),
+        "file_name": record.get("file_name"),
+        "last_modified": record.get("update_date") or record.get("create_date"),
+        "attached_documents": attached_documents,
+        "attached_documents_count": len(attached_documents),
+        "settings": settings,
+        "settings_summary": _settings_summary(settings),
+    }
+
+
+def _generated_records_for_owner(
+    email: str | None = None,
+    session: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    from src import db
+
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    active_statuses = [
+        status.value for status in db.generated_files_status if status != db.generated_files_status.DELETED
+    ]
+    df = db.selectFromDB(
+        table_name="generated_files",
+        field_names=[owner_field, "status"],
+        field_values=[[owner_value], active_statuses],
+        order_by_field_names=["update_date"],
+        order_by_types=["DESC"],
+        limit=limit,
+    )
+    return _records_from_dataframe(df)
+
+
 def _generated_file_by_id(
     generated_file_id: int,
     email: str | None = None,
@@ -432,14 +556,9 @@ def _generated_file_by_id(
 ) -> dict[str, Any]:
     from src import db
 
-    field_names = ["id"]
-    field_values = [[generated_file_id]]
-    if email:
-        field_names.append("email")
-        field_values.append([_validate_email(email)])
-    if session:
-        field_names.append("session")
-        field_values.append([session])
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    field_names = ["id", owner_field]
+    field_values = [[generated_file_id], [owner_value]]
 
     df = db.selectFromDB(
         table_name="generated_files",
@@ -484,6 +603,439 @@ def _uploaded_document(record: dict[str, Any]) -> dict[str, Any]:
         "status": record.get("status"),
         "session": record.get("session"),
     }
+
+
+def _owner_identity(email: str | None = None, session: str | None = None) -> tuple[str, str, str, str]:
+    normalized_email = _validate_email(email) if email else ""
+    normalized_session = "" if normalized_email else (session or "").strip()
+    if not normalized_email and not normalized_session:
+        raise HTTPException(status_code=400, detail="Log in or continue as guest before continuing.")
+
+    owner_field = "email" if normalized_email else "session"
+    owner_value = normalized_email or normalized_session
+    return normalized_email, normalized_session, owner_field, owner_value
+
+
+def _owner_filter_fields(
+    email: str | None = None,
+    session: str | None = None,
+) -> tuple[list[str], list[list[str]], str, str]:
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    return [owner_field], [[owner_value]], owner_field, owner_value
+
+
+def _safe_uploaded_file_name(file_name: str | None) -> str:
+    safe_name = Path(file_name or "").name.strip()
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Each uploaded document needs a file name.")
+    return safe_name
+
+
+def _uploaded_doc_path(uploaded_file_id: int, file_name: str) -> Path:
+    suffix = Path(file_name).suffix
+    return Config.DIR_CONTENTS / "uploaded_docs" / f"{uploaded_file_id}{suffix}"
+
+
+def _uploaded_records_for_owner(
+    email: str | None = None,
+    session: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    from src import db
+
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    active_statuses = [
+        status.value for status in db.uploaded_files_status if status != db.uploaded_files_status.DELETED
+    ]
+    df = db.selectFromDB(
+        table_name="uploaded_files",
+        field_names=[owner_field, "status"],
+        field_values=[[owner_value], active_statuses],
+        order_by_field_names=["update_date"],
+        order_by_types=["DESC"],
+        limit=limit,
+    )
+    return _records_from_dataframe(df)
+
+
+def _uploaded_file_by_owner_and_name(
+    file_name: str,
+    email: str | None = None,
+    session: str | None = None,
+) -> dict[str, Any] | None:
+    from src import db
+
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    df = db.selectFromDB(
+        table_name="uploaded_files",
+        field_names=[owner_field, "file_name", "status"],
+        field_values=[[owner_value], [file_name], [db.uploaded_files_status.UPLOADED.value]],
+        limit=1,
+    )
+    records = _records_from_dataframe(df)
+    return records[0] if records else None
+
+
+def _save_uploaded_file(upload: UploadFile, uploaded_file_id: int, file_name: str) -> Path:
+    upload_dir = Config.DIR_CONTENTS / "uploaded_docs"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    destination = _uploaded_doc_path(uploaded_file_id, file_name)
+    upload.file.seek(0)
+    with destination.open("wb") as output_file:
+        shutil.copyfileobj(upload.file, output_file)
+    return destination
+
+
+def _vector_collection_name(vector_db_collections_id: int) -> str:
+    return f"{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}"
+
+
+def _active_literature_collection_record(generated_file_id: int) -> dict[str, Any] | None:
+    from src import db
+
+    df = db.selectFromDB(
+        table_name="vector_db_collections",
+        field_names=["generated_files_id", "type", "status"],
+        field_values=[
+            [generated_file_id],
+            [db.vector_db_collections_type.LITERATURE.value],
+            [db.vector_db_collections_status.ACTIVE.value],
+        ],
+        order_by_field_names=["update_date"],
+        order_by_types=["DESC"],
+        limit=1,
+    )
+    records = _records_from_dataframe(df)
+    return records[0] if records else None
+
+
+def _active_literature_collection(generated_file_id: int) -> dict[str, Any] | None:
+    record = _active_literature_collection_record(generated_file_id)
+    if not record:
+        return None
+    return {
+        **record,
+        "collection_name": _vector_collection_name(int(record["id"])),
+    }
+
+
+def _active_uploaded_files_collection_record(generated_file_id: int) -> dict[str, Any] | None:
+    from src import db
+
+    df = db.selectFromDB(
+        table_name="vector_db_collections",
+        field_names=["generated_files_id", "type", "status"],
+        field_values=[
+            [generated_file_id],
+            [db.vector_db_collections_type.UPLOADED_FILES.value],
+            [db.vector_db_collections_status.ACTIVE.value],
+        ],
+        order_by_field_names=["update_date"],
+        order_by_types=["DESC"],
+        limit=1,
+    )
+    records = _records_from_dataframe(df)
+    return records[0] if records else None
+
+
+def _active_uploaded_files_collection(generated_file_id: int) -> dict[str, Any] | None:
+    record = _active_uploaded_files_collection_record(generated_file_id)
+    if not record:
+        return None
+    return {
+        **record,
+        "collection_name": _vector_collection_name(int(record["id"])),
+    }
+
+
+def _attached_uploaded_documents(generated_file_id: int) -> list[dict[str, Any]]:
+    collection = _active_uploaded_files_collection_record(generated_file_id)
+    if not collection:
+        return []
+    return [_uploaded_document(record) for record in _attached_uploaded_files(int(collection["id"]))]
+
+
+def _uploaded_file_records_by_ids(uploaded_file_ids: list[int], email: str | None = None, session: str | None = None) -> list[dict[str, Any]]:
+    from src import db
+
+    unique_ids = sorted({int(file_id) for file_id in uploaded_file_ids})
+    if not unique_ids:
+        return []
+
+    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+    df = db.selectFromDB(
+        table_name="uploaded_files",
+        field_names=["id", owner_field, "status"],
+        field_values=[unique_ids, [owner_value], [db.uploaded_files_status.UPLOADED.value]],
+    )
+    return _records_from_dataframe(df)
+
+
+def _uploaded_file_attachment_records(vector_db_collections_id: int) -> list[dict[str, Any]]:
+    from src import db
+
+    df = db.selectFromDB(
+        table_name="vector_db_collection_files",
+        field_names=["vector_db_collections_id"],
+        field_values=[[vector_db_collections_id]],
+    )
+    return [
+        record
+        for record in _records_from_dataframe(df)
+        if record.get("uploaded_files_id") is not None
+    ]
+
+
+def _attached_uploaded_files(vector_db_collections_id: int) -> list[dict[str, Any]]:
+    attached_rows = _uploaded_file_attachment_records(vector_db_collections_id)
+    uploaded_file_ids = [int(row["uploaded_files_id"]) for row in attached_rows if row.get("uploaded_files_id") is not None]
+    if not uploaded_file_ids:
+        return []
+
+    from src import db
+
+    df = db.selectFromDB(
+        table_name="uploaded_files",
+        field_names=["id"],
+        field_values=[uploaded_file_ids],
+    )
+    records_by_id = {int(record["id"]): record for record in _records_from_dataframe(df)}
+    return [records_by_id[file_id] for file_id in uploaded_file_ids if file_id in records_by_id]
+
+
+def _active_uploaded_file_collections_for_uploaded_file(uploaded_file_id: int) -> list[dict[str, Any]]:
+    from src import db
+
+    df_files = db.selectFromDB(
+        table_name="vector_db_collection_files",
+        field_names=["uploaded_files_id"],
+        field_values=[[uploaded_file_id]],
+    )
+    collection_ids = sorted(
+        {
+            int(record["vector_db_collections_id"])
+            for record in _records_from_dataframe(df_files)
+            if record.get("vector_db_collections_id") is not None
+        }
+    )
+    if not collection_ids:
+        return []
+
+    df_collections = db.selectFromDB(
+        table_name="vector_db_collections",
+        field_names=["id", "type", "status"],
+        field_values=[
+            collection_ids,
+            [db.vector_db_collections_type.UPLOADED_FILES.value],
+            [db.vector_db_collections_status.ACTIVE.value],
+        ],
+        order_by_field_names=["update_date"],
+        order_by_types=["DESC"],
+    )
+    return _records_from_dataframe(df_collections)
+
+
+def _create_uploaded_files_collection(generated_file: dict[str, Any]) -> dict[str, Any]:
+    from src import db
+    from src.common import createVectorDBCollection
+
+    now = datetime.now()
+    generated_file_id = int(generated_file["id"])
+    inserted_ids = db.insertIntoDB(
+        table_name="vector_db_collections",
+        field_names=[
+            "email",
+            "session",
+            "type",
+            "generated_files_id",
+            "status",
+            "create_date",
+            "update_date",
+        ],
+        field_values=[
+            [generated_file.get("email") or ""],
+            [generated_file.get("session") or ""],
+            [db.vector_db_collections_type.UPLOADED_FILES.value],
+            [generated_file_id],
+            [db.vector_db_collections_status.ACTIVE.value],
+            [now],
+            [now],
+        ],
+    )
+    vector_db_collections_id = inserted_ids[0] if inserted_ids else None
+    if vector_db_collections_id is None:
+        raise HTTPException(status_code=500, detail="Unable to create an attachment collection.")
+
+    collection_name = _vector_collection_name(int(vector_db_collections_id))
+    createVectorDBCollection(collection_name=collection_name)
+    return {
+        "id": vector_db_collections_id,
+        "email": generated_file.get("email") or "",
+        "session": generated_file.get("session") or "",
+        "type": db.vector_db_collections_type.UPLOADED_FILES.value,
+        "generated_files_id": generated_file_id,
+        "status": db.vector_db_collections_status.ACTIVE.value,
+        "create_date": now,
+        "update_date": now,
+        "collection_name": collection_name,
+    }
+
+
+def _create_literature_collection(generated_file: dict[str, Any]) -> dict[str, Any]:
+    from src import db
+    from src.common import createVectorDBCollection
+
+    now = datetime.now()
+    generated_file_id = int(generated_file["id"])
+    inserted_ids = db.insertIntoDB(
+        table_name="vector_db_collections",
+        field_names=[
+            "email",
+            "session",
+            "type",
+            "generated_files_id",
+            "status",
+            "create_date",
+            "update_date",
+        ],
+        field_values=[
+            [generated_file.get("email") or ""],
+            [generated_file.get("session") or ""],
+            [db.vector_db_collections_type.LITERATURE.value],
+            [generated_file_id],
+            [db.vector_db_collections_status.ACTIVE.value],
+            [now],
+            [now],
+        ],
+    )
+    vector_db_collections_id = inserted_ids[0] if inserted_ids else None
+    if vector_db_collections_id is None:
+        raise HTTPException(status_code=500, detail="Unable to create the literature search collection.")
+
+    collection_name = _vector_collection_name(int(vector_db_collections_id))
+    createVectorDBCollection(collection_name=collection_name)
+    return {
+        "id": vector_db_collections_id,
+        "email": generated_file.get("email") or "",
+        "session": generated_file.get("session") or "",
+        "type": db.vector_db_collections_type.LITERATURE.value,
+        "generated_files_id": generated_file_id,
+        "status": db.vector_db_collections_status.ACTIVE.value,
+        "create_date": now,
+        "update_date": now,
+        "collection_name": collection_name,
+    }
+
+
+def _delete_vector_collection_record(collection_record: dict[str, Any], now: datetime | None = None) -> None:
+    from src import db
+    from src.vectordb import deleteCollection
+
+    vector_db_collections_id = int(collection_record["id"])
+    deleteCollection(_vector_collection_name(vector_db_collections_id))
+    db.updateDB(
+        table_name="vector_db_collections",
+        update_fields=["status", "update_date"],
+        update_values=[db.vector_db_collections_status.DELETED.value, now or datetime.now()],
+        select_fields=["id"],
+        select_values=[[vector_db_collections_id]],
+    )
+
+
+def _load_uploaded_files_to_vector_collection(collection_name: str, file_paths: list[tuple[str, Path]]) -> None:
+
+    from src.vectordb import ChromaDB, getLoader
+
+    db_vector = ChromaDB()
+    try:
+        db_vector.get(collection_name=collection_name)
+    except Exception:
+        db_vector.create(collection_name=collection_name, delete_if_exists=True)
+    docs = []
+    for file_name, file_path in file_paths:
+        for doc in list(getLoader(file_path)):
+            doc.metadata = {**{'app_file_id': Path(file_path).stem, 'app_file_name': file_name}, **{k: str(v) for k, v in doc.metadata.items()}}
+            docs.append(doc)
+    if docs:
+        db_vector.add(docs=docs)
+
+
+def _create_uploaded_files_collection_from_records(
+    generated_file: dict[str, Any],
+    uploaded_file_records: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not uploaded_file_records:
+        return None
+
+    uploaded_files_collection = _create_uploaded_files_collection(generated_file)
+    vector_db_collections_id = int(uploaded_files_collection["id"])
+    _insert_uploaded_file_attachment_rows(vector_db_collections_id, uploaded_file_records)
+    _load_uploaded_files_to_vector_collection(
+        uploaded_files_collection["collection_name"],
+        _uploaded_file_paths(uploaded_file_records),
+    )
+    return uploaded_files_collection
+
+
+def _refresh_vector_collections_for_regeneration(generated_file: dict[str, Any]) -> None:
+    generated_file_id = int(generated_file["id"])
+    now = datetime.now()
+
+    uploaded_collection = _active_uploaded_files_collection_record(generated_file_id)
+    if uploaded_collection:
+        attached_records = _attached_uploaded_files(int(uploaded_collection["id"]))
+        _delete_vector_collection_record(uploaded_collection, now)
+        _create_uploaded_files_collection_from_records(generated_file, attached_records)
+
+    literature_collection = _active_literature_collection_record(generated_file_id)
+    if literature_collection:
+        _delete_vector_collection_record(literature_collection, now)
+        _create_literature_collection(generated_file)
+
+
+def _insert_uploaded_file_attachment_rows(vector_db_collections_id: int, uploaded_file_records: list[dict[str, Any]]) -> None:
+    if not uploaded_file_records:
+        return
+
+    from src import db
+
+    existing_ids = {
+        int(record["uploaded_files_id"])
+        for record in _uploaded_file_attachment_records(vector_db_collections_id)
+        if record.get("uploaded_files_id") is not None
+    }
+    new_records = [record for record in uploaded_file_records if int(record["id"]) not in existing_ids]
+    if not new_records:
+        return
+
+    now = datetime.now()
+    db.insertIntoDB(
+        table_name="vector_db_collection_files",
+        field_names=["vector_db_collections_id", "uploaded_files_id", "literature_id", "create_date", "update_date"],
+        field_values=[
+            [vector_db_collections_id for _ in new_records],
+            [int(record["id"]) for record in new_records],
+            [None for _ in new_records],
+            [now for _ in new_records],
+            [now for _ in new_records],
+        ],
+    )
+
+
+def _uploaded_file_paths(records: list[dict[str, Any]]) -> list[tuple[str, Path]]:
+    paths = []
+    for record in records:
+        file_name = str(record.get("file_name") or "")
+        file_path = _uploaded_doc_path(int(record["id"]), file_name)
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"{record.get('file_name') or 'An uploaded file'} was not found on disk.")
+        paths.append((file_name, file_path))
+    return paths
+
+
+def _safe_download_stem(value: str | None) -> str:
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(value or "generated-document")).strip("-")
+    return stem or "generated-document"
 
 
 def _is_content_key(value: Any) -> bool:
@@ -550,31 +1102,57 @@ def _section_body_from_outline_node(value: Any) -> str:
     return ""
 
 
-def _manuscript_from_section_records(records: list[Any]) -> list[dict[str, str]]:
+def _heading_level(value: Any, fallback: int = 1) -> int:
+    try:
+        level = int(value)
+    except (TypeError, ValueError):
+        level = fallback
+    return max(1, min(6, level))
+
+
+def _manuscript_from_section_records(
+    records: list[Any],
+    level: int = 1,
+    path: list[str] | None = None,
+) -> list[dict[str, Any]]:
     sections = []
+    path = path or []
     for record in records:
         if not isinstance(record, dict):
             continue
 
         heading = record.get("heading") or record.get("title") or record.get("header") or record.get("section")
+        section_level = _heading_level(record.get("level") or record.get("depth") or record.get("heading_level"), level)
         if heading:
+            current_path = [*path, str(heading)]
+            body = _text_from_content_value(record.get("body") or record.get("content") or record.get("text"))
             sections.append(
                 {
                     "heading": str(heading),
-                    "body": _text_from_content_value(record.get("body") or record.get("content") or record.get("text")),
+                    "level": section_level,
+                    "body": body,
+                    "raw_body": body,
+                    "path": current_path,
                 }
             )
+        else:
+            current_path = path
 
         children = record.get("children") or record.get("sections") or []
         if isinstance(children, list):
-            sections.extend(_manuscript_from_section_records(children))
+            sections.extend(_manuscript_from_section_records(children, section_level + 1 if heading else section_level, current_path))
 
     return sections
 
 
-def _manuscript_from_outline_tree(node: Any) -> list[dict[str, str]]:
+def _manuscript_from_outline_tree(
+    node: Any,
+    level: int = 1,
+    path: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    path = path or []
     if isinstance(node, list):
-        section_records = _manuscript_from_section_records(node)
+        section_records = _manuscript_from_section_records(node, level, path)
         if section_records:
             return section_records
         return []
@@ -587,19 +1165,29 @@ def _manuscript_from_outline_tree(node: Any) -> list[dict[str, str]]:
         if _is_content_key(heading) or str(heading).strip().lower() in {"references", "bibliography"}:
             continue
 
-        sections.append({"heading": str(heading), "body": _section_body_from_outline_node(value)})
-        sections.extend(_manuscript_from_outline_tree(value))
+        section_level = _heading_level(None, level)
+        current_path = [*path, str(heading)]
+        body = _section_body_from_outline_node(value)
+        sections.append(
+            {
+                "heading": str(heading),
+                "level": section_level,
+                "body": body,
+                "raw_body": body,
+                "path": current_path,
+            }
+        )
+        sections.extend(_manuscript_from_outline_tree(value, section_level + 1, current_path))
 
     return sections
 
 
-def _manuscript_from_outline_file(file_id: int) -> tuple[list[dict[str, str]], bool]:
-    outline_file_path = Config.DIR_CONTENTS / f"outline_{file_id}.json"
+def _manuscript_from_outline_file(file_id: int) -> tuple[list[dict[str, Any]], bool]:
+    outline_file_path = _outline_file_path(file_id)
     if not outline_file_path.exists():
         return [], False
 
-    with outline_file_path.open() as fp:
-        outline_data = json.load(fp)
+    outline_data = _load_outline_json(outline_file_path)
 
     if isinstance(outline_data, dict):
         if any(key in outline_data for key in ("heading", "title", "header", "section")):
@@ -609,6 +1197,16 @@ def _manuscript_from_outline_file(file_id: int) -> tuple[list[dict[str, str]], b
                 return _manuscript_from_section_records(outline_data[key]), True
 
     return _manuscript_from_outline_tree(outline_data), True
+
+
+def _raw_outline_from_outline_file(file_id: int) -> tuple[str, bool]:
+    outline_file_path = Config.DIR_CONTENTS / f"outline_{file_id}.json"
+    if not outline_file_path.exists():
+        return "", False
+
+    outline_data = _load_outline_json(outline_file_path)
+
+    return _raw_outline_from_outline_data(outline_data), True
 
 
 def _outline_template_content(template_name: str) -> str:
@@ -652,7 +1250,27 @@ def _process_outline(outline: str) -> dict[str, Any]:
     return namespace["processOutline"](outline)
 
 
+def _raw_outline_from_outline_data(outline_data: dict[str, Any]) -> str:
+    manage_outline_path = Path(__file__).resolve().parent / "src" / "manage_outline.py"
+    source = manage_outline_path.read_text()
+    module = ast.parse(source, filename=str(manage_outline_path))
+    required_names = {"ContentTypes", "SpecialSectionTypes", "getRawOutline"}
+    body = [
+        node
+        for node in module.body
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in required_names
+    ]
+    namespace = {
+        "Enum": Enum,
+        "print_func_name": lambda func: func,
+    }
+    exec(compile(ast.Module(body=body, type_ignores=[]), str(manage_outline_path), "exec"), namespace)
+    raw_outline_lines = namespace["getRawOutline"](outline_data, [], 1)
+    return "\n".join(str(line) for line in raw_outline_lines).strip()
+
+
 GENERATION_JOBS: dict[str, dict[str, Any]] = {}
+DOC_CONTENT_LOCK = threading.Lock()
 OUTLINE_CONTENT_KEY = "content"
 OUTLINE_IS_ABSTRACT = "is_abstract"
 OUTLINE_INSTRUCTIONS = "instructions"
@@ -666,20 +1284,41 @@ def _outline_file_path(generated_file_id: int) -> Path:
     return Config.DIR_CONTENTS / f"outline_{generated_file_id}.json"
 
 
-def _read_outline_file(generated_file_id: int) -> dict[str, Any]:
-    outline_file_path = _outline_file_path(generated_file_id)
+def _load_outline_json(outline_file_path: Path) -> dict[str, Any]:
     with outline_file_path.open() as fp:
-        outline_data = json.load(fp)
+        try:
+            outline_data = json.load(fp)
+        except json.JSONDecodeError as exp:
+            logger.exception("Saved outline JSON is invalid: %s", outline_file_path)
+            raise HTTPException(
+                status_code=409,
+                detail="The saved outline file is empty or invalid. Save the outline again, then reload this manuscript.",
+            ) from exp
+
     if not isinstance(outline_data, dict):
-        raise ValueError("The saved outline was not a valid JSON object.")
+        raise HTTPException(
+            status_code=409,
+            detail="The saved outline file is not in the expected format. Save the outline again, then reload this manuscript.",
+        )
     return outline_data
+
+
+def _read_outline_file(generated_file_id: int) -> dict[str, Any]:
+    return _load_outline_json(_outline_file_path(generated_file_id))
 
 
 def _write_outline_file(generated_file_id: int, outline_data: dict[str, Any]) -> Path:
     outline_file_path = _outline_file_path(generated_file_id)
     outline_file_path.parent.mkdir(parents=True, exist_ok=True)
-    with outline_file_path.open("w") as fp:
-        json.dump(outline_data, fp, indent=2)
+    temp_outline_file_path = outline_file_path.with_name(f"{outline_file_path.name}.{uuid4().hex}.tmp")
+    try:
+        with temp_outline_file_path.open("w") as fp:
+            json.dump(outline_data, fp, indent=2)
+            fp.write("\n")
+        temp_outline_file_path.replace(outline_file_path)
+    finally:
+        if temp_outline_file_path.exists():
+            temp_outline_file_path.unlink()
     return outline_file_path
 
 
@@ -688,6 +1327,7 @@ def _save_processed_outline(
     outline: str,
     email: str | None = None,
     session: str | None = None,
+    preserve_generated_content: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], Path]:
     from src import db
 
@@ -699,10 +1339,18 @@ def _save_processed_outline(
     try:
         processed_outline = _process_outline(outline)
     except Exception as exp:
+        logger.exception("Unable to parse structured outline")
         raise HTTPException(
             status_code=400,
-            detail=f"I could not understand that structured outline. Check the heading levels and [--content--] tags, then try again. Details: {exp}",
+            detail="I could not understand that structured outline. Check the heading levels and [--content--] tags, then try again.",
         ) from exp
+
+    if preserve_generated_content:
+        try:
+            existing_outline = _read_outline_file(generated_file_id)
+            _merge_existing_generated_content(processed_outline, existing_outline)
+        except FileNotFoundError:
+            pass
 
     outline_file_path = _write_outline_file(generated_file_id, processed_outline)
     now = datetime.now()
@@ -731,6 +1379,41 @@ def _set_generated_file_status(generated_file_id: int, status: str) -> None:
         logger.exception("Unable to update generated file %s status to %s", generated_file_id, status)
 
 
+def _resolve_generation_architecture(
+    generated_file_id: int,
+    architecture_type: str,
+    collection_name: str = "",
+    collection_name_lit_search: str = "",
+) -> tuple[str, str, str]:
+    from src import db
+
+    if architecture_type != db.generated_files_ai_architecture.RAG.value:
+        return architecture_type, collection_name, collection_name_lit_search
+
+    uploaded_collection = _active_uploaded_files_collection(generated_file_id)
+    literature_collection = _active_literature_collection(generated_file_id)
+    collection_name = uploaded_collection["collection_name"] if uploaded_collection else collection_name
+    collection_name_lit_search = (
+        literature_collection["collection_name"] if literature_collection else collection_name_lit_search
+    )
+
+    if not collection_name and not collection_name_lit_search:
+        logger.warning(
+            "Generated file %s is marked as RAG but has no active uploaded-file or literature-search collection. Falling back to base generation.",
+            generated_file_id,
+        )
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["ai_architecture", "update_date"],
+            update_values=[db.generated_files_ai_architecture.BASE.value, datetime.now()],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+        return db.generated_files_ai_architecture.BASE.value, "", ""
+
+    return architecture_type, collection_name, collection_name_lit_search
+
+
 def _job_snapshot(job: dict[str, Any]) -> dict[str, Any]:
     public_keys = {
         "id",
@@ -742,11 +1425,31 @@ def _job_snapshot(job: dict[str, Any]) -> dict[str, Any]:
         "completed_sections",
         "total_sections",
         "manuscript",
+        "concept_maps",
+        "ref_list",
         "generated_file",
         "created_at",
         "updated_at",
     }
     return _jsonable({key: job.get(key) for key in public_keys if key in job})
+
+
+def _active_generation_job_for_file(generated_file_id: int) -> dict[str, Any] | None:
+    for job in GENERATION_JOBS.values():
+        if job.get("generated_file_id") == generated_file_id and job.get("worker_active"):
+            return job
+    return None
+
+
+def _finalize_generation_task(job: dict[str, Any]) -> None:
+    job["task"] = None
+    if job.get("pause_requested") and job.get("status") not in {"completed", "error"}:
+        job["status"] = "paused"
+        job["message"] = "Generation paused. Click Generate to continue with the remaining outline."
+        job["current_section"] = ""
+    if job.get("status") in {"completed", "error", "paused"}:
+        job["worker_active"] = False
+    job["updated_at"] = datetime.now().isoformat()
 
 
 def _normalize_content_item(item: Any) -> tuple[str, Any] | None:
@@ -766,6 +1469,111 @@ def _content_value(items: list[Any], content_type: str, default: Any = "") -> An
         if normalized and normalized[0] == content_type:
             return normalized[1]
     return default
+
+
+def _normalize_concept_map(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+
+    concept_map: dict[str, list[str]] = {}
+    for key, raw_children in value.items():
+        node_label = str(key).strip()
+        if not node_label:
+            continue
+
+        if isinstance(raw_children, (list, tuple, set)):
+            children = [str(child).strip() for child in raw_children if str(child).strip()]
+        elif raw_children in (None, "", {}):
+            children = []
+        else:
+            children = [str(raw_children).strip()] if str(raw_children).strip() else []
+
+        concept_map[node_label] = children
+
+    return concept_map
+
+
+def _concept_maps_from_outline_tree(node: Any, path: list[str] | None = None) -> list[dict[str, Any]]:
+    if not isinstance(node, dict):
+        return []
+
+    path = path or []
+    concept_maps: list[dict[str, Any]] = []
+    items = _content_items(node)
+    concept_map = _normalize_concept_map(_content_value(items, OUTLINE_CONCEPT_MAP, {}))
+    if concept_map:
+        concept_maps.append(
+            {
+                "section": path[-1] if path else "Concept map",
+                "path": path.copy(),
+                "map": concept_map,
+            }
+        )
+
+    for key, value in node.items():
+        if key == OUTLINE_CONTENT_KEY:
+            continue
+        concept_maps.extend(_concept_maps_from_outline_tree(value, [*path, str(key)]))
+
+    return concept_maps
+
+
+def _concept_maps_from_outline_file(file_id: int) -> tuple[list[dict[str, Any]], bool]:
+    outline_file_path = _outline_file_path(file_id)
+    if not outline_file_path.exists():
+        return [], False
+
+    outline_data = _load_outline_json(outline_file_path)
+
+    return _concept_maps_from_outline_tree(outline_data), True
+
+
+def _normalize_ref_list(value: Any) -> list[str]:
+    if value in (None, "", {}):
+        return []
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if not isinstance(value, list):
+        return [str(value).strip()] if str(value).strip() else []
+
+    references = []
+    seen = set()
+    for item in value:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        references.append(text)
+    return references
+
+
+def _attached_reference_map_for_generated_file(generated_file_id: int) -> dict[str, str]:
+    from src.common import getAttachedRefs
+
+    uploaded_collection = _active_uploaded_files_collection_record(generated_file_id)
+    literature_collection = _active_literature_collection_record(generated_file_id)
+    uploaded_collection_id = int(uploaded_collection["id"]) if uploaded_collection else None
+    literature_collection_id = int(literature_collection["id"]) if literature_collection else None
+    attached_references, _ = getAttachedRefs(uploaded_collection_id, literature_collection_id)
+    return {str(reference_id): reference_text for reference_id, reference_text, _reference_type in attached_references}
+
+
+def _process_manuscript_citations(
+    manuscript: list[dict[str, Any]],
+    attached_references: dict[str, str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    from src.generate import processCitation, sanitizeContent
+
+    current_ref_list = []
+    processed_manuscript = []
+    for section in manuscript:
+        section_body = str(section.get("body") or "")
+        if attached_references and "CITE(" in section_body:
+            section_body, current_ref_list = processCitation(section_body, current_ref_list, attached_references)
+        section_body = sanitizeContent(section_body)
+        processed_manuscript.append({**section, "body": section_body})
+
+    return processed_manuscript, current_ref_list
 
 
 def _truthy_content_flag(value: Any) -> bool:
@@ -790,12 +1598,172 @@ def _set_content_value(items: list[Any], content_type: str, value: Any) -> None:
     items.append([content_type, value])
 
 
+def _outline_node_for_path(outline_data: dict[str, Any], path: list[str] | tuple[str, ...]) -> dict[str, Any] | None:
+    node: Any = outline_data
+    for heading in path:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(heading)
+    return node if isinstance(node, dict) else None
+
+
+def _outline_node_for_heading_and_paragraph(
+    outline_data: dict[str, Any],
+    heading: str,
+    raw_paragraph: str,
+) -> dict[str, Any] | None:
+    heading = str(heading or "").strip()
+    raw_paragraph = str(raw_paragraph or "").strip()
+    if not heading:
+        return None
+
+    matches: list[dict[str, Any]] = []
+
+    def walk(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+
+        for key, value in node.items():
+            if key == OUTLINE_CONTENT_KEY:
+                continue
+            if not isinstance(value, dict):
+                continue
+
+            if str(key).strip() == heading:
+                items = _content_items(value)
+                raw_content = str(_content_value(items, OUTLINE_CONTENT_AI, "") or "")
+                if not raw_paragraph or raw_paragraph in raw_content or not raw_content:
+                    matches.append(value)
+            walk(value)
+
+    walk(outline_data)
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def _display_manuscript_from_outline_tree(
+    outline_data: dict[str, Any],
+    attached_references: dict[str, str],
+    content_overrides: dict[tuple[str, ...], Any] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    display_outline = deepcopy(outline_data)
+    for path, content in (content_overrides or {}).items():
+        node = _outline_node_for_path(display_outline, path)
+        if node is None:
+            continue
+        items = _content_items(node)
+        if not items:
+            node[OUTLINE_CONTENT_KEY] = []
+            items = node[OUTLINE_CONTENT_KEY]
+        _set_content_value(items, OUTLINE_CONTENT_AI, content)
+
+    manuscript = _manuscript_from_outline_tree(display_outline)
+    return _process_manuscript_citations(manuscript, attached_references)
+
+
+def _has_content_value(items: list[Any], content_type: str) -> bool:
+    value = _content_value(items, content_type, "")
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value not in (None, "", [], {})
+
+
+def _section_has_generated_content(items: list[Any]) -> bool:
+    return _has_content_value(items, OUTLINE_CONTENT_AI)
+
+
+def _merge_existing_generated_content(target_node: Any, source_node: Any) -> None:
+    if not isinstance(target_node, dict) or not isinstance(source_node, dict):
+        return
+
+    target_items = _content_items(target_node)
+    source_items = _content_items(source_node)
+    if target_items and source_items:
+        for content_type in (OUTLINE_IS_ABSTRACT, OUTLINE_CONTENT_AI, OUTLINE_CONTENT_PRE_SUMMARY, OUTLINE_CONCEPT_MAP):
+            if _has_content_value(source_items, content_type):
+                _set_content_value(target_items, content_type, _content_value(source_items, content_type))
+
+    for key, target_value in target_node.items():
+        if key == OUTLINE_CONTENT_KEY:
+            continue
+        _merge_existing_generated_content(target_value, source_node.get(key))
+
+
+def _clear_generated_content_items(items: list[Any]) -> bool:
+    changed = False
+    for index, item in enumerate(items):
+        normalized = _normalize_content_item(item)
+        if not normalized:
+            continue
+
+        content_type, value = normalized
+        if content_type not in {OUTLINE_CONTENT_AI, OUTLINE_CONTENT_PRE_SUMMARY, OUTLINE_CONCEPT_MAP}:
+            continue
+
+        empty_value: Any = {} if content_type == OUTLINE_CONCEPT_MAP else ""
+        if value == empty_value:
+            continue
+
+        if isinstance(item, list):
+            if len(item) == 1:
+                item.append(empty_value)
+            else:
+                item[1] = empty_value
+        else:
+            items[index] = [content_type, empty_value]
+        changed = True
+
+    return changed
+
+
+def _reset_outline_generated_content(node: Any) -> bool:
+    changed = False
+    if isinstance(node, dict):
+        items = _content_items(node)
+        if items:
+            changed = _clear_generated_content_items(items) or changed
+
+        for key, value in node.items():
+            if key == OUTLINE_CONTENT_KEY:
+                continue
+            changed = _reset_outline_generated_content(value) or changed
+    elif isinstance(node, list):
+        for item in node:
+            changed = _reset_outline_generated_content(item) or changed
+
+    return changed
+
+
+def _reset_generated_document_content(generated_file_id: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], bool]:
+    try:
+        outline_data = _read_outline_file(generated_file_id)
+    except FileNotFoundError:
+        return [], [], [], False
+
+    if _reset_outline_generated_content(outline_data):
+        _write_outline_file(generated_file_id, outline_data)
+
+    return _manuscript_from_outline_tree(outline_data), [], [], True
+
+
 def _section_needs_ai(items: list[Any]) -> bool:
     return any((_normalize_content_item(item) or ("", ""))[0] == OUTLINE_CONTENT_AI for item in items)
 
 
 def _section_is_abstract(items: list[Any]) -> bool:
     return _truthy_content_flag(_content_value(items, OUTLINE_IS_ABSTRACT, False))
+
+
+def _heading_looks_like_abstract(heading: str) -> bool:
+    normalized = re.sub(r"[^a-z]+", " ", heading.lower()).strip()
+    return normalized in {"abstract", "summary", "executive summary"} or normalized.startswith("abstract ")
+
+
+def _detector_response_is_abstract(response: Any) -> bool:
+    if isinstance(response, dict):
+        return _truthy_content_flag(response.get(OUTLINE_IS_ABSTRACT, False))
+    return _truthy_content_flag(getattr(response, OUTLINE_IS_ABSTRACT, False))
 
 
 def _section_instructions(items: list[Any]) -> str:
@@ -820,7 +1788,94 @@ def _section_prompt(path: list[str], items: list[Any]) -> str:
     return "\n\n".join(line for line in lines if line)
 
 
-def _extract_generation_sections(outline_data: dict[str, Any]) -> list[dict[str, Any]]:
+def _split_manuscript_paragraphs(text: Any) -> list[str]:
+    normalized = str(text or "").replace("\r\n", "\n").strip()
+    if not normalized:
+        return []
+
+    blocks = [block.strip() for block in re.split(r"\n\s*\n+", normalized) if block.strip()]
+    if len(blocks) > 1:
+        return blocks
+
+    return [block.strip() for block in normalized.split("\n") if block.strip()]
+
+
+def _paragraph_update_instruction(action: str) -> str:
+    if action == "Expand":
+        return (
+            "Write additional scholarly text that expands on the selected paragraph. "
+            "Do not repeat the selected paragraph. Return only the new text to append after it."
+        )
+    if action == "Rephrase":
+        return (
+            "Rephrase the selected paragraph for clarity, flow, and scholarly tone while preserving the meaning. "
+            "Return only the replacement paragraph text."
+        )
+    return "Return only the replacement paragraph text."
+
+
+def _paragraph_update_prompt(path: list[str], section_body: str, paragraph_index: int, action: str) -> str:
+    paragraphs = _split_manuscript_paragraphs(section_body)
+    if paragraph_index >= len(paragraphs):
+        raise HTTPException(status_code=400, detail="The selected paragraph could not be found in the saved manuscript.")
+    if action == "Expand":
+        paragraphs.insert(paragraph_index + 1, "[--content--]")
+    else:
+        paragraphs[paragraph_index] = "[--content--]"
+    lines = [f"{'#' * min(index + 1, 6)} {heading}" for index, heading in enumerate(path)]
+    lines.append("\n\n".join(paragraphs))
+    return "\n\n".join(line for line in lines if str(line).strip())
+
+
+def _content_response_text(response: Any) -> str:
+    if isinstance(response, dict):
+        content = response.get("content")
+        if content is None and isinstance(response.get("result"), dict):
+            content = response["result"].get("content")
+        return _text_from_content_value(content).strip()
+    return _text_from_content_value(response).strip()
+
+
+def _replace_paragraph_in_section_body(
+    section_body: str,
+    paragraph_index: int,
+    raw_paragraph: str,
+    replacement: str,
+    action: str,
+) -> str:
+    paragraphs = _split_manuscript_paragraphs(section_body)
+    sent_paragraph = str(raw_paragraph or "").strip()
+    if sent_paragraph and (paragraph_index >= len(paragraphs) or paragraphs[paragraph_index].strip() != sent_paragraph):
+        try:
+            paragraph_index = next(
+                index
+                for index, paragraph in enumerate(paragraphs)
+                if paragraph.strip() == sent_paragraph
+            )
+        except StopIteration:
+            raise HTTPException(
+                status_code=409,
+                detail="The selected paragraph has changed. Reload the manuscript and try again.",
+            )
+
+    if paragraph_index >= len(paragraphs):
+        raise HTTPException(status_code=400, detail="The selected paragraph could not be found in the saved manuscript.")
+
+    replacement = str(replacement or "").strip()
+    if action == "Expand" and replacement:
+        if sent_paragraph and replacement.startswith(sent_paragraph):
+            replacement = replacement[len(sent_paragraph):].strip()
+        if replacement:
+            paragraphs.insert(paragraph_index + 1, replacement)
+    elif replacement:
+        paragraphs[paragraph_index] = replacement
+    else:
+        paragraphs.pop(paragraph_index)
+
+    return "\n\n".join(paragraph for paragraph in paragraphs if paragraph.strip())
+
+
+def _extract_generation_sections(outline_data: dict[str, Any], remaining_only: bool = True) -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = []
 
     def walk(node: Any, path: list[str]) -> None:
@@ -828,7 +1883,7 @@ def _extract_generation_sections(outline_data: dict[str, Any]) -> list[dict[str,
             return
 
         items = _content_items(node)
-        if items and _section_needs_ai(items):
+        if items and _section_needs_ai(items) and (not remaining_only or not _section_has_generated_content(items)):
             sections.append(
                 {
                     "path": path.copy(),
@@ -856,32 +1911,50 @@ def _mark_first_abstract_section(outline_data: dict[str, Any], agent_abstract_de
     if not outline_data:
         return outline_data, ""
 
-    title = next(iter(outline_data))
-    title_node = outline_data.get(title)
-    if not isinstance(title_node, dict):
-        return outline_data, ""
+    candidates: list[tuple[str, dict[str, Any], list[Any], bool]] = []
+    existing_abstract = ""
 
-    first_section_header = ""
-    first_section_node: dict[str, Any] | None = None
-    for key, value in title_node.items():
-        if key == OUTLINE_CONTENT_KEY or not isinstance(value, dict):
+    def walk(node: Any, path: list[str]) -> None:
+        nonlocal existing_abstract
+        if not isinstance(node, dict) or existing_abstract:
+            return
+
+        heading = path[-1] if path else ""
+        items = _content_items(node)
+        if items and _section_is_abstract(items):
+            existing_abstract = heading
+            return
+
+        looks_like_abstract = _heading_looks_like_abstract(heading) if heading else False
+        if heading and (looks_like_abstract or (items and _section_needs_ai(items))):
+            candidates.append((heading, node, items, looks_like_abstract))
+
+        for key, value in node.items():
+            if key == OUTLINE_CONTENT_KEY:
+                continue
+            walk(value, [*path, str(key)])
+
+    walk(outline_data, [])
+    if existing_abstract:
+        return outline_data, existing_abstract
+
+    for heading, node, items, looks_like_abstract in candidates:
+        is_abstract = looks_like_abstract
+        if not is_abstract and _section_needs_ai(items):
+            response = agent_abstract_detector.invoke({"current_section": heading})
+            is_abstract = _detector_response_is_abstract(response)
+
+        if not is_abstract:
             continue
-        first_section_header = str(key)
-        first_section_node = value
-        break
 
-    if first_section_node is None:
-        return outline_data, ""
-
-    content = first_section_node.setdefault(OUTLINE_CONTENT_KEY, [])
-    if content and (_normalize_content_item(content[0]) or ("", False))[0] == OUTLINE_IS_ABSTRACT:
-        return outline_data, first_section_header if _section_is_abstract(content) else ""
-
-    response = agent_abstract_detector.invoke({"current_section": first_section_header})
-    is_abstract = _truthy_content_flag(response.get(OUTLINE_IS_ABSTRACT, False)) if isinstance(response, dict) else False
-    if is_abstract:
-        content.insert(0, [OUTLINE_IS_ABSTRACT, True])
-        return outline_data, first_section_header
+        if not isinstance(node.get(OUTLINE_CONTENT_KEY), list):
+            node[OUTLINE_CONTENT_KEY] = []
+        items = node[OUTLINE_CONTENT_KEY]
+        if not _section_needs_ai(items):
+            _set_content_value(items, OUTLINE_CONTENT_AI, "")
+        if not _section_is_abstract(items):
+            items.insert(0, [OUTLINE_IS_ABSTRACT, True])
+        return outline_data, heading
 
     return outline_data, ""
 
@@ -912,84 +1985,6 @@ def _safe_architecture_classes() -> tuple[Any, Any, Any]:
             nest_asyncio_module.apply = original_apply
 
 
-def _safe_generate_content_function() -> Any:
-    try:
-        _safe_architecture_classes()
-        from src.generate import generateContent
-
-        return generateContent
-    except ImportError:
-        logger.debug("Loading generateContent from source because src.generate has import-time dependencies.", exc_info=True)
-
-    class ArchitecturePlaceholder:
-        pass
-
-    generate_path = Path(__file__).resolve().parent / "src" / "generate.py"
-    source = generate_path.read_text()
-    module = ast.parse(source, filename=str(generate_path))
-    body = [
-        node
-        for node in module.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "generateContent"
-    ]
-    namespace = {
-        "AbstractWriterArchitecture": ArchitecturePlaceholder,
-        "ContentWriterArchitecture": ArchitecturePlaceholder,
-        "dict": dict,
-        "logging": logging,
-        "print_func_name": lambda func: func,
-        "re": re,
-        "formatCitations": lambda text: text,
-        "getLiteraturesFromDB": lambda literature_id_list: ([], {}),
-    }
-    exec(compile(ast.Module(body=body, type_ignores=[]), str(generate_path), "exec"), namespace)
-    return namespace["generateContent"]
-
-
-async def _generate_section_content(
-    agent: Any,
-    content_pre_summary: str,
-    current_section: str,
-    instructions: str,
-    attached_references: dict[str, str],
-) -> tuple[str, str, dict[str, Any], list[str], str]:
-    class CachingAgent:
-        def __init__(self, wrapped_agent: Any) -> None:
-            self.wrapped_agent = wrapped_agent
-            self.response: dict[str, Any] | None = None
-
-        async def ainvoke(self, input: dict[str, Any]) -> dict[str, Any]:
-            self.response = await self.wrapped_agent.ainvoke(input)
-            return self.response
-
-    caching_agent = CachingAgent(agent)
-    try:
-        generate_content = _safe_generate_content_function()
-        return await generate_content(
-            caching_agent,
-            content_pre_summary,
-            current_section,
-            instructions,
-            attached_references.copy(),
-        )
-    except Exception:
-        if caching_agent.response is None:
-            raise
-        logger.debug("Falling back to direct generation response parsing", exc_info=True)
-
-    response = caching_agent.response
-    content = str(response.get("content") or "").strip()
-    content_summary = str(response.get("content_summary") or response.get("content_pre") or content).strip()
-    concept_map = response.get("concept_map", {})
-    if not isinstance(concept_map, dict):
-        concept_map = {}
-
-    next_summary_parts = [part for part in (content_pre_summary.strip(), content_summary) if part]
-    next_content_pre_summary = "\n\n".join(dict.fromkeys(next_summary_parts))
-    sanitized_content = re.sub(r" \~([^\~])", r" \\~\1", content)
-    return next_content_pre_summary, content, concept_map, [], sanitized_content
-
-
 async def _run_generation_job(
     job_id: str,
     generated_file_id: int,
@@ -997,17 +1992,51 @@ async def _run_generation_job(
     generated_file: dict[str, Any],
 ) -> None:
     job = GENERATION_JOBS[job_id]
+    outline_data: dict[str, Any] | None = None
+    attached_references = request.attached_references.copy()
+    display_content_overrides: dict[tuple[str, ...], Any] = {}
 
     def update_job(**updates: Any) -> None:
         job.update(updates)
         job["updated_at"] = datetime.now().isoformat()
 
+    def manuscript_snapshot(
+        outline_data_current: dict[str, Any],
+        ref_list_override: Any = None,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        manuscript, processed_ref_list = _display_manuscript_from_outline_tree(
+            outline_data_current,
+            attached_references,
+            display_content_overrides,
+        )
+        return manuscript, _normalize_ref_list(ref_list_override) or processed_ref_list
+
     try:
         from src import db
+        from src.generate import generateContent
+
+        def pause_if_requested(outline_data_current: dict[str, Any], completed_sections: int) -> bool:
+            if not job.get("pause_requested"):
+                return False
+            manuscript, ref_list = manuscript_snapshot(outline_data_current, job.get("ref_list", []))
+            _set_generated_file_status(generated_file_id, db.generated_files_status.CANCELLED.value)
+            update_job(
+                status="paused",
+                message="Generation paused. Click Generate to continue with the remaining outline.",
+                current_section="",
+                completed_sections=completed_sections,
+                worker_active=False,
+                generated_file={**generated_file, "status": db.generated_files_status.CANCELLED.value},
+                manuscript=manuscript,
+                ref_list=ref_list,
+            )
+            return True
 
         update_job(status="running", message="Reading the saved outline...")
         _set_generated_file_status(generated_file_id, db.generated_files_status.RUNNING.value)
         outline_data = _read_outline_file(generated_file_id)
+        if pause_if_requested(outline_data, 0):
+            return
 
         update_job(message="Checking for an abstract section...")
         AbstractSectionDetectorArchitecture, AbstractWriterArchitecture, ContentWriterArchitecture = _safe_architecture_classes()
@@ -1019,10 +2048,12 @@ async def _run_generation_job(
         outline_data, _ = await asyncio.to_thread(_mark_first_abstract_section, outline_data, detector)
         _write_outline_file(generated_file_id, outline_data)
 
-        sections = _extract_generation_sections(outline_data)
+        sections = _extract_generation_sections(outline_data, remaining_only=request.mode == "remaining")
+        manuscript, ref_list = manuscript_snapshot(outline_data)
         update_job(
             total_sections=len(sections),
-            manuscript=_manuscript_from_outline_tree(outline_data),
+            manuscript=manuscript,
+            ref_list=ref_list,
         )
         if not sections:
             _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
@@ -1030,18 +2061,32 @@ async def _run_generation_job(
                 status="completed",
                 message="The structured outline was saved. No AI content sections were marked for generation.",
                 current_section="",
+                worker_active=False,
                 generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
+                manuscript=manuscript,
+                ref_list=ref_list,
             )
             return
 
         architecture_type = generated_file.get("ai_architecture") or request.architecture_type or "base"
+        architecture_type, collection_name, collection_name_lit_search = _resolve_generation_architecture(
+            generated_file_id=generated_file_id,
+            architecture_type=architecture_type,
+            collection_name=request.collection_name,
+            collection_name_lit_search=request.collection_name_lit_search,
+        )
+        generated_file = {
+            **generated_file,
+            "ai_architecture": architecture_type,
+        }
+
         writer = ContentWriterArchitecture(
             model_name=_model_name(request.model_name),
             temperature=request.temperature,
             instructions=request.instructions,
             type=architecture_type,
-            collection_name=request.collection_name,
-            collection_name_lit_search=request.collection_name_lit_search,
+            collection_name=collection_name,
+            collection_name_lit_search=collection_name_lit_search,
         )
         abstract_writer = AbstractWriterArchitecture(
             model_name=_model_name(request.model_name),
@@ -1050,65 +2095,109 @@ async def _run_generation_job(
         )
 
         content_pre_summary = ""
-        attached_references = request.attached_references.copy()
+        attached_references = _attached_reference_map_for_generated_file(generated_file_id)
+        section_ref_list = []
         for index, section in enumerate(sections, start=1):
+            if pause_if_requested(outline_data, index - 1):
+                return
+
             section_label = section["heading"]
+            manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
             update_job(
                 message=f"Writing section {index} of {len(sections)}: {section_label}",
                 current_section=section_label,
                 completed_sections=index - 1,
-                manuscript=_manuscript_from_outline_tree(outline_data),
+                manuscript=manuscript,
+                ref_list=ref_list,
             )
             agent = abstract_writer if section["is_abstract"] else writer
             (
+                raw_content,
                 content_pre_summary,
-                content_for_frontend,
                 concept_map,
-                _ref_list,
-                sanitized_content,
-            ) = await _generate_section_content(
-                agent=agent,
-                content_pre_summary=content_pre_summary,
-                current_section=section["current_section"],
-                instructions=section["instructions"],
-                attached_references=attached_references,
+                section_ref_list,
+                display_content,
+            ) = await generateContent(
+                agent,
+                content_pre_summary,
+                section["current_section"],
+                section["instructions"],
+                section_ref_list,
+                attached_references,
             )
-            _set_content_value(section["items"], OUTLINE_CONTENT_AI, sanitized_content or content_for_frontend)
+            raw_content = str(raw_content or "")
+            display_content = display_content or raw_content
+            display_content_overrides[tuple(section["path"])] = display_content
+            _set_content_value(section["items"], OUTLINE_CONTENT_AI, raw_content)
             _set_content_value(section["items"], OUTLINE_CONTENT_PRE_SUMMARY, content_pre_summary)
             if concept_map:
                 _set_content_value(section["items"], OUTLINE_CONCEPT_MAP, concept_map)
             _write_outline_file(generated_file_id, outline_data)
+            manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
             update_job(
                 completed_sections=index,
-                manuscript=_manuscript_from_outline_tree(outline_data),
+                manuscript=manuscript,
+                ref_list=ref_list,
             )
+            if pause_if_requested(outline_data, index):
+                return
 
         _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
+        manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
         update_job(
             status="completed",
             message="Content generation completed.",
             current_section="",
+            worker_active=False,
             generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
-            manuscript=_manuscript_from_outline_tree(outline_data),
+            manuscript=manuscript,
+            ref_list=ref_list,
+        )
+    except asyncio.CancelledError:
+        if outline_data:
+            manuscript, ref_list = manuscript_snapshot(outline_data, job.get("ref_list", []))
+        else:
+            manuscript, ref_list = job.get("manuscript", []), job.get("ref_list", [])
+        _set_generated_file_status(generated_file_id, "cancelled")
+        update_job(
+            status="paused",
+            message="Generation paused. Click Generate to continue with the remaining outline.",
+            current_section="",
+            worker_active=False,
+            generated_file={**generated_file, "status": "cancelled"},
+            manuscript=manuscript,
+            ref_list=ref_list,
         )
     except Exception as exp:
         logger.exception("Unable to generate manuscript for generated file %s", generated_file_id)
         _set_generated_file_status(generated_file_id, "error")
         update_job(
             status="error",
-            error=f"Unable to generate manuscript content: {exp}",
+            error=_friendly_error_detail("generate manuscript content", exp)[1],
             message="Content generation stopped.",
             current_section="",
+            worker_active=False,
         )
+    finally:
+        job["task"] = None
 
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
+    checks = {
+        "ai_model": _check_ai_model_health(),
+        "chroma_db": _check_chroma_health(),
+        "postgres": _check_postgres_health(),
+    }
+    statuses = {check["status"] for check in checks.values()}
+    overall_status = "error" if "error" in statuses else "warning" if "warning" in statuses else "ok"
     return {
-        "status": "ok",
+        "status": overall_status,
+        "checks": checks,
         "default_model": Config.env_config.get("DEFAULT_AI_MODEL"),
         "chroma_host": Config.env_config.get("CHROMA_HOST"),
         "chroma_port": Config.env_config.get("CHROMA_PORT"),
+        "checked_at": datetime.now().isoformat(),
     }
 
 
@@ -1127,6 +2216,7 @@ async def workspace_data() -> dict[str, Any]:
     return {
         "outline_template": '',
         "manuscript": [],
+        "ref_list": [],
         "generated_documents": [],
         "uploaded_documents": [],
     }
@@ -1222,17 +2312,17 @@ async def default_settings() -> dict[str, Any]:
 @app.get("/api/settings/{settings_id}")
 async def get_settings(
     settings_id: int,
-    email: str = Query(...),
-    session: str = Query(...),
+    email: str | None = Query(None),
+    session: str | None = Query(None),
 ) -> dict[str, Any]:
     try:
         from src import db
 
-        normalized_email = _validate_email(email)
+        owner_fields, owner_values, _, _ = _owner_filter_fields(email=email, session=session)
         df = db.selectFromDB(
             table_name="settings",
-            field_names=["id", "email", "session"],
-            field_values=[[settings_id], [normalized_email], [session]],
+            field_names=["id", *owner_fields],
+            field_values=[[settings_id], *owner_values],
             limit=1,
         )
         records = _records_from_dataframe(df)
@@ -1250,17 +2340,17 @@ async def get_settings(
 async def update_settings(
     settings_id: int,
     request: SettingsUpdateRequest,
-    email: str = Query(...),
-    session: str = Query(...),
+    email: str | None = Query(None),
+    session: str | None = Query(None),
 ) -> dict[str, Any]:
     try:
         from src import db
 
-        normalized_email = _validate_email(email)
+        owner_fields, owner_values, _, _ = _owner_filter_fields(email=email, session=session)
         df = db.selectFromDB(
             table_name="settings",
-            field_names=["id", "email", "session"],
-            field_values=[[settings_id], [normalized_email], [session]],
+            field_names=["id", *owner_fields],
+            field_values=[[settings_id], *owner_values],
             limit=1,
         )
         if not _records_from_dataframe(df):
@@ -1276,13 +2366,13 @@ async def update_settings(
             table_name="settings",
             update_fields=["llm", "temperature", "instructions", "update_date"],
             update_values=[request.llm, request.temperature, request.instructions, now],
-            select_fields=["id", "email", "session"],
-            select_values=[[settings_id], [normalized_email], [session]],
+            select_fields=["id", *owner_fields],
+            select_values=[[settings_id], *owner_values],
         )
         updated = db.selectFromDB(
             table_name="settings",
-            field_names=["id", "email", "session"],
-            field_values=[[settings_id], [normalized_email], [session]],
+            field_names=["id", *owner_fields],
+            field_values=[[settings_id], *owner_values],
             limit=1,
         )
         records = _records_from_dataframe(updated)
@@ -1294,26 +2384,16 @@ async def update_settings(
 
 
 @app.get("/api/generated-files")
-async def generated_files(email: str = Query(...), limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+async def generated_files(
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+    limit: int = Query(1000, ge=1, le=1000),
+) -> dict[str, Any]:
     try:
-        from src import db
-
-        normalized_email = _validate_email(email)
-        active_statuses = [
-            status.value for status in db.generated_files_status if status != db.generated_files_status.DELETED
-        ]
-        df = db.selectFromDB(
-            table_name="generated_files",
-            field_names=["email", "status"],
-            field_values=[[normalized_email], active_statuses],
-            order_by_field_names=["update_date"],
-            order_by_types=["DESC"],
-            limit=limit,
-        )
-        records = _records_from_dataframe(df)
+        records = _generated_records_for_owner(email=email, session=session, limit=limit)
         return {
             "generated_files": [_generated_file_record(record) for record in records],
-            "generated_documents": [_generated_document(record) for record in records],
+            "generated_documents": [_generated_document_detail(record) for record in records],
         }
     except HTTPException:
         raise
@@ -1330,9 +2410,17 @@ async def generated_file_manuscript(
     try:
         record = _generated_file_by_id(generated_file_id, email=email, session=session)
         manuscript, source_exists = _manuscript_from_outline_file(generated_file_id)
+        attached_reference_map = _attached_reference_map_for_generated_file(generated_file_id)
+        manuscript, ref_list = _process_manuscript_citations(manuscript, attached_reference_map)
+        raw_outline, _ = _raw_outline_from_outline_file(generated_file_id)
         return {
             "generated_file": _generated_file_record(record),
             "manuscript": manuscript,
+            "ref_list": ref_list,
+            "literature_search": _active_literature_collection(generated_file_id),
+            "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
+            "attached_files": _attached_uploaded_documents(generated_file_id),
+            "outline": raw_outline,
             "source_exists": source_exists,
             "message": "" if source_exists else "No manuscript content has been saved for this file yet.",
         }
@@ -1342,30 +2430,529 @@ async def generated_file_manuscript(
         raise _api_error("load manuscript", exp)
 
 
-@app.post("/api/generated-files/{generated_file_id}/outline")
-async def save_generated_file_outline(
+@app.patch("/api/generated-files/{generated_file_id}/paragraph")
+async def update_generated_file_paragraph(
     generated_file_id: int,
-    request: GeneratedFileOutlineRequest,
+    request: GeneratedFileParagraphUpdateRequest,
 ) -> dict[str, Any]:
     try:
-        updated_record, processed_outline, outline_file_path = _save_processed_outline(
-            generated_file_id,
-            request.outline,
-            email=request.email,
-            session=request.session,
+        from src import db
+
+        generated_file = _generated_file_by_id(generated_file_id, email=request.email, session=request.session)
+        outline_data = _read_outline_file(generated_file_id)
+        node = _outline_node_for_path(outline_data, request.section_path) if request.section_path else None
+        if node is None:
+            node = _outline_node_for_heading_and_paragraph(
+                outline_data,
+                request.section_heading,
+                request.raw_paragraph,
+            )
+        if node is None:
+            raise HTTPException(status_code=404, detail="The selected section could not be found. Reload the manuscript and try again.")
+
+        items = _content_items(node)
+        if not items or not _section_needs_ai(items):
+            raise HTTPException(status_code=400, detail="Only generated manuscript paragraphs can be updated.")
+
+        current_raw_content = str(_content_value(items, OUTLINE_CONTENT_AI, "") or "")
+        if not current_raw_content.strip():
+            raise HTTPException(status_code=400, detail="This section does not have generated content to update yet.")
+
+        replacement = ""
+        if request.action != "Remove":
+            _, _, ContentWriterArchitecture = _safe_architecture_classes()
+            architecture_type = generated_file.get("ai_architecture") or db.generated_files_ai_architecture.BASE.value
+            architecture_type, collection_name, collection_name_lit_search = _resolve_generation_architecture(
+                generated_file_id=generated_file_id,
+                architecture_type=architecture_type,
+            )
+            writer = ContentWriterArchitecture(
+                model_name=_model_name(request.model_name),
+                temperature=request.temperature,
+                instructions=request.instructions,
+                type=architecture_type,
+                collection_name=collection_name,
+                collection_name_lit_search=collection_name_lit_search,
+            )
+            section_body = _section_body_from_outline_node(node) or current_raw_content
+            prompt = _paragraph_update_prompt(request.section_path, section_body, request.paragraph_index, request.action)
+            response = await writer.ainvoke(
+                _content_state(
+                    ContentRequest(
+                        current_section=prompt,
+                        content_pre="",
+                        content_specific_instructions=_paragraph_update_instruction(request.action),
+                        model_name=request.model_name,
+                        temperature=request.temperature,
+                        instructions=request.instructions,
+                        architecture_type=architecture_type,
+                        collection_name=collection_name,
+                        collection_name_lit_search=collection_name_lit_search,
+                    )
+                )
+            )
+            replacement = _content_response_text(response)
+            if not replacement:
+                raise HTTPException(status_code=502, detail="The AI model did not return updated paragraph text. Please try again.")
+
+        updated_raw_content = _replace_paragraph_in_section_body(
+            current_raw_content,
+            request.paragraph_index,
+            request.raw_paragraph,
+            replacement,
+            request.action,
         )
-        manuscript, _ = _manuscript_from_outline_file(generated_file_id)
+        _set_content_value(items, OUTLINE_CONTENT_AI, updated_raw_content)
+        _write_outline_file(generated_file_id, outline_data)
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["update_date"],
+            update_values=[datetime.now()],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        attached_reference_map = _attached_reference_map_for_generated_file(generated_file_id)
+        manuscript, ref_list = _display_manuscript_from_outline_tree(outline_data, attached_reference_map)
+        raw_outline, _ = _raw_outline_from_outline_file(generated_file_id)
+        action_message = {
+            "Expand": "Paragraph expanded.",
+            "Rephrase": "Paragraph rephrased.",
+            "Remove": "Paragraph removed.",
+        }[request.action]
         return {
-            "status": "saved",
-            "generated_file": _generated_file_record(updated_record),
-            "outline": _jsonable(processed_outline),
+            "generated_file": _generated_file_record({**generated_file, "update_date": datetime.now()}),
             "manuscript": manuscript,
-            "path": str(outline_file_path),
+            "ref_list": ref_list,
+            "outline": raw_outline,
+            "message": action_message,
         }
     except HTTPException:
         raise
     except Exception as exp:
-        raise _api_error("save structured outline", exp)
+        raise _api_error("update manuscript paragraph", exp)
+
+
+@app.get("/api/generated-files/{generated_file_id}/download")
+async def download_generated_file(
+    generated_file_id: int,
+    download_format: DownloadFormat = Query("md", alias="format"),
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+):
+    try:
+        from src import common as common_module
+
+        record = _generated_file_by_id(generated_file_id, email=email, session=session)
+        if not _outline_file_path(generated_file_id).exists():
+            raise HTTPException(status_code=404, detail="No manuscript content has been saved for this file yet.")
+
+        uploaded_collection = _active_uploaded_files_collection_record(generated_file_id)
+        literature_collection = _active_literature_collection_record(generated_file_id)
+        uploaded_collection_id = int(uploaded_collection["id"]) if uploaded_collection else None
+        literature_collection_id = int(literature_collection["id"]) if literature_collection else None
+
+        def build_doc_content() -> tuple[str, Any, str, str]:
+            def get_attached_refs_for_download(
+                vector_db_collections_id_uploaded_files: int | None,
+                vector_db_collections_id_literature: int | None,
+            ) -> tuple[list[Any], dict[str, Any]]:
+                files: list[Any] = []
+                file_info: dict[str, Any] = {}
+                for collection_id in (vector_db_collections_id_uploaded_files, vector_db_collections_id_literature):
+                    refs, info = common_module.getVectorDBFiles(collection_id)
+                    files.extend(refs)
+                    file_info.update(info)
+                return files, file_info
+
+            with DOC_CONTENT_LOCK:
+                original_get_attached_refs = getattr(common_module, "getAttachedRefs", None)
+                common_module.getAttachedRefs = get_attached_refs_for_download
+                try:
+                    return common_module.getDocContent(
+                        generated_file_id,
+                        uploaded_collection_id,
+                        literature_collection_id,
+                    )
+                finally:
+                    if original_get_attached_refs is not None:
+                        common_module.getAttachedRefs = original_get_attached_refs
+
+        content_md, content_docx, content_tex, bibs = await asyncio.to_thread(build_doc_content)
+
+        file_stem = _safe_download_stem(str(record.get("file_name") or "generated-document"))
+        file_name = f"{file_stem}.{download_format if download_format != 'latex' else 'zip'}"
+        headers = {"Content-Disposition": f'attachment; filename="{file_name}"'}
+
+        if download_format == "docx":
+            output = BytesIO()
+            content_docx.save(output)
+            output.seek(0)
+            return StreamingResponse(
+                output,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers=headers,
+            )
+
+        if download_format == "latex":
+            output = BytesIO()
+            with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("main.tex", content_tex)
+                archive.writestr("bibliography.bib", bibs or "")
+            output.seek(0)
+            return Response(content=output.getvalue(), media_type="application/zip", headers=headers)
+
+        text_by_format = {
+            "md": (content_md, "text/markdown; charset=utf-8"),
+        }
+        content, media_type = text_by_format[download_format]
+        return Response(content=content, media_type=media_type, headers=headers)
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("download generated document", exp)
+
+
+@app.post("/api/generated-files/{generated_file_id}/literature-search")
+async def enable_generated_file_literature_search(
+    generated_file_id: int,
+    request: GeneratedFileLiteratureSearchRequest,
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        generated_file = _generated_file_by_id(generated_file_id, email=request.email, session=request.session)
+        existing_literature_collection = _active_literature_collection_record(generated_file_id)
+        if existing_literature_collection:
+            _delete_vector_collection_record(existing_literature_collection)
+
+        literature_collection = _create_literature_collection(generated_file)
+        collection_name = literature_collection["collection_name"]
+
+        now = datetime.now()
+        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["ai_architecture", "status", "update_date"],
+            update_values=[db.generated_files_ai_architecture.RAG.value, db.generated_files_status.CREATED.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+        updated_file = {
+            **generated_file,
+            "ai_architecture": db.generated_files_ai_architecture.RAG.value,
+            "status": db.generated_files_status.CREATED.value,
+            "update_date": now,
+        }
+        return {
+            "status": "enabled",
+            "generated_file": _jsonable(updated_file),
+            "literature_search": _jsonable(literature_collection),
+            "collection_name": collection_name,
+            "manuscript": manuscript,
+            "concept_maps": concept_maps,
+            "ref_list": ref_list,
+            "content_reset": source_exists,
+            "message": (
+                "Literature Search enabled. The manuscript content was reset because the generation context changed."
+                if source_exists
+                else "Literature Search is enabled for this file."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("enable literature search", exp)
+
+
+@app.delete("/api/generated-files/{generated_file_id}/literature-search")
+async def disable_generated_file_literature_search(
+    generated_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        generated_file = _generated_file_by_id(generated_file_id, email=email, session=session)
+        literature_collection = _active_literature_collection_record(generated_file_id)
+        if not literature_collection:
+            uploaded_collection = _active_uploaded_files_collection_record(generated_file_id)
+            has_uploaded_collection = bool(
+                uploaded_collection and _attached_uploaded_files(int(uploaded_collection["id"]))
+            )
+            next_architecture = (
+                db.generated_files_ai_architecture.RAG.value
+                if has_uploaded_collection
+                else db.generated_files_ai_architecture.BASE.value
+            )
+            now = datetime.now()
+            if generated_file.get("ai_architecture") != next_architecture:
+                db.updateDB(
+                    table_name="generated_files",
+                    update_fields=["ai_architecture", "update_date"],
+                    update_values=[next_architecture, now],
+                    select_fields=["id"],
+                    select_values=[[generated_file_id]],
+                )
+            updated_file = {
+                **generated_file,
+                "ai_architecture": next_architecture,
+                "update_date": now,
+            }
+            return {
+                "status": "disabled",
+                "generated_file": _generated_file_record(updated_file),
+                "literature_search": None,
+                "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
+                "attached_files": _attached_uploaded_documents(generated_file_id),
+                "message": "Literature Search is already disabled for this file.",
+            }
+
+        now = datetime.now()
+        _delete_vector_collection_record(literature_collection, now)
+
+        uploaded_collection = _active_uploaded_files_collection_record(generated_file_id)
+        has_uploaded_collection = bool(
+            uploaded_collection and _attached_uploaded_files(int(uploaded_collection["id"]))
+        )
+        next_architecture = (
+            db.generated_files_ai_architecture.RAG.value
+            if has_uploaded_collection
+            else db.generated_files_ai_architecture.BASE.value
+        )
+        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["ai_architecture", "status", "update_date"],
+            update_values=[next_architecture, db.generated_files_status.CREATED.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        updated_file = {
+            **generated_file,
+            "ai_architecture": next_architecture,
+            "status": db.generated_files_status.CREATED.value,
+            "update_date": now,
+        }
+        return {
+            "status": "disabled",
+            "generated_file": _generated_file_record(updated_file),
+            "literature_search": None,
+            "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
+            "attached_files": _attached_uploaded_documents(generated_file_id),
+            "manuscript": manuscript,
+            "concept_maps": concept_maps,
+            "ref_list": ref_list,
+            "content_reset": source_exists,
+            "message": (
+                "Literature Search disabled. The manuscript content was reset because the generation context changed."
+                if source_exists
+                else "Literature Search disabled for this file."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("disable literature search", exp)
+
+
+@app.post("/api/generated-files/{generated_file_id}/uploaded-files/attach")
+async def attach_uploaded_files_to_generated_file(
+    generated_file_id: int,
+    request: GeneratedFileAttachUploadedFilesRequest,
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        uploaded_file_ids = sorted({int(file_id) for file_id in request.uploaded_file_ids})
+        if not uploaded_file_ids:
+            raise HTTPException(status_code=400, detail="Select at least one uploaded document to attach.")
+
+        generated_file = _generated_file_by_id(generated_file_id, email=request.email, session=request.session)
+        uploaded_records = _uploaded_file_records_by_ids(
+            uploaded_file_ids,
+            email=generated_file.get("email") or request.email,
+            session=generated_file.get("session") or request.session,
+        )
+        found_ids = {int(record["id"]) for record in uploaded_records}
+        missing_ids = [file_id for file_id in uploaded_file_ids if file_id not in found_ids]
+        if missing_ids:
+            raise HTTPException(status_code=404, detail="One or more selected uploaded documents were not found.")
+
+        active_collection = _active_uploaded_files_collection_record(generated_file_id)
+        if active_collection:
+            attached_records = _attached_uploaded_files(int(active_collection["id"]))
+            attached_ids = {int(record["id"]) for record in attached_records}
+            duplicate_records = [record for record in uploaded_records if int(record["id"]) in attached_ids]
+            if duplicate_records:
+                duplicate_names = [str(record.get("file_name") or "Untitled") for record in duplicate_records]
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "already_attached",
+                        "message": f"Already attached: {', '.join(duplicate_names)}.",
+                        "duplicates": duplicate_names,
+                    },
+                )
+
+            if attached_records and request.mode == "ask":
+                attached_names = [str(record.get("file_name") or "Untitled") for record in attached_records]
+                selected_names = [str(record.get("file_name") or "Untitled") for record in uploaded_records]
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "existing_attachments",
+                        "message": "This generated document already has attached files.",
+                        "attached_files": attached_names,
+                        "selected_files": selected_names,
+                    },
+                )
+
+            if attached_records and request.mode == "replace":
+                now = datetime.now()
+                _delete_vector_collection_record(active_collection, now)
+                active_collection = _create_uploaded_files_collection(generated_file)
+        else:
+            active_collection = _create_uploaded_files_collection(generated_file)
+
+        vector_db_collections_id = int(active_collection["id"])
+        collection_name = active_collection.get("collection_name") or _vector_collection_name(vector_db_collections_id)
+        file_paths = _uploaded_file_paths(uploaded_records)
+        _insert_uploaded_file_attachment_rows(vector_db_collections_id, uploaded_records)
+        _load_uploaded_files_to_vector_collection(collection_name, file_paths)
+
+        now = datetime.now()
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["ai_architecture", "update_date"],
+            update_values=[db.generated_files_ai_architecture.RAG.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+        db.updateDB(
+            table_name="vector_db_collections",
+            update_fields=["update_date"],
+            update_values=[now],
+            select_fields=["id"],
+            select_values=[[vector_db_collections_id]],
+        )
+
+        updated_file = {
+            **generated_file,
+            "ai_architecture": db.generated_files_ai_architecture.RAG.value,
+            "update_date": now,
+        }
+        attached_records = _attached_uploaded_files(vector_db_collections_id)
+        return {
+            "status": "attached",
+            "generated_file": _jsonable(updated_file),
+            "collection": _jsonable(
+                {
+                    **active_collection,
+                    "collection_name": collection_name,
+                    "update_date": now,
+                }
+            ),
+            "attached_files": [_uploaded_document(record) for record in attached_records],
+            "message": "Uploaded documents attached to this generated document.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("attach uploaded documents", exp)
+
+
+@app.delete("/api/generated-files/{generated_file_id}/uploaded-files/{uploaded_file_id}/attach")
+async def remove_uploaded_file_attachment(
+    generated_file_id: int,
+    uploaded_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        generated_file = _generated_file_by_id(generated_file_id, email=email, session=session)
+        active_collection = _active_uploaded_files_collection_record(generated_file_id)
+        if not active_collection:
+            raise HTTPException(status_code=404, detail="There are no uploaded files attached to this generated document.")
+
+        attached_records = _attached_uploaded_files(int(active_collection["id"]))
+        attached_ids = {int(record["id"]) for record in attached_records}
+        if int(uploaded_file_id) not in attached_ids:
+            raise HTTPException(status_code=404, detail="That uploaded file is not attached to this generated document.")
+
+        remaining_records = [record for record in attached_records if int(record["id"]) != int(uploaded_file_id)]
+        now = datetime.now()
+        _delete_vector_collection_record(active_collection, now)
+
+        uploaded_files_collection = None
+        if remaining_records:
+            uploaded_files_collection = _create_uploaded_files_collection_from_records(generated_file, remaining_records)
+
+        has_literature_collection = _active_literature_collection_record(generated_file_id) is not None
+        next_architecture = (
+            db.generated_files_ai_architecture.RAG.value
+            if remaining_records or has_literature_collection
+            else db.generated_files_ai_architecture.BASE.value
+        )
+        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["ai_architecture", "status", "update_date"],
+            update_values=[next_architecture, db.generated_files_status.CREATED.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        updated_file = {
+            **generated_file,
+            "ai_architecture": next_architecture,
+            "status": db.generated_files_status.CREATED.value,
+            "update_date": now,
+        }
+        return {
+            "status": "removed",
+            "generated_file": _jsonable(updated_file),
+            "uploaded_files_collection": _jsonable(uploaded_files_collection),
+            "attached_files": [_uploaded_document(record) for record in remaining_records],
+            "manuscript": manuscript,
+            "concept_maps": concept_maps,
+            "ref_list": ref_list,
+            "content_reset": source_exists,
+            "message": (
+                "Uploaded document removed. The manuscript content was reset because the attached references changed."
+                if source_exists
+                else "Uploaded document removed from this generated document."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("remove attached uploaded document", exp)
+
+
+@app.get("/api/generated-files/{generated_file_id}/concept-map")
+async def generated_file_concept_map(
+    generated_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
+    try:
+        record = _generated_file_by_id(generated_file_id, email=email, session=session)
+        concept_maps, source_exists = _concept_maps_from_outline_file(generated_file_id)
+        return {
+            "generated_file": _generated_file_record(record),
+            "concept_maps": concept_maps,
+            "source_exists": source_exists,
+            "message": "" if concept_maps else "No concept map has been generated for this file yet.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("load concept map", exp)
 
 
 @app.post("/api/generated-files/{generated_file_id}/generate")
@@ -1374,13 +2961,26 @@ async def generate_generated_file(
     request: GeneratedFileGenerateRequest,
 ) -> dict[str, Any]:
     try:
+        active_job = _active_generation_job_for_file(generated_file_id)
+        if active_job:
+            detail = (
+                "Generation is pausing. Please try again in a moment."
+                if active_job.get("pause_requested")
+                else "Content generation is already running for this file."
+            )
+            raise HTTPException(status_code=409, detail=detail)
+
         _required_default_model()
         generated_file, processed_outline, outline_file_path = _save_processed_outline(
             generated_file_id,
             request.outline,
             email=request.email,
             session=request.session,
+            preserve_generated_content=request.mode == "remaining",
         )
+        if request.mode == "restart":
+            _refresh_vector_collections_for_regeneration(generated_file)
+
         job_id = uuid4().hex
         manuscript = _manuscript_from_outline_tree(processed_outline)
         job = {
@@ -1392,14 +2992,21 @@ async def generate_generated_file(
             "current_section": "",
             "completed_sections": 0,
             "total_sections": 0,
+            "mode": request.mode,
             "manuscript": manuscript,
+            "ref_list": [],
             "generated_file": _generated_file_record(generated_file),
             "outline_path": str(outline_file_path),
+            "pause_requested": False,
+            "worker_active": True,
+            "task": None,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
         }
         GENERATION_JOBS[job_id] = job
-        asyncio.create_task(_run_generation_job(job_id, generated_file_id, request, _generated_file_record(generated_file)))
+        task = asyncio.create_task(_run_generation_job(job_id, generated_file_id, request, _generated_file_record(generated_file)))
+        task.add_done_callback(lambda _task, current_job=job: _finalize_generation_task(current_job))
+        job["task"] = task
         return {"status": "queued", "job": _job_snapshot(job)}
     except HTTPException:
         raise
@@ -1415,24 +3022,39 @@ async def generation_job(job_id: str) -> dict[str, Any]:
     return {"job": _job_snapshot(job)}
 
 
-@app.get("/api/uploaded-files")
-async def uploaded_files(email: str = Query(...), limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
-    try:
-        from src import db
+@app.post("/api/generation-jobs/{job_id}/pause")
+async def pause_generation_job(job_id: str) -> dict[str, Any]:
+    job = GENERATION_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="That generation job was not found.")
 
-        normalized_email = _validate_email(email)
-        active_statuses = [
-            status.value for status in db.uploaded_files_status if status != db.uploaded_files_status.DELETED
-        ]
-        df = db.selectFromDB(
-            table_name="uploaded_files",
-            field_names=["email", "status"],
-            field_values=[[normalized_email], active_statuses],
-            order_by_field_names=["update_date"],
-            order_by_types=["DESC"],
-            limit=limit,
-        )
-        records = _records_from_dataframe(df)
+    if job.get("status") in {"queued", "running"}:
+        job["pause_requested"] = True
+        job["status"] = "paused"
+        job["message"] = "Generation paused. Click Generate to continue with the remaining outline."
+        job["current_section"] = ""
+        job["updated_at"] = datetime.now().isoformat()
+        if job.get("generated_file_id"):
+            _set_generated_file_status(int(job["generated_file_id"]), "cancelled")
+        if isinstance(job.get("generated_file"), dict):
+            job["generated_file"] = {**job["generated_file"], "status": "cancelled"}
+        task = job.get("task")
+        if isinstance(task, asyncio.Task) and not task.done():
+            task.cancel()
+        else:
+            _finalize_generation_task(job)
+
+    return {"job": _job_snapshot(job)}
+
+
+@app.get("/api/uploaded-files")
+async def uploaded_files(
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+) -> dict[str, Any]:
+    try:
+        records = _uploaded_records_for_owner(email=email, session=session, limit=limit)
         return {
             "uploaded_files": [_uploaded_file_record(record) for record in records],
             "uploaded_documents": [_uploaded_document(record) for record in records],
@@ -1443,14 +3065,230 @@ async def uploaded_files(email: str = Query(...), limit: int = Query(50, ge=1, l
         raise _api_error("load uploaded files", exp)
 
 
+@app.post("/api/uploaded-files")
+async def upload_uploaded_files(
+    files: list[UploadFile] = File(...),
+    email: str | None = Form(None),
+    session: str | None = Form(None),
+    replace: bool = Form(False),
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        normalized_email, normalized_session, _, _ = _owner_identity(email=email, session=session)
+        incoming_files: list[tuple[UploadFile, str]] = []
+        seen_names: set[str] = set()
+        for upload in files:
+            file_name = _safe_uploaded_file_name(upload.filename)
+            name_key = file_name.casefold()
+            if name_key in seen_names:
+                continue
+            seen_names.add(name_key)
+            incoming_files.append((upload, file_name))
+
+        if not incoming_files:
+            raise HTTPException(status_code=400, detail="Choose at least one document to upload.")
+
+        existing_by_name = {
+            file_name: existing
+            for _, file_name in incoming_files
+            if (existing := _uploaded_file_by_owner_and_name(file_name, email=normalized_email, session=normalized_session))
+        }
+        if existing_by_name and not replace:
+            duplicate_names = sorted(existing_by_name)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        "One or more uploaded documents already exist. Confirm replacement to update the saved files."
+                    ),
+                    "duplicates": duplicate_names,
+                },
+            )
+
+        now = datetime.now()
+        uploaded_records: list[dict[str, Any]] = []
+        for upload, file_name in incoming_files:
+            existing = existing_by_name.get(file_name)
+            if existing:
+                uploaded_file_id = int(existing["id"])
+                db.updateDB(
+                    table_name="uploaded_files",
+                    update_fields=["status", "update_date"],
+                    update_values=[db.uploaded_files_status.UPLOADED.value, now],
+                    select_fields=["id"],
+                    select_values=[[uploaded_file_id]],
+                )
+                record = {
+                    **existing,
+                    "status": db.uploaded_files_status.UPLOADED.value,
+                    "update_date": now,
+                }
+            else:
+                inserted_ids = db.insertIntoDB(
+                    table_name="uploaded_files",
+                    field_names=["email", "session", "file_name", "status", "create_date", "update_date"],
+                    field_values=[
+                        [normalized_email],
+                        [normalized_session],
+                        [file_name],
+                        [db.uploaded_files_status.UPLOADED.value],
+                        [now],
+                        [now],
+                    ],
+                )
+                uploaded_file_id = int(inserted_ids[0])
+                record = {
+                    "id": uploaded_file_id,
+                    "email": normalized_email,
+                    "session": normalized_session,
+                    "file_name": file_name,
+                    "status": db.uploaded_files_status.UPLOADED.value,
+                    "create_date": now,
+                    "update_date": now,
+                }
+
+            saved_path = _save_uploaded_file(upload, uploaded_file_id, file_name)
+            uploaded_records.append({**record, "path": str(saved_path)})
+
+        records = _uploaded_records_for_owner(email=normalized_email, session=normalized_session, limit=200)
+        return {
+            "message": "Documents uploaded successfully.",
+            "uploaded_files": [_uploaded_file_record(record) for record in records],
+            "uploaded_documents": [_uploaded_document(record) for record in records],
+            "saved_files": [_jsonable(record) for record in uploaded_records],
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("upload documents", exp)
+
+
+@app.delete("/api/uploaded-files/{uploaded_file_id}")
+async def delete_uploaded_file(
+    uploaded_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        normalized_email, normalized_session, _, _ = _owner_identity(email=email, session=session)
+        uploaded_records = _uploaded_file_records_by_ids(
+            [uploaded_file_id],
+            email=normalized_email,
+            session=normalized_session,
+        )
+        if not uploaded_records:
+            raise HTTPException(status_code=404, detail="Uploaded document was not found.")
+
+        uploaded_record = uploaded_records[0]
+        affected_collections = _active_uploaded_file_collections_for_uploaded_file(uploaded_file_id)
+        affected_documents: list[dict[str, Any]] = []
+        now = datetime.now()
+
+        for collection in affected_collections:
+            generated_file_id = int(collection["generated_files_id"])
+            generated_file = _generated_file_by_id(
+                generated_file_id,
+                email=normalized_email or None,
+                session=normalized_session or None,
+            )
+            attached_records = _attached_uploaded_files(int(collection["id"]))
+            remaining_records = [
+                record
+                for record in attached_records
+                if int(record["id"]) != int(uploaded_file_id)
+                and record.get("status") != db.uploaded_files_status.DELETED.value
+            ]
+
+            _delete_vector_collection_record(collection, now)
+
+            uploaded_files_collection = None
+            if remaining_records:
+                uploaded_files_collection = _create_uploaded_files_collection_from_records(generated_file, remaining_records)
+
+            has_literature_collection = _active_literature_collection_record(generated_file_id) is not None
+            next_architecture = (
+                db.generated_files_ai_architecture.RAG.value
+                if remaining_records or has_literature_collection
+                else db.generated_files_ai_architecture.BASE.value
+            )
+            manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+            db.updateDB(
+                table_name="generated_files",
+                update_fields=["ai_architecture", "status", "update_date"],
+                update_values=[next_architecture, db.generated_files_status.CREATED.value, now],
+                select_fields=["id"],
+                select_values=[[generated_file_id]],
+            )
+
+            updated_file = {
+                **generated_file,
+                "ai_architecture": next_architecture,
+                "status": db.generated_files_status.CREATED.value,
+                "update_date": now,
+            }
+            affected_documents.append(
+                {
+                    "generated_file": _generated_file_record(updated_file),
+                    "uploaded_files_collection": _jsonable(uploaded_files_collection),
+                    "attached_files": [_uploaded_document(record) for record in remaining_records],
+                    "manuscript": manuscript,
+                    "concept_maps": concept_maps,
+                    "ref_list": ref_list,
+                    "content_reset": source_exists,
+                }
+            )
+
+        db.updateDB(
+            table_name="uploaded_files",
+            update_fields=["status", "update_date"],
+            update_values=[db.uploaded_files_status.DELETED.value, now],
+            select_fields=["id"],
+            select_values=[[uploaded_file_id]],
+        )
+
+        uploaded_path = _uploaded_doc_path(int(uploaded_file_id), str(uploaded_record.get("file_name") or ""))
+        try:
+            uploaded_path.unlink(missing_ok=True)
+        except Exception:
+            logger.warning("Unable to remove uploaded file from disk: %s", uploaded_path, exc_info=True)
+
+        records = _uploaded_records_for_owner(email=normalized_email, session=normalized_session, limit=200)
+        affected_count = len(affected_documents)
+        return {
+            "status": "deleted",
+            "uploaded_file": _uploaded_file_record(
+                {
+                    **uploaded_record,
+                    "status": db.uploaded_files_status.DELETED.value,
+                    "update_date": now,
+                }
+            ),
+            "uploaded_documents": [_uploaded_document(record) for record in records],
+            "affected_documents": affected_documents,
+            "message": (
+                f"Uploaded document deleted. {affected_count} generated document"
+                f"{'' if affected_count == 1 else 's'} reset because the attached references changed."
+                if affected_count
+                else "Uploaded document deleted."
+            ),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("delete uploaded document", exp)
+
+
 @app.post("/api/generated-files")
 async def create_generated_file(request: GeneratedFileRequest) -> dict[str, Any]:
     try:
         from src import db
 
         email = _validate_email(request.email) if request.email else ""
-        session = request.session.strip()
-        if not session:
+        session = "" if email else request.session.strip()
+        if not email and not session:
             raise HTTPException(status_code=400, detail="A session is required to save a file.")
         file_name = request.file_name.strip()
         if not file_name:
@@ -1459,10 +3297,11 @@ async def create_generated_file(request: GeneratedFileRequest) -> dict[str, Any]
         if email:
             if request.settings_id is None:
                 raise HTTPException(status_code=400, detail="Settings id is required for signed-in users.")
+            owner_fields, owner_values, _, _ = _owner_filter_fields(email=email, session=session)
             settings = db.selectFromDB(
                 table_name="settings",
-                field_names=["id", "email", "session"],
-                field_values=[[request.settings_id], [email], [session]],
+                field_names=["id", *owner_fields],
+                field_values=[[request.settings_id], *owner_values],
                 limit=1,
             )
             if not _records_from_dataframe(settings):
@@ -1554,18 +3393,54 @@ async def update_generated_file(generated_file_id: int, request: GeneratedFileUp
         raise _api_error("update generated file", exp)
 
 
-@app.get("/api/ai/models")
-async def ai_models() -> dict[str, Any]:
+@app.delete("/api/generated-files/{generated_file_id}")
+async def delete_generated_file(
+    generated_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
     try:
-        from src.ai.llms import extractAvailableLLMs
+        from src import db
 
-        default_model = _required_default_model()
-        models = extractAvailableLLMs()
-        return {"models": _jsonable(models), "default_model": default_model}
+        generated_file = _generated_file_by_id(generated_file_id, email=email, session=session)
+        now = datetime.now()
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["status", "update_date"],
+            update_values=[db.generated_files_status.DELETED.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        active_collections = db.selectFromDB(
+            table_name="vector_db_collections",
+            field_names=["generated_files_id", "status"],
+            field_values=[[generated_file_id], [db.vector_db_collections_status.ACTIVE.value]],
+        )
+        for collection in _records_from_dataframe(active_collections):
+            _delete_vector_collection_record(collection, now)
+
+        records = _generated_records_for_owner(
+            email=generated_file.get("email") or email,
+            session=generated_file.get("session") or session,
+            limit=1000,
+        )
+        return {
+            "status": "deleted",
+            "generated_file": _generated_file_record(
+                {
+                    **generated_file,
+                    "status": db.generated_files_status.DELETED.value,
+                    "update_date": now,
+                }
+            ),
+            "generated_documents": [_generated_document_detail(record) for record in records],
+            "message": "Generated document removed.",
+        }
     except HTTPException:
         raise
     except Exception as exp:
-        raise _api_error("load AI models", exp)
+        raise _api_error("remove generated file", exp)
 
 
 @app.post("/api/ai/outline")
@@ -1613,6 +3488,12 @@ async def write_content(request: ContentRequest) -> dict[str, Any]:
     try:
         from src.ai.architecture import ContentWriterArchitecture
 
+        if request.architecture_type == "rag" and not request.collection_name and not request.collection_name_lit_search:
+            raise HTTPException(
+                status_code=400,
+                detail="RAG content generation needs an attached-document collection or a literature-search collection. Attach files or enable Literature Search, then try again.",
+            )
+
         architecture = ContentWriterArchitecture(
             model_name=_model_name(request.model_name),
             temperature=request.temperature,
@@ -1627,195 +3508,6 @@ async def write_content(request: ContentRequest) -> dict[str, Any]:
         raise
     except Exception as exp:
         raise _api_error("write content", exp)
-
-
-@app.post("/api/ai/abstract/detect")
-async def detect_abstract(request: AbstractDetectorRequest) -> dict[str, Any]:
-    try:
-        from src.ai.architecture import AbstractSectionDetectorArchitecture
-
-        architecture = AbstractSectionDetectorArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-        )
-        state = _content_state(ContentRequest(current_section=request.current_section))
-        response = await architecture.ainvoke(state)
-        return {"result": _jsonable(response)}
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("detect abstract section", exp)
-
-
-@app.post("/api/ai/abstract/write")
-async def write_abstract(request: AbstractWriterRequest) -> dict[str, Any]:
-    try:
-        from src.ai.architecture import AbstractWriterArchitecture
-
-        architecture = AbstractWriterArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-        )
-        state = _content_state(
-            ContentRequest(
-                current_section=request.current_section,
-                content_pre=request.content_pre,
-                content_specific_instructions=request.content_specific_instructions,
-            )
-        )
-        response = await architecture.ainvoke(state)
-        return {"result": _jsonable(response)}
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("write abstract", exp)
-
-
-@app.get("/api/db/tables")
-async def db_tables() -> dict[str, Any]:
-    try:
-        from src import db
-
-        return {"tables": sorted(db.tables.keys())}
-    except Exception as exp:
-        raise _api_error("load database tables", exp)
-
-
-@app.post("/api/db/select")
-async def select_from_db(request: DBSelectRequest) -> dict[str, Any]:
-    try:
-        from src import db
-
-        df = db.selectFromDB(
-            table_name=request.table_name,
-            field_names=request.field_names,
-            field_values=request.field_values,
-            order_by_field_names=request.order_by_field_names,
-            order_by_types=request.order_by_types,
-            limit=request.limit,
-        )
-        return {"rows": _records_from_dataframe(df)}
-    except Exception as exp:
-        raise _api_error("select from database", exp)
-
-
-@app.post("/api/db/insert")
-async def insert_into_db(request: DBInsertRequest) -> dict[str, Any]:
-    try:
-        from src import db
-
-        inserted_ids = db.insertIntoDB(
-            table_name=request.table_name,
-            field_names=request.field_names,
-            field_values=request.field_values,
-        )
-        return {"inserted_ids": _jsonable(inserted_ids)}
-    except Exception as exp:
-        raise _api_error("insert into database", exp)
-
-
-@app.patch("/api/db/update")
-async def update_db(request: DBUpdateRequest) -> dict[str, str]:
-    try:
-        from src import db
-
-        db.updateDB(
-            table_name=request.table_name,
-            update_fields=request.update_fields,
-            update_values=request.update_values,
-            select_fields=request.select_fields,
-            select_values=request.select_values,
-        )
-        return {"status": "updated"}
-    except Exception as exp:
-        raise _api_error("update database", exp)
-
-
-@app.post("/api/vector-db/collections")
-async def create_vector_collection(request: VectorCollectionRequest) -> dict[str, str]:
-    try:
-        from src.vectordb import ChromaDB
-
-        vector_db = ChromaDB(embedding=request.embedding)
-        vector_db.create(request.collection_name, delete_if_exists=request.delete_if_exists)
-        return {"status": "created", "collection_name": request.collection_name}
-    except Exception as exp:
-        raise _api_error("create vector collection", exp)
-
-
-@app.delete("/api/vector-db/collections/{collection_name}")
-async def delete_vector_collection(collection_name: str) -> dict[str, str]:
-    try:
-        from src.vectordb import deleteCollection
-
-        deleteCollection(collection_name)
-        return {"status": "deleted", "collection_name": collection_name}
-    except Exception as exp:
-        raise _api_error("delete vector collection", exp)
-
-
-@app.post("/api/vector-db/query")
-async def query_vector_collection(request: VectorQueryRequest) -> dict[str, Any]:
-    try:
-        from src.vectordb import ChromaDB
-
-        vector_db = ChromaDB(embedding=request.embedding)
-        vector_db.get(request.collection_name, is_graph=request.is_graph)
-        documents = vector_db.invoke(request.query)
-        return {"documents": _jsonable(documents)}
-    except Exception as exp:
-        raise _api_error("query vector collection", exp)
-
-
-@app.post("/api/vector-db/ingest-paths")
-async def ingest_vector_paths(request: VectorPathIngestRequest) -> dict[str, Any]:
-    try:
-        from src.vectordb import ChromaDB, getLoader
-
-        vector_db = ChromaDB(embedding=request.embedding)
-        vector_db.create(request.collection_name)
-        docs = []
-        for file_path in request.file_paths:
-            docs.extend(list(getLoader(Path(file_path))))
-        vector_db.add(
-            docs,
-            chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
-            is_graph=request.is_graph,
-        )
-        return {"status": "ingested", "documents_loaded": len(docs)}
-    except Exception as exp:
-        raise _api_error("ingest vector paths", exp)
-
-
-@app.post("/api/vector-db/collections/{collection_name}/documents")
-async def ingest_uploaded_documents(
-    collection_name: str,
-    files: list[UploadFile] = File(...),
-    embedding: str = Query("text-embedding-3-large"),
-    chunk_size: int = Query(1000, ge=1),
-    chunk_overlap: int = Query(200, ge=0),
-    is_graph: bool = Query(False),
-) -> dict[str, Any]:
-    try:
-        from src.vectordb import ChromaDB, getLoader
-
-        vector_db = ChromaDB(embedding=embedding)
-        vector_db.create(collection_name)
-        docs = []
-        with tempfile.TemporaryDirectory(prefix="discourse2draft-upload-") as temp_dir:
-            temp_path = Path(temp_dir)
-            for upload in files:
-                file_path = temp_path / Path(upload.filename or "document").name
-                with file_path.open("wb") as output:
-                    shutil.copyfileobj(upload.file, output)
-                docs.extend(list(getLoader(file_path)))
-        vector_db.add(docs, chunk_size=chunk_size, chunk_overlap=chunk_overlap, is_graph=is_graph)
-        return {"status": "ingested", "documents_loaded": len(docs), "collection_name": collection_name}
-    except Exception as exp:
-        raise _api_error("ingest uploaded documents", exp)
 
 
 frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"

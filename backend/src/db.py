@@ -214,7 +214,6 @@ class VectorDBCollectionFiles(Base):
 try:
 
     connection_string = f'postgresql://{Config.env_config["DB_USER"]}:{Config.env_config["DB_PASSWORD"]}@{Config.env_config["DB_HOST"]}:{Config.env_config["DB_PORT"]}/{Config.DB_NAME}'
-    logging.info(f'Connection string: {connection_string}')
     engine = sa.create_engine(connection_string)
 
     if not database_exists(engine.url):

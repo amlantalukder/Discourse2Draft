@@ -1,16 +1,8 @@
 import re
-import logging
 from enum import Enum
 
-from .ai.llms import extractAvailableLLMs
 from .ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
 from .utils import print_func_name
-from .common import unMarkdownText
-
-# ---------------------------------------------------------------------------
-class ContentGenerationScope(Enum):
-    DO_NOT_GENERATE = 'Do Not Generate'
-    GENERATE_IF_NEEDED = 'Generate Content If Needed'
 
 # ---------------------------------------------------------------------------
 class SpecialSectionTypes(Enum):
@@ -24,6 +16,15 @@ class ContentTypes(Enum):
     CONTENT_AI = 'content_ai'
     CONTENT_PRE_SUMMARY = 'content_pre_summary'
     CONCEPT_MAP = 'concept_map'
+
+@print_func_name
+def unMarkdownText(text):
+
+    from bs4 import BeautifulSoup
+    from markdown import markdown
+
+    html = markdown(text)
+    return ''.join(BeautifulSoup(html).findAll(text=True))
 
 @print_func_name
 def resetOutline(d):
