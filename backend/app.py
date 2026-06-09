@@ -9,6 +9,7 @@ import json
 import logging
 from pathlib import Path
 import re
+import secrets
 import shutil
 import sys
 import threading
@@ -28,6 +29,12 @@ from src.utils import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("discourse2draft.api")
+
+PASSWORD_RESET_CODE_TTL_SECONDS = 15 * 60
+PASSWORD_RESET_CODE_MAX_ATTEMPTS = 5
+_password_reset_codes: dict[str, dict[str, Any]] = {}
+_password_reset_lock = threading.Lock()
+
 
 def _install_runtime_compatibility() -> None:
     module_aliases = {
@@ -113,6 +120,25 @@ class CreateAccountRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: str
+
+
+class VerifyResetCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    password: str
+    confirm_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    email: str
+    current_password: str
+    password: str
+    confirm_password: str
 
 
 class GeneratedFileRequest(BaseModel):
@@ -348,6 +374,42 @@ def _validate_password(password: str, confirm_password: str | None = None) -> No
         raise HTTPException(status_code=400, detail="Password must contain at least one number.")
     if not any(char in special_chars for char in password):
         raise HTTPException(status_code=400, detail="Password must contain at least one special character.")
+
+
+def _normalize_reset_code(code: str) -> str:
+    normalized = code.strip()
+    if not re.fullmatch(r"\d{6}", normalized):
+        raise HTTPException(status_code=400, detail="Enter the 6-digit activation code.")
+    return normalized
+
+
+def _store_password_reset_code(email: str, code: str) -> None:
+    expires_at = datetime.now().timestamp() + PASSWORD_RESET_CODE_TTL_SECONDS
+    with _password_reset_lock:
+        _password_reset_codes[email] = {
+            "code": code,
+            "expires_at": expires_at,
+            "attempts": 0,
+        }
+
+
+def _validate_password_reset_code(email: str, code: str, consume: bool = False) -> None:
+    normalized_code = _normalize_reset_code(code)
+    with _password_reset_lock:
+        record = _password_reset_codes.get(email)
+        if record is None:
+            raise HTTPException(status_code=400, detail="Request a new activation code before continuing.")
+        if datetime.now().timestamp() > float(record.get("expires_at", 0)):
+            _password_reset_codes.pop(email, None)
+            raise HTTPException(status_code=400, detail="That activation code has expired. Request a new code.")
+        if int(record.get("attempts", 0)) >= PASSWORD_RESET_CODE_MAX_ATTEMPTS:
+            _password_reset_codes.pop(email, None)
+            raise HTTPException(status_code=400, detail="Too many incorrect attempts. Request a new activation code.")
+        if not secrets.compare_digest(str(record.get("code", "")), normalized_code):
+            record["attempts"] = int(record.get("attempts", 0)) + 1
+            raise HTTPException(status_code=400, detail="That activation code is not valid.")
+        if consume:
+            _password_reset_codes.pop(email, None)
 
 
 def _credential_by_email(email: str) -> dict[str, Any] | None:
@@ -2288,15 +2350,138 @@ async def forgot_password(request: ForgotPasswordRequest) -> dict[str, Any]:
         if credential is None:
             raise HTTPException(status_code=404, detail="No account was found for that email.")
 
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        mailgun_domain = Config.env_config.get("MAILGUN_DOMAIN")
+        mailgun_api_key = Config.env_config.get("MAILGUN_API_KEY")
+        if not mailgun_domain or not mailgun_api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Email delivery is not configured. Add Mailgun settings and restart the backend.",
+            )
+
+        def send_activation_code():
+            import requests
+
+            return requests.post(
+                f"https://api.mailgun.net/v3/{mailgun_domain}/messages",
+                auth=("api", mailgun_api_key),
+                data={
+                    "from": f"Mailgun Sandbox <postmaster@{mailgun_api_key}>",
+                    "to": email,
+                    "subject": "Activation code for Discourse2Draft",
+                    "text": f"Activation code: {code}",
+                },
+                timeout=15,
+            )
+
+        response = await asyncio.to_thread(send_activation_code)
+        if not response.ok:
+            logger.error(
+                "Mailgun forgot password email failed with status %s: %s",
+                response.status_code,
+                response.text[:300],
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Unable to send the activation code right now. Please try again later.",
+            )
+
+        _store_password_reset_code(email, code)
+
         return {
-            "status": "account_found",
+            "status": "code_sent",
             "email": email,
-            "message": "Account found. Password reset code delivery is not configured yet.",
+            "message": "An activation code was sent to your email.",
         }
     except HTTPException:
         raise
     except Exception as exp:
-        raise _api_error("verify account", exp)
+        raise _api_error("send activation code", exp)
+
+
+@app.post("/api/auth/verify-reset-code")
+async def verify_reset_code(request: VerifyResetCodeRequest) -> dict[str, Any]:
+    try:
+        email = _validate_email(request.email)
+        if _credential_by_email(email) is None:
+            raise HTTPException(status_code=404, detail="No account was found for that email.")
+
+        _validate_password_reset_code(email, request.code)
+        return {
+            "status": "verified",
+            "email": email,
+            "message": "Code verified. You can now change your password.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("verify activation code", exp)
+
+
+@app.post("/api/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest) -> dict[str, Any]:
+    try:
+        from src import db
+
+        email = _validate_email(request.email)
+        if _credential_by_email(email) is None:
+            raise HTTPException(status_code=404, detail="No account was found for that email.")
+        _validate_password(request.password, request.confirm_password)
+        _validate_password_reset_code(email, request.code, consume=True)
+
+        db.updateDB(
+            table_name="credentials",
+            update_fields=["password", "update_date"],
+            update_values=[db.encryptPassword(request.password), datetime.now()],
+            select_fields=["email"],
+            select_values=[[email]],
+        )
+        return {
+            "status": "password_updated",
+            "email": email,
+            "message": "Password updated. You can now log in with your new password.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("reset password", exp)
+
+
+@app.post("/api/auth/change-password")
+async def change_password(request: ChangePasswordRequest) -> dict[str, Any]:
+    try:
+        from src import db
+
+        email = _validate_email(request.email)
+        credential = _credential_by_email(email)
+        if credential is None:
+            raise HTTPException(status_code=404, detail="No account was found for that email.")
+
+        current_password_hash = db.encryptPassword(request.current_password)
+        if not secrets.compare_digest(str(credential.get("password") or ""), current_password_hash):
+            raise HTTPException(status_code=401, detail="Current password is not correct.")
+
+        _validate_password(request.password, request.confirm_password)
+        new_password_hash = db.encryptPassword(request.password)
+        if secrets.compare_digest(current_password_hash, new_password_hash):
+            raise HTTPException(status_code=400, detail="New password must be different from the current password.")
+
+        db.updateDB(
+            table_name="credentials",
+            update_fields=["password", "update_date"],
+            update_values=[new_password_hash, datetime.now()],
+            select_fields=["email"],
+            select_values=[[email]],
+        )
+        return {
+            "status": "password_changed",
+            "email": email,
+            "message": "Password changed successfully.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("change password", exp)
 
 
 @app.get("/api/settings/default")
@@ -3510,8 +3695,12 @@ async def write_content(request: ContentRequest) -> dict[str, Any]:
         raise _api_error("write content", exp)
 
 
-frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
-if frontend_dist.exists():
+frontend_dist_paths = [
+    Config.DIR_HOME / "dist",
+    Path(__file__).resolve().parents[1] / "frontend" / "dist",
+]
+frontend_dist = next((path for path in frontend_dist_paths if path.exists()), None)
+if frontend_dist is not None:
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 
