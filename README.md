@@ -145,11 +145,15 @@ DB_PORT = 5432
 - Run app with uv
   - `uv run shiny run app.py -p <port>`
 
+The app can be accessed at `http://127.0.0.1:<port>/`
+
 **Using Docker**
 
 Use the following command to run the app with Docker:
 
 `docker compose up -d`
+
+The app can be accessed at `http://127.0.0.1:5173/`
 
 # Contact
 

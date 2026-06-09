@@ -2,16 +2,14 @@ services:
   postgres:
     image: postgres:17.9
     container_name: discourse2draft-postgres
-    environment:
-      POSTGRES_DB: discourse2draft-db
-      POSTGRES_USER: discourse2draft
-      POSTGRES_PASSWORD: discourse2draft
+    env_file:
+      - ./backend/.env
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U discourse2draft -d discourse2draft-db"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-discourse2draft-db}\""]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -29,7 +27,10 @@ services:
       - chroma_data:/chroma/chroma
 
   backend:
-    image: python:3.12.4-slim
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: discourse2draft-backend:latest
     container_name: discourse2draft-backend
     working_dir: /app/backend
     depends_on:
@@ -39,47 +40,12 @@ services:
         condition: service_started
     ports:
       - "8012:8012"
+    env_file:
+      - ./backend/.env
     volumes:
-      - ./backend:/src/backend:ro
-      - backend_runtime:/app/backend
+      - ./backend/.env:/app/backend/.env:ro
       - backend_data:/app/backend/data
       - backend_logs:/app/backend/logs
-      - pip_cache:/root/.cache/pip
-    environment:
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONUNBUFFERED: "1"
-    command:
-      - /bin/sh
-      - -c
-      - |
-        set -eu
-        tar \
-          --exclude='./data' \
-          --exclude='./logs' \
-          --exclude='./.venv' \
-          --exclude='./__pycache__' \
-          -C /src/backend -cf - . | tar -C /app/backend -xf -
-
-        if [ -f /src/backend/.env ]; then
-          cp /src/backend/.env /app/backend/.env
-        else
-          : > /app/backend/.env
-        fi
-
-        cat >> /app/backend/.env <<'EOF'
-
-        # Docker Compose runtime overrides
-        DB_HOST=postgres
-        DB_USER=discourse2draft
-        DB_PASSWORD=discourse2draft
-        DB_PORT=5432
-        CHROMA_HOST=chroma
-        CHROMA_PORT=8000
-        EOF
-
-        python -m pip install -r requirements.txt
-        python -m uvicorn app:app --host 0.0.0.0 --port 8012
     healthcheck:
       test:
         [
@@ -91,7 +57,10 @@ services:
       retries: 10
 
   frontend:
-    image: node:22-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: discourse2draft-frontend:latest
     container_name: discourse2draft-frontend
     working_dir: /app/frontend
     depends_on:
@@ -101,21 +70,9 @@ services:
       - "5173:5173"
     environment:
       VITE_API_PROXY_TARGET: http://backend:8012
-    volumes:
-      - ./frontend:/app/frontend
-      - frontend_node_modules:/app/frontend/node_modules
-    command:
-      - /bin/sh
-      - -c
-      - |
-        npm ci
-        npx vite --host 0.0.0.0 --port 5173
 
 volumes:
   postgres_data:
   chroma_data:
-  backend_runtime:
   backend_data:
   backend_logs:
-  frontend_node_modules:
-  pip_cache:
