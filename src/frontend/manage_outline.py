@@ -100,12 +100,10 @@ def generateOutlineByAI(query, dir_path_ref_files=None):
     '''
     Use AI to generate outline from a given query
     '''
-
-    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files)
-    
+    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files)   
     response = agent.invoke({'query': query})
     outline = response['content']
-    
+
     return outline
 
 @print_func_name
@@ -114,7 +112,6 @@ def processOutlineByAI(outline):
     Use AI to process outline into structured format
     '''
     agent = OutlineFormatterArchitecture()
-    
     response = agent.invoke({'outline_unstructured': outline})
     outline_structured = response['content']
     print(outline_structured)
@@ -538,19 +535,22 @@ def mod_ai_outline_creator(input, output, session, saved_outline, reload_uploade
         temperature = input.slide_temp()
         instructions = input.text_instructions()
 
-        agent = OutlineCreatorArchitecture(llm, temperature=temperature, instructions=instructions)
+        try:
+            agent = OutlineCreatorArchitecture(llm, temperature=temperature, instructions=instructions)
 
-        if not topic_desc.get():
-            return generateOutline(agent, topic_name.get())
+            if not topic_desc.get():
+                return generateOutline(agent, topic_name.get())
 
-        generateOutline(agent, f'''\
-                        <Topic name>
-                        {topic_name.get()}
-                        </Topic name>
-                        
-                        <Topic description>
-                        {topic_desc.get()}
-                        </Topic description>''')
+            generateOutline(agent, f'''\
+                            <Topic name>
+                            {topic_name.get()}
+                            </Topic name>
+                            
+                            <Topic description>
+                            {topic_desc.get()}
+                            </Topic description>''')
+        except Exception as exp:
+            ui.notification_show(exp)
 
     @reactive.effect
     @print_func_name

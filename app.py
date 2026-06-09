@@ -15,10 +15,8 @@ from utils import Config, print_func_name, getUIID
 import asyncio
 import logging
 import pandas as pd
-import htmltools
-print(htmltools.__version__)
-import shiny
-print(shiny.__version__)
+import aiohttp
+print(f'{aiohttp.__version__=}')
 
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.css", method='link_files')
 ui.include_css(Path(__file__).parent / "www" / "css" / "bootstrap.min.css", method='link_files')

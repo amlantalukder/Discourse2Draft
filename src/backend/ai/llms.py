@@ -2,8 +2,7 @@ from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
 
 import requests
-from pathlib import Path
-from ..utils import Config
+from ..utils import Config, traceError, formatErrorString, SetupException
 from utils import Config as config_base, print_func_name, Versions
 import logging
 
@@ -38,7 +37,7 @@ def extractAvailableLLMs() -> tuple[list, list]:
             logging.info(response.text)
 
     except Exception as error:
-        logging.error('litellm proxy access error:', error)
+        logging.error('Error during litellm model info access:', error)
     
     llms_filtered = {}
     if Config.llms_selected:
@@ -62,26 +61,29 @@ def getAIModel(model_name: str, temperature: int = 0, is_embedding=False) -> Cha
     :param is_embedding: For embedding model
     :return: OpenAI Chat LLM
     """
-
-    if not is_embedding:
-    
-        return ChatOpenAI(
-            model=model_name,
-            base_url=Config.env_config.get('AI_BASE_URL'),
-            api_key=Config.env_config.get('AI_API_KEY'),
-            temperature=temperature,
-            max_tokens=None,
-            timeout=None,
+    try:
+        if not is_embedding:
+        
+            return ChatOpenAI(
+                model=model_name,
+                base_url=Config.env_config.get('AI_BASE_URL'),
+                api_key=Config.env_config.get('AI_API_KEY'),
+                temperature=temperature,
+                max_tokens=None,
+                timeout=None,
+                max_retries=2,
+                seed=1000,
+                http_client=config_base.httpx_client
+            )
+        
+        return OpenAIEmbeddings(
+            model=model_name, 
+            base_url=Config.env_config['AI_BASE_URL'], 
+            api_key=Config.env_config['AI_API_KEY'],
+            request_timeout=None,
             max_retries=2,
-            seed=1000,
-            http_client=config_base.httpx_client
+            http_client=config_base.httpx_client,
         )
-    
-    return OpenAIEmbeddings(
-        model=model_name, 
-        base_url=Config.env_config['AI_BASE_URL'], 
-        api_key=Config.env_config['AI_API_KEY'],
-        request_timeout=None,
-        max_retries=2,
-        http_client=config_base.httpx_client,
-    )
+    except Exception as exp:
+        logging.error(traceError(exp))
+        raise SetupException(formatErrorString('during AI model set up'))

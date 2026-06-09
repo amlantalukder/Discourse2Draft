@@ -3,6 +3,7 @@ from shiny.express import ui, render, module
 from shiny.types import FileInfo
 import faicons
 from utils import Config, getUIID, print_func_name
+from ..backend.utils import SetupException
 from ..backend.db import insertIntoDB, updateDB, selectFromDB, \
                 generated_files_status, \
                 generated_files_ai_architecture, \
@@ -624,9 +625,11 @@ def mod_contents(input, output, session,
 
         ui.notification_show("Creating outline", type="message")
 
-        outline = generateOutlineByAI(query, dir_path_ref_files=dir_temp_files if dir_temp_files.exists() else None)
-
-        showOutlineEditor(outline)
+        try:
+            outline = generateOutlineByAI(query, dir_path_ref_files=dir_temp_files if dir_temp_files.exists() else None)
+            showOutlineEditor(outline)
+        except Exception as exp:
+            ui.notification_show(exp)
 
     @print_func_name
     def saveOutline(regenerate=False):
@@ -658,9 +661,12 @@ def mod_contents(input, output, session,
                 ui.update_text_area(id='text_outline', value=outline)
                 ui.notification_show("The provided outline was reformatted to find the proper positions for AI to write in.", type="warning")
                 d_outline = processOutline(outline)
+            except SetupException as exp:
+                ui.notification_show(exp)
+                return False
             except Exception as exp:
                 logging.error(f'Failed to generate outline with AI: {exp}') 
-                ui.notification_show("Outline formatting is invalid. Failed to fix it with AI. Please follow the outline format mentioned in docs.", type="error")
+                ui.notification_show("Outline formatting is invalid. Failed to fix it with AI.", type="error")
                 return False
 
         with open(Config.DIR_CONTENTS / f'outline_{config_app.generated_files_id}.json', 'w') as fp:

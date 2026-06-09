@@ -12,6 +12,7 @@ import dotenv
 from enum import Enum
 import logging
 from utils import print_func_name
+from .utils import SetupException, formatErrorString
 
 # -----------------------------------------------------------------------
 @print_func_name
@@ -240,7 +241,6 @@ try:
 
 except Exception as exp:
    logging.error(exp)
-
 
 # -----------------------------------------------------------------------
 tables = {'credentials': Credentials, 

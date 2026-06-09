@@ -1,8 +1,5 @@
 from chromadb import HttpClient
 from langchain_chroma import Chroma
-from .ai.llms import getAIModel
-from .utils import Config
-from utils import print_func_name
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_graph_retriever.transformers import ShreddingTransformer
 from langchain_graph_retriever.adapters.chroma import ChromaAdapter
@@ -15,14 +12,24 @@ from pathlib import Path
 import truststore
 import logging
 
+from utils import print_func_name
+from .ai.llms import getAIModel
+from .utils import Config, traceError, formatErrorString, SetupException
+
 truststore.inject_into_ssl()
 
 class ChromaDB:
 
     def __init__(self, embedding: str = 'text-embedding-3-large'):
-        logging.info(f"Initializing ChromaDB with host: {Config.env_config['CHROMA_HOST']}, port: {Config.env_config['CHROMA_PORT']}")
-        self.client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
 
+        logging.info(f"Initializing ChromaDB with host: {Config.env_config['CHROMA_HOST']}, port: {Config.env_config['CHROMA_PORT']}")
+        
+        try:
+            self.client = HttpClient(host=Config.env_config['CHROMA_HOST'],  port=Config.env_config['CHROMA_PORT'])
+        except Exception as exp:
+            logging.error(traceError(exp))
+            raise SetupException(formatErrorString('connecting Chroma DB'))
+        
         self.embedding = getAIModel(model_name=embedding, is_embedding=True)
 
     def create(self, collection_name: str, delete_if_exists: bool = False):

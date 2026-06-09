@@ -205,7 +205,10 @@ def detachDocs(generated_files_id, vector_db_collections_id):
                 select_values=[[generated_files_id]])
 
     vector_db_collection_name = f'{Config.APP_NAME_AS_PREFIX}_collection_{vector_db_collections_id}'
-    deleteCollection(vector_db_collection_name)
+    try:
+        deleteCollection(vector_db_collection_name)
+    except Exception as exp:
+        ui.notification_show(exp)
 
 @print_func_name
 def getGeneratedDocuments(email, session_id):

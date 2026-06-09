@@ -1,3 +1,4 @@
+from shiny.express import ui
 
 from ..backend.ai.architecture import (ContentWriterArchitecture,
                                        AbstractSectionDetectorArchitecture,
@@ -66,15 +67,18 @@ class ConfigApp:
         else:
             vector_db_collection_name_lit_search = ''
         
-        self.agent = ContentWriterArchitecture(model_name=self.llm, 
-                                        temperature=self.temperature, 
-                                        instructions=self.instructions, 
-                                        type=ai_architecture,
-                                        collection_name= vector_db_collection_name,
-                                        collection_name_lit_search=vector_db_collection_name_lit_search)
-        
-        self.agent_abstract_detector = AbstractSectionDetectorArchitecture()
-        self.agent_abstract_writer = AbstractWriterArchitecture()
+        try:
+            self.agent = ContentWriterArchitecture(model_name=self.llm, 
+                                            temperature=self.temperature, 
+                                            instructions=self.instructions, 
+                                            type=ai_architecture,
+                                            collection_name= vector_db_collection_name,
+                                            collection_name_lit_search=vector_db_collection_name_lit_search)
+            
+            self.agent_abstract_detector = AbstractSectionDetectorArchitecture()
+            self.agent_abstract_writer = AbstractWriterArchitecture()
+        except Exception as exp:
+            ui.notification_show(exp)
         
     def __repr__(self):
         return f'''ConfigApp(email={self.email}, 

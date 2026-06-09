@@ -3,7 +3,6 @@
 .venv
 .posit
 .vscode
-lib
 data/*
 docs/temp
 certs

@@ -58,3 +58,11 @@ class Config:
 # ---------------------------------------------------------------------------
 def traceError(exp):
     return f'Line number: {exp.__traceback__.tb_lineno}, Description: {exp}\n\n{traceback.format_exc()}'
+
+# ---------------------------------------------------------------------------
+def formatErrorString(error_action):
+    return f'An error occurred {error_action}'
+
+# ---------------------------------------------------------------------------
+class SetupException(Exception):
+    ...
