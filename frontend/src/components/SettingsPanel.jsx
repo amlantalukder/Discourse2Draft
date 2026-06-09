@@ -1,4 +1,4 @@
-import { Save, X } from "lucide-react";
+import { Save, X } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { IconButton } from "./IconButton";
 

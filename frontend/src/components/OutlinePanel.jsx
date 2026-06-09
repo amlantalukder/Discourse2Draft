@@ -1,11 +1,33 @@
-import { PanelTopClose, PanelTopOpen, Pause, Pencil, Play, RefreshCw } from "lucide-react";
+import { PanelTopClose, PanelTopOpen, Pause, Pencil, Play, RefreshCw } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { FileUploadControl } from "./FileUploadControl";
 import { IconButton } from "./IconButton";
 import { OutlineEditor } from "./OutlineEditor";
 
-export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument, setReferenceDocument, outline, setOutline, useExample, setUseExample, onGenerate, onFormat, onRun, onRegenerate, onPause, onDownload, isRunning, status, hasSelectedFile = false, resetSignal = 0 }) {
+export function OutlinePanel({
+  mode,
+  setMode,
+  query,
+  setQuery,
+  referenceDocument,
+  setReferenceDocument,
+  outline,
+  setOutline,
+  useExample,
+  setUseExample,
+  onGenerate,
+  onFormat,
+  onRun,
+  onRegenerate,
+  onPause,
+  onDownload,
+  isRunning,
+  status,
+  hasSelectedFile = false,
+  hasGeneratedContent = false,
+  resetSignal = 0,
+}) {
   const isQueryMode = mode === "query";
   const isLocked = !hasSelectedFile;
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -67,7 +89,7 @@ export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument
           <IconButton label="Edit outline" onClick={openOutlineEditor} disabled={isLocked || isRunning}>
             <Pencil size={18} />
           </IconButton>
-          <IconButton label="Regenerate" onClick={onRegenerate} disabled={isLocked || isQueryMode || isRunning}>
+          <IconButton label="Regenerate" onClick={onRegenerate} disabled={isLocked || isQueryMode || isRunning || !hasGeneratedContent}>
             <RefreshCw size={18} />
           </IconButton>
           {isRunning ? (

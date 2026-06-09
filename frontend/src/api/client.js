@@ -49,10 +49,24 @@ function formatErrorDetail(detail, fallback) {
   return friendlyMessage(detail, fallback);
 }
 
+function apiUrl(path) {
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+  if (API_BASE) {
+    const normalizedBase = API_BASE.endsWith("/") ? API_BASE : `${API_BASE}/`;
+    return `${normalizedBase}${normalizedPath}`;
+  }
+
+  const baseUrl = import.meta.env.BASE_URL || "./";
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
 async function fetchJSON(path, options) {
   let response;
   try {
-    response = await fetch(`${API_BASE}${path}`, options);
+    response = await fetch(apiUrl(path), options);
   } catch (error) {
     throw new Error("Backend is not reachable. Start the backend server and try again.");
   }
@@ -71,7 +85,7 @@ async function fetchJSON(path, options) {
 export async function getBlob(path) {
   let response;
   try {
-    response = await fetch(`${API_BASE}${path}`);
+    response = await fetch(apiUrl(path));
   } catch (error) {
     throw new Error("Backend is not reachable. Start the backend server and try again.");
   }

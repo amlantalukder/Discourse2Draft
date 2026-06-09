@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "./FontAwesomeIcons";
 import { getJSON, postJSON } from "../api/client";
 import { AboutPage } from "./AboutPage";
 import { TopBar } from "./TopBar";
 
 const PASSWORD_RULE = 'Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?"{}[]|<>).';
+const EMPTY_FORGOT_FORM = { email: "", code: "", password: "", confirm_password: "" };
 
 function PasswordInput({ value, onChange, autoComplete, label }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -38,7 +39,8 @@ export function LoginPage({ onContinue }) {
     password: "",
     confirm_password: "",
   });
-  const [forgotForm, setForgotForm] = useState({ email: "" });
+  const [forgotForm, setForgotForm] = useState({ ...EMPTY_FORGOT_FORM });
+  const [forgotStep, setForgotStep] = useState("email");
   const [authMessage, setAuthMessage] = useState("");
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,6 +50,10 @@ export function LoginPage({ onContinue }) {
     setAuthView(nextView);
     setAuthMessage("");
     setAuthError("");
+    if (nextView === "forgot") {
+      setForgotForm({ ...EMPTY_FORGOT_FORM, email: loginForm.email });
+      setForgotStep("email");
+    }
   }
 
   function updateForm(setForm, field) {
@@ -93,15 +99,76 @@ export function LoginPage({ onContinue }) {
     }
   }
 
+  async function sendResetCode() {
+    setAuthMessage("");
+    setAuthError("");
+    setIsSubmitting(true);
+
+    try {
+      const payload = await postJSON("/api/auth/forgot-password", { email: forgotForm.email });
+      setForgotForm((current) => ({
+        ...current,
+        email: payload.email ?? current.email,
+        code: "",
+        password: "",
+        confirm_password: "",
+      }));
+      setForgotStep("code");
+      setAuthMessage(payload.message ?? "Account found.");
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleForgotPassword(event) {
+    event.preventDefault();
+    await sendResetCode();
+  }
+
+  async function handleResendResetCode() {
+    await sendResetCode();
+  }
+
+  async function handleVerifyResetCode(event) {
     event.preventDefault();
     setAuthMessage("");
     setAuthError("");
     setIsSubmitting(true);
 
     try {
-      const payload = await postJSON("/api/auth/forgot-password", forgotForm);
-      setAuthMessage(payload.message ?? "Account found.");
+      const payload = await postJSON("/api/auth/verify-reset-code", {
+        email: forgotForm.email,
+        code: forgotForm.code,
+      });
+      setForgotStep("password");
+      setAuthMessage(payload.message ?? "Code verified.");
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResetPassword(event) {
+    event.preventDefault();
+    setAuthMessage("");
+    setAuthError("");
+
+    if (forgotForm.password !== forgotForm.confirm_password) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const payload = await postJSON("/api/auth/reset-password", forgotForm);
+      setLoginForm({ email: payload.email ?? forgotForm.email, password: "" });
+      setForgotForm({ ...EMPTY_FORGOT_FORM });
+      setForgotStep("email");
+      setAuthView("login");
+      setAuthMessage(payload.message ?? "Password updated. You can log in with your new password.");
     } catch (error) {
       setAuthError(error.message);
     } finally {
@@ -211,20 +278,66 @@ export function LoginPage({ onContinue }) {
   }
 
   function renderForgotPassword() {
+    const submitHandler = forgotStep === "email" ? handleForgotPassword : forgotStep === "code" ? handleVerifyResetCode : handleResetPassword;
+    const submitLabel = forgotStep === "email" ? "Send Code" : forgotStep === "code" ? "Verify Code" : "Change Password";
+    const submittingLabel = forgotStep === "email" ? "Sending" : forgotStep === "code" ? "Verifying" : "Changing";
+
     return (
-      <form className="auth-card auth-card-forgot" onSubmit={handleForgotPassword}>
+      <form className="auth-card auth-card-forgot" onSubmit={submitHandler}>
         <h1>Forgot Password</h1>
         <div className="auth-divider" />
         {renderFeedback()}
 
         <label className="auth-field auth-field-short">
           <span>Email</span>
-          <input type="email" autoComplete="email" required value={forgotForm.email} onChange={updateForm(setForgotForm, "email")} />
+          <input
+            type="email"
+            autoComplete="email"
+            disabled={forgotStep !== "email" || isSubmitting}
+            required
+            value={forgotForm.email}
+            onChange={updateForm(setForgotForm, "email")}
+          />
         </label>
+
+        {forgotStep !== "email" ? (
+          <label className="auth-field auth-code-field">
+            <span>Activation code</span>
+            <span className="auth-code-input-row">
+              <input
+                type="text"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                disabled={forgotStep === "password" || isSubmitting}
+                required
+                value={forgotForm.code}
+                onChange={updateForm(setForgotForm, "code")}
+              />
+              <button className="tool-button auth-resend-button" type="button" disabled={isSubmitting} onClick={handleResendResetCode}>
+                {isSubmitting ? "Sending" : "Resend"}
+              </button>
+            </span>
+          </label>
+        ) : null}
+
+        {forgotStep === "password" ? (
+          <>
+            <PasswordInput label="New password" autoComplete="new-password" value={forgotForm.password} onChange={updateForm(setForgotForm, "password")} />
+            <PasswordInput
+              label="Confirm new password"
+              autoComplete="new-password"
+              value={forgotForm.confirm_password}
+              onChange={updateForm(setForgotForm, "confirm_password")}
+            />
+            <p className="auth-note">{PASSWORD_RULE}</p>
+          </>
+        ) : null}
 
         <div className="auth-actions auth-actions-split">
           <button className="tool-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Sending" : "Send Code"}
+            {isSubmitting ? submittingLabel : submitLabel}
           </button>
           <button className="tool-button" type="button" onClick={() => switchAuthView("login")}>
             Back to Login

@@ -1,4 +1,4 @@
-import { Plus, Save, SlidersHorizontal } from "lucide-react";
+import { Plus, Save, SlidersHorizontal } from "./FontAwesomeIcons";
 import { IconButton } from "./IconButton";
 
 export function WorkspaceHeader({ fileName, setFileName, onSave, onNewDocument, isSaving = false, settings, onOpenSettings }) {

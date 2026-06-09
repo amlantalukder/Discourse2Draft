@@ -1,4 +1,4 @@
-import { CornerDownRight, Pencil, Plus, Save, X } from "lucide-react";
+import { CornerDownRight, Pencil, Plus, Save, X } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { IconButton } from "./IconButton";
 

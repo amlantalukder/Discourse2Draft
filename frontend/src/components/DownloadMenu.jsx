@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download } from "./FontAwesomeIcons";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "./IconButton";
 

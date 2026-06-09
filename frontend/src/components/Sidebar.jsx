@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Maximize2, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Maximize2, Search, Trash2 } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { FileUploadControl } from "./FileUploadControl";

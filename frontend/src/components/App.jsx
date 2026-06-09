@@ -1,8 +1,9 @@
-import { AlertTriangle, FilePlus2, GitMerge, RefreshCw, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, FilePlus2, GitMerge, RefreshCw, Trash2, Upload } from "./FontAwesomeIcons";
 import { useEffect, useRef, useState } from "react";
 import { deleteJSON, getBlob, getJSON, patchJSON, postForm, postJSON } from "../api/client";
 import { AboutPage } from "./AboutPage";
 import { ActionStrip } from "./ActionStrip";
+import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ConceptMapPanel } from "./ConceptMapPanel";
 import { GeneratedDocumentsView } from "./GeneratedDocumentsView";
@@ -91,6 +92,11 @@ function normalizeReferenceList(refList = []) {
     });
 }
 
+function hasManuscriptContent(manuscript = [], generatedContent = "") {
+  if (String(generatedContent ?? "").trim()) return true;
+  return (Array.isArray(manuscript) ? manuscript : []).some((section) => String(section?.body ?? "").trim());
+}
+
 function wait(milliseconds) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, milliseconds);
@@ -153,6 +159,7 @@ export function App() {
   const [aiSettings, setAiSettings] = useState(initialAuthSession?.settings ?? null);
   const [llmOptions, setLlmOptions] = useState(initialAuthSession?.llm_options ?? []);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isConceptMapOpen, setIsConceptMapOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -573,6 +580,11 @@ export function App() {
       return;
     }
 
+    if (!hasManuscriptContent(workspaceData.manuscript, generatedContent)) {
+      setStatus("Generate manuscript content before using Regenerate.");
+      return;
+    }
+
     if (!outline.trim()) {
       setStatus("Add a structured outline before regenerating the manuscript.");
       return;
@@ -711,6 +723,7 @@ export function App() {
     setDisableLiteratureSearchPrompt(null);
     setStatus("");
     setIsSettingsPanelOpen(false);
+    setIsChangePasswordOpen(false);
     setIsAboutOpen(false);
     setIsRegenerateConfirmOpen(false);
     setShowLogin(true);
@@ -1419,7 +1432,13 @@ export function App() {
 
   return (
     <div className={`app-window ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`} data-view="workspace">
-      <TopBar accountLabel={authSession?.user?.email ?? "Anonymous session"} isGuest={authSession?.status === "anonymous" || !authSession?.user?.email} onHelp={() => setIsAboutOpen(true)} onLogout={logout} />
+      <TopBar
+        accountLabel={authSession?.user?.email ?? "Anonymous session"}
+        isGuest={authSession?.status === "anonymous" || !authSession?.user?.email}
+        onChangePassword={() => setIsChangePasswordOpen(true)}
+        onHelp={() => setIsAboutOpen(true)}
+        onLogout={logout}
+      />
       <Sidebar
         generatedDocuments={workspaceData.generated_documents}
         selectedGeneratedDocumentId={generatedFile?.id}
@@ -1462,6 +1481,7 @@ export function App() {
           isRunning={isSavingOutline}
           status={status}
           hasSelectedFile={Boolean(generatedFile?.id)}
+          hasGeneratedContent={hasManuscriptContent(workspaceData.manuscript, generatedContent)}
           resetSignal={workspaceResetVersion}
         />
         <ActionStrip
@@ -1481,6 +1501,16 @@ export function App() {
         <Manuscript manuscript={workspaceData.manuscript} refList={workspaceData.ref_list} generatedContent={generatedContent} isGenerating={isSavingOutline} currentWritingSection={currentWritingSection} selectedParagraphId={selectedParagraph?.id ?? ""} updatingParagraphId={updatingParagraphId} onParagraphSelectionChange={setSelectedParagraph} />
       </main>
       <SettingsPanel settings={aiSettings} modelOptions={llmOptions} isOpen={isSettingsPanelOpen} isSaving={isSavingSettings} onClose={() => setIsSettingsPanelOpen(false)} onSave={saveSettings} />
+      {isChangePasswordOpen && authSession?.user?.email ? (
+        <ChangePasswordDialog
+          email={authSession.user.email}
+          onClose={() => setIsChangePasswordOpen(false)}
+          onChanged={(payload) => {
+            setIsChangePasswordOpen(false);
+            setStatus(payload.message ?? "Password changed successfully.");
+          }}
+        />
+      ) : null}
       {isGeneratedDocumentsViewOpen ? (
         <GeneratedDocumentsView
           documents={workspaceData.generated_documents}

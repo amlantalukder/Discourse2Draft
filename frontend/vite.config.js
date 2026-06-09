@@ -4,7 +4,12 @@ import { defineConfig } from "vite";
 const backendTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:8012";
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
+  build: {
+    outDir: "../backend/dist",
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
       "/api": {

@@ -63,16 +63,28 @@ function advanceOneWord(currentSections, targetSections) {
   };
 }
 
-function shouldShowLoadingDots({ index, isGenerating, section, targetSection, currentWritingSection }) {
-  if (!isGenerating || index === 0 || !currentWritingSection) return false;
-  if (section.heading !== currentWritingSection) return false;
+function sameHeading(left, right) {
+  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
+}
+
+function hasStreamingDelta(currentSections, targetSections) {
+  return alignStreamedSections(currentSections, targetSections).some((section, index) => section.body !== (targetSections[index]?.body ?? ""));
+}
+
+function shouldShowLoadingDots({ index, section, targetSection, currentWritingSection, isActiveStreamingSection }) {
+  if (index === 0) return false;
 
   const visibleBody = section.body ?? "";
   const targetBody = targetSection?.body ?? "";
   const isWaitingForBackend = !targetBody.trim();
   const isStreamingToTarget = Boolean(targetBody) && visibleBody !== targetBody;
 
-  return isWaitingForBackend || isStreamingToTarget;
+  if (currentWritingSection) {
+    if (!sameHeading(section.heading, currentWritingSection)) return false;
+    return isWaitingForBackend || isStreamingToTarget;
+  }
+
+  return isActiveStreamingSection && isStreamingToTarget;
 }
 
 function LoadingDots({ inline = false }) {
@@ -200,17 +212,26 @@ export function Manuscript({
   }, [generatedContent, manuscript]);
 
   const streamedSectionsRef = useRef(sections);
+  const streamGenerationChangesRef = useRef(false);
   const [streamedSections, setStreamedSections] = useState(sections);
 
   useEffect(() => {
-    if (!isGenerating) {
+    if (isGenerating) {
+      streamGenerationChangesRef.current = true;
+    }
+
+    const shouldStream = streamGenerationChangesRef.current;
+    const alignedSections = alignStreamedSections(streamedSectionsRef.current, sections);
+    const hasPendingStream = hasStreamingDelta(streamedSectionsRef.current, sections);
+
+    if (!shouldStream || !hasPendingStream) {
+      streamGenerationChangesRef.current = false;
       streamedSectionsRef.current = sections;
       setStreamedSections(sections);
       return undefined;
     }
 
     let timeoutId;
-    const alignedSections = alignStreamedSections(streamedSectionsRef.current, sections);
     streamedSectionsRef.current = alignedSections;
     setStreamedSections(alignedSections);
 
@@ -221,19 +242,20 @@ export function Manuscript({
 
       if (result.hasMore) {
         timeoutId = window.setTimeout(streamNextWord, STREAM_DELAY_MS);
+      } else {
+        streamGenerationChangesRef.current = false;
       }
     }
 
-    if (alignedSections.some((section, index) => section.body !== (sections[index]?.body ?? ""))) {
-      timeoutId = window.setTimeout(streamNextWord, STREAM_DELAY_MS);
-    }
+    timeoutId = window.setTimeout(streamNextWord, STREAM_DELAY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
   }, [isGenerating, sections]);
 
-  const visibleSections = isGenerating ? streamedSections : sections;
+  const visibleSections = streamedSections;
+  const activeStreamingIndex = visibleSections.findIndex((section, index) => section.body !== (sections[index]?.body ?? ""));
 
   function handleParagraphClick(event, section, sectionIndex, paragraph, paragraphIndex) {
     event.stopPropagation();
@@ -268,10 +290,10 @@ export function Manuscript({
           const paragraphs = splitBodyIntoParagraphs(section.body);
           const showLoadingDots = shouldShowLoadingDots({
             index,
-            isGenerating,
             section,
             targetSection: sections[index],
             currentWritingSection,
+            isActiveStreamingSection: index === activeStreamingIndex,
           });
 
           return (

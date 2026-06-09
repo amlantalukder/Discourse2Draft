@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { X } from "./FontAwesomeIcons";
 import aboutMarkdown from "../../docs/README.md?raw";
 import { IconButton } from "./IconButton";
 

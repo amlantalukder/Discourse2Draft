@@ -1,4 +1,4 @@
-import { Download, GitBranch, Maximize2, RotateCcw, X } from "lucide-react";
+import { Download, GitBranch, Maximize2, RotateCcw, X } from "./FontAwesomeIcons";
 import { useEffect, useMemo, useRef } from "react";
 import { IconButton } from "./IconButton";
 

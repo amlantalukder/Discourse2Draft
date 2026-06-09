@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X } from "./FontAwesomeIcons";
 import { useEffect, useRef } from "react";
 import { IconButton } from "./IconButton";
 

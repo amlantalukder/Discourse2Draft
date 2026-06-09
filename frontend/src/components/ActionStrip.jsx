@@ -1,4 +1,4 @@
-import { ChevronDown, Paperclip, Play, Trash2, X } from "lucide-react";
+import { ChevronDown, Paperclip, Play, Trash2, X } from "./FontAwesomeIcons";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "./IconButton";
 

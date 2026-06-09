@@ -1,4 +1,4 @@
-import { Trash2, X } from "lucide-react";
+import { Trash2, X } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { IconButton } from "./IconButton";
