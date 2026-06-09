@@ -43,7 +43,7 @@ Backend contains agents developed by Langgraph architecture. The graph starts wi
 
 ![alt text](frontend/docs/figures/workflows.jpg)
 
-**Detailed architecture is represented in this [link](docs/README.md).**
+**Detailed architecture is represented in this [link](frontend/docs/README.md).**
 
 ## Running the app
 
