@@ -149,6 +149,17 @@ function downloadBlobFile(fileName, blob) {
   URL.revokeObjectURL(url);
 }
 
+function renderFileNameList(fileNames = []) {
+  if (!fileNames.length) return "None";
+  return (
+    <ul className="confirm-file-list">
+      {fileNames.map((fileName, index) => (
+        <li key={`${fileName}-${index}`}>{fileName}</li>
+      ))}
+    </ul>
+  );
+}
+
 export function App() {
   const initialAuthSession = useRef(loadStoredAuthSession()).current;
   const outlineBeforeExample = useRef("");
@@ -226,6 +237,7 @@ export function App() {
           setSystemHealth({
             status: "error",
             checks: {
+              backend: { status: "error", message: "Backend API is not reachable." },
               ai_model: { status: "unknown", message: "Health could not be checked." },
               chroma_db: { status: "unknown", message: "Health could not be checked." },
               postgres: { status: "unknown", message: "Health could not be checked." },
@@ -1136,6 +1148,17 @@ export function App() {
       return false;
     }
 
+    if (mode === "ask") {
+      setAttachFilesPrompt({
+        documents: selectedDocuments,
+        attachedFiles: normalizeUploadedDocuments(workspaceData.attached_files ?? []).map((file) => file.name ?? file.file_name ?? "Untitled"),
+        selectedFiles: selectedDocuments.map((document) => document.name ?? document.file_name ?? "Untitled"),
+        hasExistingAttachments: Boolean((workspaceData.attached_files ?? []).length),
+      });
+      setStatus("Confirm attaching files before resetting the manuscript.");
+      return true;
+    }
+
     setIsAttachingUploadedDocuments(true);
     setStatus(mode === "replace" ? "Replacing attached files..." : "Attaching uploaded files...");
     try {
@@ -1151,6 +1174,9 @@ export function App() {
         const attachedDocuments = normalizeUploadedDocuments(payload.attached_files ?? current.attached_files);
         return {
           ...current,
+          manuscript: payload.manuscript ?? current.manuscript,
+          ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+          concept_maps: payload.concept_maps ?? current.concept_maps,
           attached_files: attachedDocuments,
           generated_documents: (current.generated_documents ?? []).map((document) =>
             String(document.id) === String(updatedFile.id)
@@ -1192,6 +1218,12 @@ export function App() {
   }
 
   async function appendUploadedFileAttachments() {
+    const documents = attachFilesPrompt?.documents ?? [];
+    setAttachFilesPrompt(null);
+    await attachUploadedDocuments(documents, "append");
+  }
+
+  async function confirmUploadedFileAttachments() {
     const documents = attachFilesPrompt?.documents ?? [];
     setAttachFilesPrompt(null);
     await attachUploadedDocuments(documents, "append");
@@ -1585,21 +1617,33 @@ export function App() {
         dialogId="attach-files-confirm"
         icon={<FilePlus2 size={19} />}
         onClose={cancelUploadedFileAttachments}
-        actions={[
-          { label: "Cancel", onClick: cancelUploadedFileAttachments },
-          { label: "Add to existing", onClick: appendUploadedFileAttachments, variant: "primary", icon: <GitMerge size={15} />, autoFocus: true },
-          { label: "Replace existing", onClick: replaceUploadedFileAttachments, variant: "danger", icon: <RefreshCw size={15} /> },
-        ]}
+        actions={
+          attachFilesPrompt?.hasExistingAttachments
+            ? [
+                { label: "Cancel", onClick: cancelUploadedFileAttachments },
+                { label: "Add and reset", onClick: appendUploadedFileAttachments, variant: "primary", icon: <GitMerge size={15} />, autoFocus: true },
+                { label: "Replace and reset", onClick: replaceUploadedFileAttachments, variant: "danger", icon: <RefreshCw size={15} /> },
+              ]
+            : [
+                { label: "Cancel", onClick: cancelUploadedFileAttachments },
+                { label: "Attach and reset", onClick: confirmUploadedFileAttachments, variant: "danger", icon: <RefreshCw size={15} />, autoFocus: true },
+              ]
+        }
       >
-        <p>This generated document already has attached files. Add the selected files to that set, or replace the current set?</p>
+        <p>
+          Attaching uploaded files will reset the manuscript content for this generated document because the reference context is changing. Your saved outline will stay in place.
+        </p>
+        {attachFilesPrompt?.hasExistingAttachments ? (
+          <p>This generated document already has attached files. Add the selected files to that set, or replace the current set?</p>
+        ) : null}
         <dl>
           <div>
             <dt>Already attached</dt>
-            <dd>{attachFilesPrompt?.attachedFiles?.length ? attachFilesPrompt.attachedFiles.join(", ") : "None"}</dd>
+            <dd>{renderFileNameList(attachFilesPrompt?.attachedFiles ?? [])}</dd>
           </div>
           <div>
             <dt>Selected</dt>
-            <dd>{attachFilesPrompt?.selectedFiles?.length ? attachFilesPrompt.selectedFiles.join(", ") : "None"}</dd>
+            <dd>{renderFileNameList(attachFilesPrompt?.selectedFiles ?? [])}</dd>
           </div>
         </dl>
       </ConfirmDialog>

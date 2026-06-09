@@ -5,6 +5,7 @@ import { FileUploadControl } from "./FileUploadControl";
 import { IconButton } from "./IconButton";
 
 const healthItems = [
+  ["backend", "Backend"],
   ["ai_model", "AI"],
   ["chroma_db", "Chroma"],
   ["postgres", "Postgres"],
@@ -57,6 +58,8 @@ export function Sidebar({
 }) {
   const [uploadFiles, setUploadFiles] = useState([]);
   const [selectedUploadedDocumentIds, setSelectedUploadedDocumentIds] = useState([]);
+  const [isGeneratedDocumentsExpanded, setIsGeneratedDocumentsExpanded] = useState(true);
+  const [isUploadedDocumentsExpanded, setIsUploadedDocumentsExpanded] = useState(true);
   const selectedUploadedDocuments = uploadedDocuments.filter((document) => selectedUploadedDocumentIds.includes(String(document.id)));
 
   useEffect(() => {
@@ -101,98 +104,112 @@ export function Sidebar({
       </button>
 
       <div className="sidebar-content">
-        <section className="side-section">
+        <section className={`side-section ${isGeneratedDocumentsExpanded ? "" : "is-collapsed"}`}>
           <header>
-            <span>Generated documents</span>
+            <button className="side-section-toggle" type="button" aria-expanded={isGeneratedDocumentsExpanded} onClick={() => setIsGeneratedDocumentsExpanded((current) => !current)}>
+              <span>Generated documents</span>
+            </button>
             <div className="side-section-actions">
               <IconButton label="Expand generated documents" type="button" onClick={onGeneratedDocumentsExpand}>
                 <Maximize2 size={15} />
               </IconButton>
-              <ChevronDown size={17} />
-            </div>
-          </header>
-          <div className="generated-list">
-            {generatedDocuments.length ? (
-              generatedDocuments.map((document) => {
-                const documentName = document.name ?? document.file_name ?? "Untitled";
-
-                return (
-                  <div className={`document-row ${String(document.id) === String(selectedGeneratedDocumentId) ? "active" : ""}`} key={document.id ?? documentName + document.date} title={documentName}>
-                    <div>
-                      <button type="button" className="document-link" title={documentName} onClick={() => onGeneratedDocumentSelect?.(document)}>
-                        {documentName}
-                      </button>
-                      <time>{document.date}</time>
-                    </div>
-                    <DownloadMenu label={`Download ${documentName}`} menuAlign="right" onDownload={(format) => onGeneratedDocumentDownload?.(document, format)} />
-                    <IconButton label={`Delete ${documentName}`} type="button" onClick={() => onGeneratedDocumentDelete?.(document)}>
-                      <Trash2 size={18} />
-                    </IconButton>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="empty-panel-message">No generated documents yet.</p>
-            )}
-            {isLoadingGeneratedDocuments ? (
-              <div className="sidebar-loading-dots" role="status" aria-label="Loading generated documents">
-                <span />
-                <span />
-                <span />
-              </div>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="side-section uploaded">
-          <header>
-            <span>Uploaded documents</span>
-            <ChevronDown size={17} />
-          </header>
-          <div className="upload-controls">
-            <FileUploadControl label="Choose documents" accept=".txt,.pdf,.doc,.docx" multiple files={uploadFiles} onFilesChange={handleUploadFiles} disabled={isUploadingDocuments} />
-          </div>
-          <label className="search-field">
-            <Search size={16} />
-            <input placeholder="Search" />
-          </label>
-          <label className="check-row">
-            <input type="checkbox" checked={isAllUploadedSelected} disabled={!hasUploadedDocuments} onChange={(event) => toggleAllUploadedDocuments(event.target.checked)} />
-            <span>Select all documents</span>
-          </label>
-          <div className="uploaded-list">
-            {uploadedDocuments.length ? (
-              uploadedDocuments.map(({ id, name, date, type }) => (
-                <div className="uploaded-row" key={id ?? name} title={name}>
-                  <input type="checkbox" checked={selectedUploadedDocumentIds.includes(String(id))} onChange={(event) => toggleUploadedDocument(id, event.target.checked)} />
-                  <span className={`file-chip ${type}`}>{type}</span>
-                  <div>
-                    <span title={name}>{name}</span>
-                    <time>{date}</time>
-                  </div>
-                  <IconButton label={`Delete ${name}`} type="button" onClick={() => onUploadedDocumentDelete?.({ id, name, date, type })}>
-                    <Trash2 size={18} />
-                  </IconButton>
-                </div>
-              ))
-            ) : (
-              <p className="empty-panel-message">No uploaded documents yet.</p>
-            )}
-            {isLoadingUploadedDocuments || isUploadingDocuments ? (
-              <div className="sidebar-loading-dots" role="status" aria-label={isUploadingDocuments ? "Uploading documents" : "Loading uploaded documents"}>
-                <span />
-                <span />
-                <span />
-              </div>
-            ) : null}
-          </div>
-          {selectedUploadedDocuments.length ? (
-            <div className="attach-files-row">
-              <button className="tool-button primary" type="button" onClick={handleAttachUploadedDocuments} disabled={isAttachingUploadedDocuments}>
-                <FilePlus2 size={14} />
-                <span>{isAttachingUploadedDocuments ? "Attaching" : "Attach files"}</span>
+              <button className="section-collapse-button" type="button" aria-label={isGeneratedDocumentsExpanded ? "Collapse generated documents" : "Expand generated documents"} aria-expanded={isGeneratedDocumentsExpanded} onClick={() => setIsGeneratedDocumentsExpanded((current) => !current)}>
+                <ChevronDown size={17} />
               </button>
             </div>
+          </header>
+          {isGeneratedDocumentsExpanded ? (
+            <div className="generated-list">
+              {generatedDocuments.length ? (
+                generatedDocuments.map((document) => {
+                  const documentName = document.name ?? document.file_name ?? "Untitled";
+
+                  return (
+                    <div className={`document-row ${String(document.id) === String(selectedGeneratedDocumentId) ? "active" : ""}`} key={document.id ?? documentName + document.date} title={documentName}>
+                      <div>
+                        <button type="button" className="document-link" title={documentName} onClick={() => onGeneratedDocumentSelect?.(document)}>
+                          {documentName}
+                        </button>
+                        <time>{document.date}</time>
+                      </div>
+                      <DownloadMenu label={`Download ${documentName}`} menuAlign="right" onDownload={(format) => onGeneratedDocumentDownload?.(document, format)} />
+                      <IconButton label={`Delete ${documentName}`} type="button" onClick={() => onGeneratedDocumentDelete?.(document)}>
+                        <Trash2 size={18} />
+                      </IconButton>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="empty-panel-message">No generated documents yet.</p>
+              )}
+              {isLoadingGeneratedDocuments ? (
+                <div className="sidebar-loading-dots" role="status" aria-label="Loading generated documents">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section className={`side-section uploaded ${isUploadedDocumentsExpanded ? "" : "is-collapsed"}`}>
+          <header>
+            <button className="side-section-toggle" type="button" aria-expanded={isUploadedDocumentsExpanded} onClick={() => setIsUploadedDocumentsExpanded((current) => !current)}>
+              <span>Uploaded documents</span>
+            </button>
+            <button className="section-collapse-button" type="button" aria-label={isUploadedDocumentsExpanded ? "Collapse uploaded documents" : "Expand uploaded documents"} aria-expanded={isUploadedDocumentsExpanded} onClick={() => setIsUploadedDocumentsExpanded((current) => !current)}>
+              <ChevronDown size={17} />
+            </button>
+          </header>
+          {isUploadedDocumentsExpanded ? (
+            <>
+              <div className="upload-controls">
+                <FileUploadControl label="Choose documents" accept=".txt,.pdf,.doc,.docx" multiple files={uploadFiles} onFilesChange={handleUploadFiles} disabled={isUploadingDocuments} />
+              </div>
+              <label className="search-field">
+                <Search size={16} />
+                <input placeholder="Search" />
+              </label>
+              <label className="check-row">
+                <input type="checkbox" checked={isAllUploadedSelected} disabled={!hasUploadedDocuments} onChange={(event) => toggleAllUploadedDocuments(event.target.checked)} />
+                <span>Select all documents</span>
+              </label>
+              <div className="uploaded-list">
+                {uploadedDocuments.length ? (
+                  uploadedDocuments.map(({ id, name, date, type }) => (
+                    <div className="uploaded-row" key={id ?? name} title={name}>
+                      <input type="checkbox" checked={selectedUploadedDocumentIds.includes(String(id))} onChange={(event) => toggleUploadedDocument(id, event.target.checked)} />
+                      <span className={`file-chip ${type}`}>{type}</span>
+                      <div>
+                        <span title={name}>{name}</span>
+                        <time>{date}</time>
+                      </div>
+                      <IconButton label={`Delete ${name}`} type="button" onClick={() => onUploadedDocumentDelete?.({ id, name, date, type })}>
+                        <Trash2 size={18} />
+                      </IconButton>
+                    </div>
+                  ))
+                ) : (
+                  <p className="empty-panel-message">No uploaded documents yet.</p>
+                )}
+                {isLoadingUploadedDocuments || isUploadingDocuments ? (
+                  <div className="sidebar-loading-dots" role="status" aria-label={isUploadingDocuments ? "Uploading documents" : "Loading uploaded documents"}>
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : null}
+              </div>
+              {selectedUploadedDocuments.length ? (
+                <div className="attach-files-row">
+                  <button className="tool-button primary" type="button" onClick={handleAttachUploadedDocuments} disabled={isAttachingUploadedDocuments}>
+                    <FilePlus2 size={14} />
+                    <span>{isAttachingUploadedDocuments ? "Attaching" : "Attach files"}</span>
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </section>
       </div>

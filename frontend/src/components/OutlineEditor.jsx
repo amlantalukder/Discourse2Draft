@@ -72,14 +72,14 @@ function normalizeSectionsForHierarchy(sections, { enforceTopLevel = true } = {}
       if (!title && !isTopLevelSection) return null;
 
       const contentAi = Boolean(section.contentAi);
-      const instructions = contentAi ? section.instructions.trim() : "";
+      const instructions = section.instructions.trim();
       const userContentBefore = contentAi ? section.userContentBefore.trim() : "";
       const userContentAfter = contentAi ? section.userContentAfter.trim() : "";
 
       return {
         ...section,
         title: title || "Untitled outline",
-        hasInstructions: contentAi && Boolean(instructions),
+        hasInstructions: Boolean(instructions),
         instructions,
         hasUserContentBefore: contentAi && Boolean(userContentBefore),
         userContentBefore,
@@ -206,7 +206,7 @@ function serializeSection(section) {
   const title = section.title.trim() || "Untitled section";
   const parts = [`${"#".repeat(normalizeLevel(section.level))} ${title}`];
 
-  if (section.contentAi && section.hasInstructions && section.instructions.trim()) {
+  if (section.hasInstructions && section.instructions.trim()) {
     parts.push(`${INSTRUCTIONS_START}\n${section.instructions.trim()}\n${INSTRUCTIONS_END}`);
   }
 
@@ -724,7 +724,7 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
           </div>
         </div>
 
-        {section.contentAi && section.hasInstructions ? renderContentRow(section, "instructions") : null}
+        {section.hasInstructions ? renderContentRow(section, "instructions") : null}
         {section.contentAi && section.hasUserContentBefore ? renderContentRow(section, "userContentBefore") : null}
         {section.contentAi ? renderContentRow(section, "contentAi") : null}
         {section.hasUserContentAfter ? renderContentRow(section, "userContentAfter") : null}

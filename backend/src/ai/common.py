@@ -17,7 +17,7 @@ class ReferenceSchema(BaseModel):
 
 # ---------------------------------------------------------------------------
 class StateContentManager(TypedDict):
-    content_pre: str
+    content_pre_summary: str
     current_section: str
     content_specific_instructions: str
     keyphrases: List[str]

@@ -142,11 +142,11 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
         attached_references: A dictionary mapping reference IDs to their formatted reference strings collected from the database that have been attached to the generated file, but may not have been included in ref_list yet.
     '''
     
-    response = await agent.ainvoke({'content_pre': content_pre_summary, 
+    response = await agent.ainvoke({'content_pre_summary': content_pre_summary, 
                                     'current_section': current_section,
                                     'content_specific_instructions': instructions})
     
-    content, content_summary, concept_map = response['content'], response['content_pre'], response.get('concept_map', {})
+    content, content_summary, concept_map = response['content'], response.get('content_summary'), response.get('concept_map', {})
         
     attached_references_ai = response.get('references', {})
     attached_references = getSanitizedReferences(attached_references_ai, attached_references)

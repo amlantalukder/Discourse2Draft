@@ -83,7 +83,7 @@ class ContentRequest(AIRequestBase):
     architecture_type: Literal["base", "rag", "graphrag"] = "base"
     collection_name: str = ""
     collection_name_lit_search: str = ""
-    content_pre: str = ""
+    content_pre_summary: str = ""
     current_section: str
     content_specific_instructions: str = ""
     keyphrases: list[str] = Field(default_factory=list)
@@ -320,7 +320,7 @@ def _jsonable(value: Any) -> Any:
 
 def _content_state(request: ContentRequest) -> dict[str, Any]:
     return {
-        "content_pre": request.content_pre,
+        "content_pre_summary": request.content_pre_summary,
         "current_section": request.current_section,
         "content_specific_instructions": request.content_specific_instructions,
         "keyphrases": request.keyphrases,
@@ -1850,6 +1850,82 @@ def _section_prompt(path: list[str], items: list[Any]) -> str:
     return "\n\n".join(line for line in lines if line)
 
 
+def _generation_section_record(path: list[str], node: dict[str, Any], items: list[Any]) -> dict[str, Any]:
+    return {
+        "path": path.copy(),
+        "heading": path[-1] if path else "Untitled section",
+        "node": node,
+        "items": items,
+        "instructions": _section_instructions(items),
+        "is_abstract": _section_is_abstract(items),
+        "current_section": _section_prompt(path, items),
+    }
+
+
+def _generation_sections_in_outline_order(outline_data: dict[str, Any]) -> list[dict[str, Any]]:
+    sections: list[dict[str, Any]] = []
+
+    def walk(node: Any, path: list[str]) -> None:
+        if not isinstance(node, dict):
+            return
+
+        items = _content_items(node)
+        if items and _section_needs_ai(items):
+            sections.append(_generation_section_record(path, node, items))
+
+        for key, value in node.items():
+            if key == OUTLINE_CONTENT_KEY:
+                continue
+            walk(value, [*path, str(key)])
+
+    walk(outline_data, [])
+    return sections
+
+
+def _content_summary_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    return _text_from_content_value(value).strip()
+
+
+def _last_completed_regular_section_summary(outline_data: dict[str, Any]) -> str:
+    last_section: dict[str, Any] | None = None
+    for section in _generation_sections_in_outline_order(outline_data):
+        if section["is_abstract"] or not _section_has_generated_content(section["items"]):
+            continue
+        last_section = section
+
+    if not last_section:
+        return ""
+
+    summary = _content_summary_text(_content_value(last_section["items"], OUTLINE_CONTENT_PRE_SUMMARY, ""))
+    if summary:
+        return summary
+
+    return _content_summary_text(_content_value(last_section["items"], OUTLINE_CONTENT_AI, ""))
+
+
+def _summary_before_section(outline_data: dict[str, Any], target_path: list[str]) -> str:
+    target_path_tuple = tuple(target_path)
+    previous_summary = ""
+    for section in _generation_sections_in_outline_order(outline_data):
+        if tuple(section["path"]) == target_path_tuple:
+            return previous_summary
+        if section["is_abstract"] or not _section_has_generated_content(section["items"]):
+            continue
+        summary = _content_summary_text(_content_value(section["items"], OUTLINE_CONTENT_PRE_SUMMARY, ""))
+        previous_summary = summary or _content_summary_text(_content_value(section["items"], OUTLINE_CONTENT_AI, ""))
+    return previous_summary
+
+
+def _initial_content_pre_summary(outline_data: dict[str, Any], sections: list[dict[str, Any]], mode: str) -> str:
+    if mode != "remaining" or not sections:
+        return ""
+    if sections[0]["is_abstract"]:
+        return _last_completed_regular_section_summary(outline_data)
+    return _summary_before_section(outline_data, sections[0]["path"])
+
+
 def _split_manuscript_paragraphs(text: Any) -> list[str]:
     normalized = str(text or "").replace("\r\n", "\n").strip()
     if not normalized:
@@ -1938,32 +2014,11 @@ def _replace_paragraph_in_section_body(
 
 
 def _extract_generation_sections(outline_data: dict[str, Any], remaining_only: bool = True) -> list[dict[str, Any]]:
-    sections: list[dict[str, Any]] = []
-
-    def walk(node: Any, path: list[str]) -> None:
-        if not isinstance(node, dict):
-            return
-
-        items = _content_items(node)
-        if items and _section_needs_ai(items) and (not remaining_only or not _section_has_generated_content(items)):
-            sections.append(
-                {
-                    "path": path.copy(),
-                    "heading": path[-1] if path else "Untitled section",
-                    "node": node,
-                    "items": items,
-                    "instructions": _section_instructions(items),
-                    "is_abstract": _section_is_abstract(items),
-                    "current_section": _section_prompt(path, items),
-                }
-            )
-
-        for key, value in node.items():
-            if key == OUTLINE_CONTENT_KEY:
-                continue
-            walk(value, [*path, str(key)])
-
-    walk(outline_data, [])
+    sections = [
+        section
+        for section in _generation_sections_in_outline_order(outline_data)
+        if not remaining_only or not _section_has_generated_content(section["items"])
+    ]
     regular_sections = [section for section in sections if not section["is_abstract"]]
     abstract_sections = [section for section in sections if section["is_abstract"]]
     return regular_sections + abstract_sections
@@ -2156,7 +2211,7 @@ async def _run_generation_job(
             instructions=request.instructions,
         )
 
-        content_pre_summary = ""
+        content_pre_summary = _initial_content_pre_summary(outline_data, sections, request.mode)
         attached_references = _attached_reference_map_for_generated_file(generated_file_id)
         section_ref_list = []
         for index, section in enumerate(sections, start=1):
@@ -2173,6 +2228,7 @@ async def _run_generation_job(
                 ref_list=ref_list,
             )
             agent = abstract_writer if section["is_abstract"] else writer
+            section_content_pre_summary = content_pre_summary
             (
                 raw_content,
                 content_pre_summary,
@@ -2188,10 +2244,15 @@ async def _run_generation_job(
                 attached_references,
             )
             raw_content = str(raw_content or "")
+            content_pre_summary = str(content_pre_summary or "")
             display_content = display_content or raw_content
             display_content_overrides[tuple(section["path"])] = display_content
             _set_content_value(section["items"], OUTLINE_CONTENT_AI, raw_content)
-            _set_content_value(section["items"], OUTLINE_CONTENT_PRE_SUMMARY, content_pre_summary)
+            _set_content_value(
+                section["items"],
+                OUTLINE_CONTENT_PRE_SUMMARY,
+                section_content_pre_summary if section["is_abstract"] else content_pre_summary,
+            )
             if concept_map:
                 _set_content_value(section["items"], OUTLINE_CONCEPT_MAP, concept_map)
             _write_outline_file(generated_file_id, outline_data)
@@ -2247,6 +2308,7 @@ async def _run_generation_job(
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     checks = {
+        "backend": _service_health("ok", "Backend", "Backend API is reachable."),
         "ai_model": _check_ai_model_health(),
         "chroma_db": _check_chroma_health(),
         "postgres": _check_postgres_health(),
@@ -2665,7 +2727,7 @@ async def update_generated_file_paragraph(
                 _content_state(
                     ContentRequest(
                         current_section=prompt,
-                        content_pre="",
+                        content_pre_summary="",
                         content_specific_instructions=_paragraph_update_instruction(request.action),
                         model_name=request.model_name,
                         temperature=request.temperature,
@@ -3030,6 +3092,7 @@ async def attach_uploaded_files_to_generated_file(
             "update_date": now,
         }
         attached_records = _attached_uploaded_files(vector_db_collections_id)
+        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
         return {
             "status": "attached",
             "generated_file": _jsonable(updated_file),
@@ -3041,7 +3104,15 @@ async def attach_uploaded_files_to_generated_file(
                 }
             ),
             "attached_files": [_uploaded_document(record) for record in attached_records],
-            "message": "Uploaded documents attached to this generated document.",
+            "manuscript": manuscript,
+            "concept_maps": concept_maps,
+            "ref_list": ref_list,
+            "content_reset": source_exists,
+            "message": (
+                "Uploaded documents attached. The manuscript content was reset because the attached references changed."
+                if source_exists
+                else "Uploaded documents attached to this generated document."
+            ),
         }
     except HTTPException:
         raise
@@ -3165,6 +3236,39 @@ async def generate_generated_file(
         )
         if request.mode == "restart":
             _refresh_vector_collections_for_regeneration(generated_file)
+
+        sections = _extract_generation_sections(processed_outline, remaining_only=request.mode == "remaining")
+        if not sections:
+            from src import db
+
+            _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
+            completed_file = {
+                **generated_file,
+                "status": db.generated_files_status.SUCCESS.value,
+            }
+            manuscript, ref_list = _display_manuscript_from_outline_tree(
+                processed_outline,
+                _attached_reference_map_for_generated_file(generated_file_id),
+            )
+            completed_at = datetime.now().isoformat()
+            job = {
+                "id": "",
+                "generated_file_id": generated_file_id,
+                "status": "completed",
+                "message": "Content generation completed.",
+                "error": "",
+                "current_section": "",
+                "completed_sections": 0,
+                "total_sections": 0,
+                "mode": request.mode,
+                "manuscript": manuscript,
+                "ref_list": ref_list,
+                "generated_file": _generated_file_record(completed_file),
+                "outline_path": str(outline_file_path),
+                "created_at": completed_at,
+                "updated_at": completed_at,
+            }
+            return {"status": "completed", "job": _job_snapshot(job)}
 
         job_id = uuid4().hex
         manuscript = _manuscript_from_outline_tree(processed_outline)

@@ -2,6 +2,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGithub } from "@fortawesome/free-brands-svg-icons";
 import {
   faArrowsRotate,
+  faChevronUp,
   faChevronDown,
   faChevronLeft,
   faChevronRight,
@@ -29,8 +30,6 @@ import {
   faTurnDown,
   faUpload,
   faUser,
-  faWindowMaximize,
-  faWindowMinimize,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -69,8 +68,8 @@ export const KeyRound = makeIcon(faKey);
 export const LogIn = makeIcon(faRightToBracket);
 export const LogOut = makeIcon(faRightFromBracket);
 export const Maximize2 = makeIcon(faMaximize);
-export const PanelTopClose = makeIcon(faWindowMinimize);
-export const PanelTopOpen = makeIcon(faWindowMaximize);
+export const PanelTopClose = makeIcon(faChevronUp);
+export const PanelTopOpen = makeIcon(faChevronDown);
 export const Paperclip = makeIcon(faPaperclip);
 export const Pause = makeIcon(faPause);
 export const Pencil = makeIcon(faPenNib);

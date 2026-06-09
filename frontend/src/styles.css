@@ -789,6 +789,35 @@ input[type="radio"] {
   font-weight: 800;
 }
 
+.side-section.is-collapsed {
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.side-section.is-collapsed header {
+  border-bottom: 0;
+}
+
+.side-section-toggle {
+  min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-section-toggle span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .side-section-actions {
   display: inline-flex;
   align-items: center;
@@ -800,6 +829,40 @@ input[type="radio"] {
   min-height: 28px;
   height: 28px;
   background: rgba(255, 255, 255, 0.58);
+}
+
+.section-collapse-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #596477;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.section-collapse-button:hover,
+.side-section-toggle:hover + .section-collapse-button,
+.side-section-actions .section-collapse-button:hover {
+  border-color: #c4cada;
+  background: rgba(255, 255, 255, 0.62);
+  color: #303849;
+}
+
+.section-collapse-button svg {
+  transition: transform 160ms ease;
+}
+
+.section-collapse-button[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
 }
 
 .generated-list {
@@ -1971,6 +2034,17 @@ time {
   line-height: 1.45;
 }
 
+.confirm-file-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.confirm-file-list li {
+  overflow-wrap: anywhere;
+}
+
 .confirm-dialog footer {
   display: flex;
   justify-content: flex-end;
@@ -2300,8 +2374,11 @@ time {
 }
 
 .outline-editor-content-card .outline-editor-row-body span {
+  overflow: visible;
   font-size: 12px;
   font-weight: 720;
+  text-overflow: clip;
+  white-space: pre-wrap;
 }
 
 .outline-editor-row-body input,

@@ -51,7 +51,7 @@ class GenerateContentGraphRAG:
 
     generate_content_human_prompt = lambda self, instructions: f'''\
     <Previous Content Summary>
-    {{content_pre}}
+    {{content_pre_summary}}
     </Previous Content Summary>
 
     <Current Section>
@@ -108,7 +108,7 @@ class GenerateContentGraphRAG:
 
         return extractLLMResponse(task_name = 'Generate Content (GraphRAG)', 
                                   chain = generate_content_chain,
-                                  kargs = {'content_pre': state['content_pre'],
+                                  kargs = {'content_pre_summary': state['content_pre_summary'],
                                             'current_section': state['current_section']},
                                   keys_to_find = ['content', 'concept_map'],
                                   value_names = ['content', 'concept_map'])

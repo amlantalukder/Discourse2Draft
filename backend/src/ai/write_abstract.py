@@ -32,7 +32,7 @@ class WriteAbstract:
 
     write_abstract_human_prompt = lambda self, instructions: (f'''
     <Previous Content Summary>
-    {{content_pre}}
+    {{content_pre_summary}}
     </Previous Content Summary>
 
     <Current Content>
@@ -77,7 +77,7 @@ class WriteAbstract:
 
         return extractLLMResponse(task_name = 'Write Abstract', 
                                   chain = write_abstract_chain,
-                                  kargs = {'content_pre': state['content_pre'],
+                                  kargs = {'content_pre_summary': state['content_pre_summary'],
                                            'current_section': state['current_section']},
                                   keys_to_find = ['content'],
                                   value_names = ['content'])

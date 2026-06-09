@@ -31,7 +31,7 @@ class AnalyzeContentHeader:
 
     analyze_content_header_human_prompt = lambda self, instructions: f'''\
         <Previous Content Summary>
-        {{content_pre}}
+        {{content_pre_summary}}
         </Previous Content Summary>
 
         <Current Section>
@@ -85,7 +85,7 @@ class AnalyzeContentHeader:
 
         return extractLLMResponse(task_name = 'Analyze Content Header', 
                                   chain = analyze_content_header_chain,
-                                  kargs = {'content_pre': state['content_pre'],
+                                  kargs = {'content_pre_summary': state['content_pre_summary'],
                                             'current_section': state['current_section']},
                                   keys_to_find = ['keyphrases'],
                                   value_names = ['keyphrases'])

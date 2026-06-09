@@ -19,7 +19,7 @@ import logging
 # -----------------------------------------------------------------------
 @print_func_name
 def checkIfSummaryNeededForPrevContent(state: StateContentManager, llm: ChatOpenAI) -> bool:
-    return llm.get_num_tokens(state.get('content_pre')) > Config.NUM_TOKENS_SUMMARY
+    return llm.get_num_tokens(state.get('content_pre_summary')) > Config.NUM_TOKENS_SUMMARY
 
 # -----------------------------------------------------------------------        
 @print_func_name
@@ -114,7 +114,7 @@ class ContentWriterArchitecture(Architecture):
         workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
+        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre_summary', output_field='content_pre_summary'))
         workflow.add_node("Generate Content", GenerateContent(llm=self.llm, instructions=self.instructions))
         workflow.add_node("Summarize Generated Content", Summarize(llm=self.llm, input_field='content', output_field='content_summary'))
         workflow.add_node("Check If Summary Needed", lambda state: checkIfSummaryNeededForGenContent(state, self.llm))
@@ -134,7 +134,7 @@ class ContentWriterArchitecture(Architecture):
         workflow = StateGraph(state_schema=StateContentManager)
 
         # Define the (single) node in the graph
-        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre', output_field='content_pre'))
+        workflow.add_node("Summarize Previous Content", Summarize(llm=self.llm, input_field='content_pre_summary', output_field='content_pre_summary'))
         workflow.add_node("Analyze Content Header", AnalyzeContentHeader(llm=self.llm))
         if self.collection_name:
             workflow.add_node("Gather Context from Documents", GatherContext(collection_name=self.collection_name))
