@@ -31,7 +31,7 @@ Quantum computing has its roots in the early 1980s when physicist Richard Feynma
 
 ## Frontend
 
-Frontend was developed with ReactJS and Vite
+Frontend was developed with ReactJS and Vite.
 
 ## Backend
 
