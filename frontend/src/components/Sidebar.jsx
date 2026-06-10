@@ -11,6 +11,15 @@ const healthItems = [
   ["postgres", "Postgres"],
 ];
 
+const SEARCH_MIN_ITEMS = 6;
+
+function itemMatchesSearch(item, query, fields) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  return fields.some((field) => String(item?.[field] ?? "").toLowerCase().includes(normalizedQuery));
+}
+
 function healthStatus(check, isLoading) {
   if (isLoading && !check) return "checking";
   return check?.status ?? "unknown";
@@ -51,15 +60,25 @@ export function Sidebar({
   isUploadingDocuments = false,
   onAttachUploadedDocuments,
   isAttachingUploadedDocuments = false,
+  uploadedTemplates = [],
+  isLoadingUploadedTemplates = false,
+  onUploadedTemplatesUpload,
+  isUploadingTemplates = false,
+  canUploadTemplates = false,
   health,
   isHealthLoading = false,
   isCollapsed = false,
   onToggleCollapse,
 }) {
   const [uploadFiles, setUploadFiles] = useState([]);
+  const [uploadTemplateFiles, setUploadTemplateFiles] = useState([]);
   const [selectedUploadedDocumentIds, setSelectedUploadedDocumentIds] = useState([]);
+  const [generatedSearch, setGeneratedSearch] = useState("");
+  const [uploadedDocumentSearch, setUploadedDocumentSearch] = useState("");
+  const [uploadedTemplateSearch, setUploadedTemplateSearch] = useState("");
   const [isGeneratedDocumentsExpanded, setIsGeneratedDocumentsExpanded] = useState(true);
   const [isUploadedDocumentsExpanded, setIsUploadedDocumentsExpanded] = useState(true);
+  const [isUploadedTemplatesExpanded, setIsUploadedTemplatesExpanded] = useState(true);
   const selectedUploadedDocuments = uploadedDocuments.filter((document) => selectedUploadedDocumentIds.includes(String(document.id)));
 
   useEffect(() => {
@@ -75,6 +94,17 @@ export function Sidebar({
     const shouldClear = await onUploadedDocumentsUpload?.(selectedFiles);
     if (shouldClear !== false) {
       setUploadFiles([]);
+    }
+  }
+
+  async function handleUploadTemplates(nextFiles) {
+    const selectedFiles = Array.isArray(nextFiles) ? nextFiles : nextFiles ? [nextFiles] : [];
+    setUploadTemplateFiles(selectedFiles);
+    if (!selectedFiles.length) return;
+
+    const shouldClear = await onUploadedTemplatesUpload?.(selectedFiles);
+    if (shouldClear !== false) {
+      setUploadTemplateFiles([]);
     }
   }
 
@@ -96,6 +126,12 @@ export function Sidebar({
 
   const hasUploadedDocuments = uploadedDocuments.length > 0;
   const isAllUploadedSelected = hasUploadedDocuments && selectedUploadedDocumentIds.length === uploadedDocuments.length;
+  const showGeneratedSearch = generatedDocuments.length >= SEARCH_MIN_ITEMS;
+  const showUploadedDocumentSearch = uploadedDocuments.length >= SEARCH_MIN_ITEMS;
+  const showUploadedTemplateSearch = uploadedTemplates.length >= SEARCH_MIN_ITEMS;
+  const filteredGeneratedDocuments = showGeneratedSearch ? generatedDocuments.filter((document) => itemMatchesSearch(document, generatedSearch, ["name", "file_name", "status"])) : generatedDocuments;
+  const filteredUploadedDocuments = showUploadedDocumentSearch ? uploadedDocuments.filter((document) => itemMatchesSearch(document, uploadedDocumentSearch, ["name", "file_name", "type"])) : uploadedDocuments;
+  const filteredUploadedTemplates = showUploadedTemplateSearch ? uploadedTemplates.filter((template) => itemMatchesSearch(template, uploadedTemplateSearch, ["name", "label", "file_name"])) : uploadedTemplates;
 
   return (
     <aside className={`sidebar ${isCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -119,9 +155,15 @@ export function Sidebar({
             </div>
           </header>
           {isGeneratedDocumentsExpanded ? (
-            <div className="generated-list">
-              {generatedDocuments.length ? (
-                generatedDocuments.map((document) => {
+            <div className="generated-list side-section-body">
+              {showGeneratedSearch ? (
+                <label className="search-field">
+                  <Search size={16} />
+                  <input placeholder="Search generated documents" value={generatedSearch} onChange={(event) => setGeneratedSearch(event.target.value)} />
+                </label>
+              ) : null}
+              {filteredGeneratedDocuments.length ? (
+                filteredGeneratedDocuments.map((document) => {
                   const documentName = document.name ?? document.file_name ?? "Untitled";
 
                   return (
@@ -139,6 +181,8 @@ export function Sidebar({
                     </div>
                   );
                 })
+              ) : generatedDocuments.length ? (
+                <p className="empty-panel-message">No matching generated documents.</p>
               ) : (
                 <p className="empty-panel-message">No generated documents yet.</p>
               )}
@@ -163,21 +207,25 @@ export function Sidebar({
             </button>
           </header>
           {isUploadedDocumentsExpanded ? (
-            <>
+            <div className="side-section-body uploaded-documents-body">
               <div className="upload-controls">
                 <FileUploadControl label="Choose documents" accept=".txt,.pdf,.doc,.docx" multiple files={uploadFiles} onFilesChange={handleUploadFiles} disabled={isUploadingDocuments} />
               </div>
-              <label className="search-field">
-                <Search size={16} />
-                <input placeholder="Search" />
-              </label>
-              <label className="check-row">
-                <input type="checkbox" checked={isAllUploadedSelected} disabled={!hasUploadedDocuments} onChange={(event) => toggleAllUploadedDocuments(event.target.checked)} />
-                <span>Select all documents</span>
-              </label>
+              {showUploadedDocumentSearch ? (
+                <label className="search-field">
+                  <Search size={16} />
+                  <input placeholder="Search uploaded documents" value={uploadedDocumentSearch} onChange={(event) => setUploadedDocumentSearch(event.target.value)} />
+                </label>
+              ) : null}
+              {uploadedDocuments.length >= 2 ? (
+                <label className="check-row">
+                  <input type="checkbox" checked={isAllUploadedSelected} disabled={!hasUploadedDocuments} onChange={(event) => toggleAllUploadedDocuments(event.target.checked)} />
+                  <span>Select all documents</span>
+                </label>
+              ) : null}
               <div className="uploaded-list">
-                {uploadedDocuments.length ? (
-                  uploadedDocuments.map(({ id, name, date, type }) => (
+                {filteredUploadedDocuments.length ? (
+                  filteredUploadedDocuments.map(({ id, name, date, type }) => (
                     <div className="uploaded-row" key={id ?? name} title={name}>
                       <input type="checkbox" checked={selectedUploadedDocumentIds.includes(String(id))} onChange={(event) => toggleUploadedDocument(id, event.target.checked)} />
                       <span className={`file-chip ${type}`}>{type}</span>
@@ -190,6 +238,8 @@ export function Sidebar({
                       </IconButton>
                     </div>
                   ))
+                ) : uploadedDocuments.length ? (
+                  <p className="empty-panel-message">No matching uploaded documents.</p>
                 ) : (
                   <p className="empty-panel-message">No uploaded documents yet.</p>
                 )}
@@ -209,7 +259,54 @@ export function Sidebar({
                   </button>
                 </div>
               ) : null}
-            </>
+            </div>
+          ) : null}
+        </section>
+
+        <section className={`side-section uploaded-templates ${isUploadedTemplatesExpanded ? "" : "is-collapsed"}`}>
+          <header>
+            <button className="side-section-toggle" type="button" aria-expanded={isUploadedTemplatesExpanded} onClick={() => setIsUploadedTemplatesExpanded((current) => !current)}>
+              <span>Uploaded templates</span>
+            </button>
+            <button className="section-collapse-button" type="button" aria-label={isUploadedTemplatesExpanded ? "Collapse uploaded templates" : "Expand uploaded templates"} aria-expanded={isUploadedTemplatesExpanded} onClick={() => setIsUploadedTemplatesExpanded((current) => !current)}>
+              <ChevronDown size={17} />
+            </button>
+          </header>
+          {isUploadedTemplatesExpanded ? (
+            <div className="side-section-body uploaded-templates-body">
+              <div className="upload-controls">
+                <FileUploadControl label="Choose templates" accept=".md" multiple files={uploadTemplateFiles} onFilesChange={handleUploadTemplates} disabled={!canUploadTemplates || isUploadingTemplates} />
+              </div>
+              {showUploadedTemplateSearch ? (
+                <label className="search-field">
+                  <Search size={16} />
+                  <input placeholder="Search uploaded templates" value={uploadedTemplateSearch} onChange={(event) => setUploadedTemplateSearch(event.target.value)} />
+                </label>
+              ) : null}
+              <div className="uploaded-template-list">
+                {!canUploadTemplates ? <p className="empty-panel-message">Start a workspace session to upload outline templates.</p> : null}
+                {canUploadTemplates && filteredUploadedTemplates.length ? (
+                  filteredUploadedTemplates.map((template) => (
+                    <div className="uploaded-template-row" key={template.name} title={template.file_name ?? template.label ?? template.name}>
+                      <span className="file-chip md">md</span>
+                      <div>
+                        <span>{template.label || template.name}</span>
+                        {template.file_name ? <time>{template.file_name}</time> : null}
+                      </div>
+                    </div>
+                  ))
+                ) : null}
+                {canUploadTemplates && uploadedTemplates.length && !filteredUploadedTemplates.length ? <p className="empty-panel-message">No matching uploaded templates.</p> : null}
+                {canUploadTemplates && !uploadedTemplates.length && !isLoadingUploadedTemplates && !isUploadingTemplates ? <p className="empty-panel-message">No uploaded templates yet.</p> : null}
+                {isLoadingUploadedTemplates || isUploadingTemplates ? (
+                  <div className="sidebar-loading-dots" role="status" aria-label={isUploadingTemplates ? "Uploading templates" : "Loading uploaded templates"}>
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </section>
       </div>

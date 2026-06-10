@@ -418,6 +418,14 @@ def _credential_by_email(email: str) -> dict[str, Any] | None:
     return records[0] if records else None
 
 
+def _credential_by_id(credentials_id: int) -> dict[str, Any] | None:
+    from src import db
+
+    df = db.selectFromDB(table_name="credentials", field_names=["id"], field_values=[[credentials_id]], limit=1)
+    records = _records_from_dataframe(df)
+    return records[0] if records else None
+
+
 def _public_user(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": record.get("id"),
@@ -427,11 +435,11 @@ def _public_user(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _create_default_settings(email: str) -> dict[str, Any]:
+def _create_default_settings(email: str, session_id: str | None = None) -> dict[str, Any]:
     from src import db
 
     now = datetime.now()
-    session_id = uuid4().hex
+    session_id = session_id or uuid4().hex
     llm = _required_default_model()
     temperature = 0.0
     instructions = ""
@@ -491,6 +499,46 @@ def _default_settings() -> dict[str, Any]:
         "instructions": "",
         "create_date": None,
         "update_date": None,
+    }
+
+
+def _create_guest_auth_payload(session: str | None = None) -> dict[str, Any]:
+    from src import db
+
+    now = datetime.now()
+    guest_token = uuid4().hex
+    guest_email = f"guest_{guest_token}@guest.discourse2draft.local"
+    inserted_ids = db.insertIntoDB(
+        table_name="credentials",
+        field_names=["email", "first_name", "last_name", "password", "create_date", "update_date"],
+        field_values=[
+            [guest_email],
+            ["Guest"],
+            ["User"],
+            [db.encryptPassword(uuid4().hex)],
+            [now],
+            [now],
+        ],
+    )
+    credential = {
+        "id": int(inserted_ids[0]) if inserted_ids else None,
+        "email": guest_email,
+        "first_name": "Guest",
+        "last_name": "User",
+        "create_date": now,
+        "update_date": now,
+    }
+    settings = _create_default_settings(guest_email, session_id=session)
+    return {
+        "status": "anonymous",
+        "user": {
+            "id": credential["id"],
+            "email": None,
+            "first_name": "Guest",
+            "last_name": "User",
+        },
+        "session": settings["session"],
+        "settings": settings,
     }
 
 
@@ -675,7 +723,60 @@ def _extract_pdf_text(content: bytes) -> str:
     return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
 
 
-async def _outline_reference_document_details(upload: UploadFile | None) -> str:
+def _query_file_path(generated_file_id: int) -> Path:
+    return Config.DIR_CONTENTS / f"query_{generated_file_id}.md"
+
+
+def _query_reference_dir(generated_file_id: int) -> Path:
+    return Config.DIR_CONTENTS / f"ref_files_for_query_{generated_file_id}"
+
+
+def _query_details_for_generated_file(generated_file_id: int) -> dict[str, Any]:
+    query_path = _query_file_path(generated_file_id)
+    reference_dir = _query_reference_dir(generated_file_id)
+    reference_files = []
+    if reference_dir.exists():
+        reference_files = [
+            {
+                "name": path.name,
+                "size": path.stat().st_size,
+                "last_modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "saved_reference": True,
+            }
+            for path in sorted(reference_dir.iterdir())
+            if path.is_file()
+        ]
+
+    return {
+        "content": query_path.read_text(encoding="utf-8") if query_path.exists() else "",
+        "file_name": query_path.name,
+        "reference_files": reference_files,
+    }
+
+
+def _save_query_text(generated_file_id: int | None, query: str) -> Path | None:
+    if generated_file_id is None:
+        return None
+
+    query_path = _query_file_path(generated_file_id)
+    query_path.parent.mkdir(parents=True, exist_ok=True)
+    query_path.write_text(query.strip(), encoding="utf-8")
+    return query_path
+
+
+def _save_query_reference_file(generated_file_id: int | None, upload: UploadFile, content: bytes) -> Path | None:
+    if generated_file_id is None:
+        return None
+
+    reference_dir = _query_reference_dir(generated_file_id)
+    reference_dir.mkdir(parents=True, exist_ok=True)
+    file_name = _safe_uploaded_file_name(upload.filename)
+    destination = reference_dir / file_name
+    destination.write_bytes(content)
+    return destination
+
+
+async def _outline_reference_document_details(upload: UploadFile | None, generated_file_id: int | None = None) -> str:
     if upload is None or not upload.filename:
         return ""
 
@@ -689,6 +790,8 @@ async def _outline_reference_document_details(upload: UploadFile | None) -> str:
     content = await upload.read()
     if len(content) > OUTLINE_REFERENCE_MAX_BYTES:
         raise HTTPException(status_code=400, detail="Reference document must be 10 MB or smaller.")
+
+    _save_query_reference_file(generated_file_id, upload, content)
 
     try:
         if suffix in {".txt", ".md", ".markdown", ".csv", ".tsv"}:
@@ -712,13 +815,35 @@ async def _outline_reference_document_details(upload: UploadFile | None) -> str:
     return details
 
 
+async def _outline_reference_documents_details(uploads: list[UploadFile], generated_file_id: int | None = None) -> str:
+    detail_blocks = []
+    for upload in uploads:
+        details = await _outline_reference_document_details(upload, generated_file_id)
+        if details.strip():
+            detail_blocks.append(f"# Reference file: {_safe_uploaded_file_name(upload.filename)}\n\n{details.strip()}")
+    return "\n\n".join(detail_blocks).strip()
+
+
 async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
+    def parse_generated_file_id(value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            generated_file_id = int(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Generated file id must be a valid integer.")
+        if generated_file_id <= 0:
+            raise HTTPException(status_code=400, detail="Generated file id must be a valid integer.")
+        return generated_file_id
+
     content_type = request.headers.get("content-type", "")
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
-        reference_document = form.get("reference_document")
-        if not (hasattr(reference_document, "filename") and hasattr(reference_document, "read")):
-            reference_document = None
+        reference_documents = [
+            upload
+            for upload in [*form.getlist("reference_documents"), *form.getlist("reference_document")]
+            if hasattr(upload, "filename") and hasattr(upload, "read")
+        ]
 
         try:
             temperature = float(form.get("temperature") or 0)
@@ -730,7 +855,8 @@ async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
             "model_name": str(form.get("model_name") or "").strip() or None,
             "temperature": temperature,
             "instructions": str(form.get("instructions") or ""),
-            "reference_document": reference_document,
+            "reference_documents": reference_documents,
+            "generated_file_id": parse_generated_file_id(form.get("generated_file_id")),
         }
 
     try:
@@ -751,7 +877,8 @@ async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
         "model_name": str(payload.get("model_name") or "").strip() or None,
         "temperature": temperature,
         "instructions": str(payload.get("instructions") or ""),
-        "reference_document": None,
+        "reference_documents": [],
+        "generated_file_id": parse_generated_file_id(payload.get("generated_file_id")),
     }
 
 
@@ -1423,6 +1550,76 @@ def _outline_templates() -> list[dict[str, str]]:
         for template_path in sorted(template_dir.glob("*.md"))
         if re.match(r"^[a-zA-Z0-9_-]+$", template_path.stem)
     ]
+
+
+def _validated_credentials_id(credentials_id: int | None) -> int:
+    if credentials_id is None or credentials_id <= 0:
+        raise HTTPException(status_code=400, detail="Start a workspace session before using uploaded templates.")
+    if _credential_by_id(credentials_id) is None:
+        raise HTTPException(status_code=404, detail="The account for these uploaded templates was not found.")
+    return int(credentials_id)
+
+
+def _user_outline_templates_dir(credentials_id: int) -> Path:
+    return Config.DIR_CONTENTS / f"user_{credentials_id}" / "outline_templates"
+
+
+def _uploaded_outline_template_file_name(file_name: str | None) -> str:
+    safe_name = _safe_uploaded_file_name(file_name)
+    template_path = Path(safe_name)
+    if template_path.suffix.lower() != ".md":
+        raise HTTPException(status_code=400, detail="Outline templates must be Markdown files with a .md extension.")
+
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", template_path.stem).strip("_")
+    if not stem:
+        raise HTTPException(status_code=400, detail="Each uploaded template needs a valid file name.")
+    return f"{stem}.md"
+
+
+def _uploaded_outline_templates(credentials_id: int) -> list[dict[str, Any]]:
+    template_dir = _user_outline_templates_dir(credentials_id)
+    if not template_dir.exists():
+        return []
+
+    return [
+        {
+            "name": template_path.stem,
+            "label": template_path.stem.replace("_", " ").replace("-", " ").title(),
+            "file_name": template_path.name,
+            "last_modified": datetime.fromtimestamp(template_path.stat().st_mtime).isoformat(),
+        }
+        for template_path in sorted(template_dir.glob("*.md"))
+        if re.match(r"^[a-zA-Z0-9_-]+$", template_path.stem)
+    ]
+
+
+def _uploaded_outline_template_content(credentials_id: int, template_name: str) -> str:
+    if not re.match(r"^[a-zA-Z0-9_-]+$", template_name):
+        raise HTTPException(status_code=400, detail="Invalid uploaded outline template name.")
+
+    template_path = _user_outline_templates_dir(credentials_id) / f"{template_name}.md"
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Uploaded outline template was not found.")
+
+    return template_path.read_text(encoding="utf-8")
+
+
+async def _save_uploaded_outline_template(credentials_id: int, upload: UploadFile) -> dict[str, Any]:
+    file_name = _uploaded_outline_template_file_name(upload.filename)
+    content = await upload.read()
+    if not content:
+        raise HTTPException(status_code=400, detail=f"{file_name} is empty.")
+
+    template_dir = _user_outline_templates_dir(credentials_id)
+    template_dir.mkdir(parents=True, exist_ok=True)
+    template_path = template_dir / file_name
+    template_path.write_bytes(content)
+    return {
+        "name": template_path.stem,
+        "label": template_path.stem.replace("_", " ").replace("-", " ").title(),
+        "file_name": template_path.name,
+        "last_modified": datetime.fromtimestamp(template_path.stat().st_mtime).isoformat(),
+    }
 
 
 def _un_markdown_text(text: str) -> str:
@@ -2451,6 +2648,61 @@ async def outline_template(template_name: str) -> dict[str, Any]:
         raise _api_error("load outline template", exp)
 
 
+@app.get("/api/uploaded-outline-templates")
+async def uploaded_outline_templates(credentials_id: int | None = Query(None)) -> dict[str, Any]:
+    try:
+        validated_credentials_id = _validated_credentials_id(credentials_id)
+        return {"templates": _uploaded_outline_templates(validated_credentials_id)}
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("load uploaded outline templates", exp)
+
+
+@app.post("/api/uploaded-outline-templates")
+async def upload_outline_templates(
+    files: list[UploadFile] = File(...),
+    credentials_id: int | None = Form(None),
+) -> dict[str, Any]:
+    try:
+        validated_credentials_id = _validated_credentials_id(credentials_id)
+        saved_templates = []
+        seen_names: set[str] = set()
+        for upload in files:
+            file_name = _uploaded_outline_template_file_name(upload.filename)
+            if file_name.casefold() in seen_names:
+                continue
+            seen_names.add(file_name.casefold())
+            saved_templates.append(await _save_uploaded_outline_template(validated_credentials_id, upload))
+
+        if not saved_templates:
+            raise HTTPException(status_code=400, detail="Choose at least one Markdown template to upload.")
+
+        return {
+            "message": "Templates uploaded successfully.",
+            "templates": _uploaded_outline_templates(validated_credentials_id),
+            "saved_templates": saved_templates,
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("upload outline templates", exp)
+
+
+@app.get("/api/uploaded-outline-templates/{template_name}")
+async def uploaded_outline_template(template_name: str, credentials_id: int | None = Query(None)) -> dict[str, Any]:
+    try:
+        validated_credentials_id = _validated_credentials_id(credentials_id)
+        return {
+            "name": template_name,
+            "content": _uploaded_outline_template_content(validated_credentials_id, template_name),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("load uploaded outline template", exp)
+
+
 @app.get("/api/workspace")
 async def workspace_data() -> dict[str, Any]:
     return {
@@ -2663,9 +2915,9 @@ async def change_password(request: ChangePasswordRequest) -> dict[str, Any]:
 
 
 @app.get("/api/settings/default")
-async def default_settings() -> dict[str, Any]:
+async def default_settings(session: str | None = Query(None)) -> dict[str, Any]:
     try:
-        return {"settings": _default_settings(), "llm_options": _llm_options()}
+        return {**_create_guest_auth_payload(session=session), "llm_options": _llm_options()}
     except HTTPException:
         raise
     except Exception as exp:
@@ -2784,6 +3036,7 @@ async def generated_file_manuscript(
             "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
             "attached_files": _attached_uploaded_documents(generated_file_id),
             "outline": raw_outline,
+            "query": _query_details_for_generated_file(generated_file_id),
             "source_exists": source_exists,
             "message": "" if source_exists else "No manuscript content has been saved for this file yet.",
         }
@@ -3858,7 +4111,8 @@ async def create_outline(request: Request) -> dict[str, Any]:
         if not payload["query"]:
             raise HTTPException(status_code=400, detail="Write a query before creating an outline.")
 
-        details = await _outline_reference_document_details(payload["reference_document"])
+        _save_query_text(payload["generated_file_id"], payload["query"])
+        details = await _outline_reference_documents_details(payload["reference_documents"], payload["generated_file_id"])
         architecture = OutlineCreatorArchitecture(
             model_name=_model_name(payload["model_name"]),
             temperature=payload["temperature"],

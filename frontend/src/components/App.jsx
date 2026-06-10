@@ -81,6 +81,15 @@ function normalizeUploadedDocuments(documents = []) {
   }));
 }
 
+function selectedReferenceUploads(referenceDocument) {
+  if (typeof File === "undefined") return [];
+  if (referenceDocument instanceof File) return [referenceDocument];
+  if (Array.isArray(referenceDocument)) {
+    return referenceDocument.filter((document) => document instanceof File);
+  }
+  return [];
+}
+
 function normalizeReferenceList(refList = []) {
   const seen = new Set();
   return (Array.isArray(refList) ? refList : [])
@@ -184,7 +193,9 @@ export function App() {
   const [isConfiguringLiteratureSearch, setIsConfiguringLiteratureSearch] = useState(false);
   const [isLoadingGeneratedDocuments, setIsLoadingGeneratedDocuments] = useState(false);
   const [isLoadingUploadedDocuments, setIsLoadingUploadedDocuments] = useState(false);
+  const [isLoadingUploadedOutlineTemplates, setIsLoadingUploadedOutlineTemplates] = useState(false);
   const [isUploadingDocuments, setIsUploadingDocuments] = useState(false);
+  const [isUploadingOutlineTemplates, setIsUploadingOutlineTemplates] = useState(false);
   const [isAttachingUploadedDocuments, setIsAttachingUploadedDocuments] = useState(false);
   const [generatedFile, setGeneratedFile] = useState(null);
   const [uploadReplacePrompt, setUploadReplacePrompt] = useState(null);
@@ -203,7 +214,9 @@ export function App() {
   const [outline, setOutline] = useState("");
   const [useExample, setUseExample] = useState(false);
   const [outlineTemplates, setOutlineTemplates] = useState([]);
+  const [uploadedOutlineTemplates, setUploadedOutlineTemplates] = useState([]);
   const [selectedOutlineTemplate, setSelectedOutlineTemplate] = useState("");
+  const [selectedUploadedOutlineTemplate, setSelectedUploadedOutlineTemplate] = useState("");
   const [action, setAction] = useState("Expand");
   const [status, setStatus] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
@@ -304,16 +317,36 @@ export function App() {
     async function loadWorkspaceSessionData() {
       setIsLoadingGeneratedDocuments(true);
       setIsLoadingUploadedDocuments(true);
+      setIsLoadingUploadedOutlineTemplates(Boolean(authSession.user?.id));
       try {
-        const email = authSession.user?.email ? encodeURIComponent(authSession.user.email) : "";
-        const session = encodeURIComponent(authSession.session);
-        const settingsId = authSession.settings?.id;
-        const generatedQuery = authOwnerQuery(authSession);
-        const uploadedQuery = authOwnerQuery(authSession);
-        const [generatedPayload, uploadedPayload, settingsPayload] = await Promise.all([
+        let activeSession = authSession;
+        if (authSession.status === "anonymous" && !authSession.user?.id) {
+          const upgradedPayload = await getJSON(`/api/settings/default?session=${encodeURIComponent(authSession.session)}`);
+          activeSession = {
+            ...authSession,
+            status: "anonymous",
+            user: upgradedPayload.user ?? authSession.user ?? null,
+            session: upgradedPayload.session ?? authSession.session,
+            settings: upgradedPayload.settings ?? authSession.settings,
+            llm_options: upgradedPayload.llm_options ?? authSession.llm_options ?? [],
+          };
+          setAuthSession(activeSession);
+          saveStoredAuthSession(activeSession);
+          setAiSettings(activeSession.settings ?? null);
+          setLlmOptions(activeSession.llm_options ?? []);
+        }
+
+        const email = activeSession.user?.email ? encodeURIComponent(activeSession.user.email) : "";
+        const session = encodeURIComponent(activeSession.session);
+        const settingsId = activeSession.settings?.id;
+        const credentialsId = activeSession.user?.id;
+        const generatedQuery = authOwnerQuery(activeSession);
+        const uploadedQuery = authOwnerQuery(activeSession);
+        const [generatedPayload, uploadedPayload, settingsPayload, uploadedTemplatesPayload] = await Promise.all([
           generatedQuery ? getJSON(`/api/generated-files?${generatedQuery}&limit=1000`) : Promise.resolve({ generated_documents: [] }),
           uploadedQuery ? getJSON(`/api/uploaded-files?${uploadedQuery}`) : Promise.resolve({ uploaded_documents: [] }),
           settingsId && email ? getJSON(`/api/settings/${settingsId}?email=${email}&session=${session}`) : Promise.resolve({}),
+          credentialsId ? getJSON(`/api/uploaded-outline-templates?credentials_id=${encodeURIComponent(credentialsId)}`) : Promise.resolve({ templates: [] }),
         ]);
         if (!isMounted) return;
         if (settingsPayload.settings) {
@@ -325,14 +358,17 @@ export function App() {
           generated_documents: normalizeGeneratedDocuments(generatedPayload.generated_documents),
           uploaded_documents: normalizeUploadedDocuments(uploadedPayload.uploaded_documents),
         }));
+        setUploadedOutlineTemplates(uploadedTemplatesPayload.templates ?? []);
       } catch (error) {
         if (isMounted) {
           setStatus(error.message);
+          setUploadedOutlineTemplates([]);
         }
       } finally {
         if (isMounted) {
           setIsLoadingGeneratedDocuments(false);
           setIsLoadingUploadedDocuments(false);
+          setIsLoadingUploadedOutlineTemplates(false);
         }
       }
     }
@@ -380,12 +416,15 @@ export function App() {
     try {
       const formData = new FormData();
       formData.append("query", trimmedQuery);
+      if (generatedFile?.id) {
+        formData.append("generated_file_id", String(generatedFile.id));
+      }
       formData.append("model_name", aiSettings?.llm ?? "");
       formData.append("temperature", String(Number(aiSettings?.temperature ?? 0)));
       formData.append("instructions", aiSettings?.instructions ?? "");
-      if (referenceDocument) {
-        formData.append("reference_document", referenceDocument);
-      }
+      selectedReferenceUploads(referenceDocument).forEach((referenceUpload) => {
+        formData.append("reference_documents", referenceUpload);
+      });
 
       const payload = await postForm("/api/ai/outline", formData);
       const content = payload.result?.content ?? "";
@@ -432,6 +471,7 @@ export function App() {
     }
     setUseExample(true);
     setSelectedOutlineTemplate(templateName);
+    setSelectedUploadedOutlineTemplate("");
     setOutlineMode("outline");
     setStatus(`Loading ${templateLabel} template...`);
     try {
@@ -441,6 +481,46 @@ export function App() {
     } catch (error) {
       setUseExample(false);
       setSelectedOutlineTemplate("");
+      setSelectedUploadedOutlineTemplate("");
+      setStatus(error.message);
+    }
+  }
+
+  async function selectUploadedOutlineTemplate(templateName) {
+    if (!templateName) {
+      setUseExample(false);
+      setSelectedUploadedOutlineTemplate("");
+      if (useExample) {
+        setOutline(outlineBeforeExample.current);
+      }
+      outlineBeforeExample.current = "";
+      return;
+    }
+
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId) {
+      setSelectedUploadedOutlineTemplate("");
+      setStatus("Start a workspace session before using uploaded templates.");
+      return;
+    }
+
+    const selectedTemplate = uploadedOutlineTemplates.find((template) => template.name === templateName);
+    const templateLabel = selectedTemplate?.label || templateName;
+    if (!useExample) {
+      outlineBeforeExample.current = outline;
+    }
+    setUseExample(true);
+    setSelectedUploadedOutlineTemplate(templateName);
+    setSelectedOutlineTemplate("");
+    setOutlineMode("outline");
+    setStatus(`Loading ${templateLabel} template...`);
+    try {
+      const payload = await getJSON(`/api/uploaded-outline-templates/${encodeURIComponent(templateName)}?credentials_id=${encodeURIComponent(credentialsId)}`);
+      setOutline(payload.content ?? "");
+      setStatus(`${templateLabel} template loaded`);
+    } catch (error) {
+      setUseExample(false);
+      setSelectedUploadedOutlineTemplate("");
       setStatus(error.message);
     }
   }
@@ -449,6 +529,7 @@ export function App() {
     if (useExample) {
       setUseExample(false);
       setSelectedOutlineTemplate("");
+      setSelectedUploadedOutlineTemplate("");
       outlineBeforeExample.current = "";
     }
     setOutline(nextOutline);
@@ -685,6 +766,7 @@ export function App() {
     setOutline("");
     setUseExample(false);
     setSelectedOutlineTemplate("");
+    setSelectedUploadedOutlineTemplate("");
     outlineBeforeExample.current = "";
     setAction("Expand");
     setGeneratedContent("");
@@ -769,8 +851,12 @@ export function App() {
     setIsConfiguringLiteratureSearch(false);
     setIsLoadingGeneratedDocuments(false);
     setIsLoadingUploadedDocuments(false);
+    setIsLoadingUploadedOutlineTemplates(false);
     setIsUploadingDocuments(false);
+    setIsUploadingOutlineTemplates(false);
     setIsAttachingUploadedDocuments(false);
+    setUploadedOutlineTemplates([]);
+    setSelectedUploadedOutlineTemplate("");
     setUploadReplacePrompt(null);
     setAttachFilesPrompt(null);
     setRemoveAttachedFilePrompt(null);
@@ -826,6 +912,19 @@ export function App() {
       setIsLiteratureSearchEnabled(Boolean(payload.literature_search?.collection_name));
       setLiteratureCollectionName(payload.literature_search?.collection_name ?? "");
       setFileName(loadedFile.file_name ?? selectedFile.file_name);
+      const loadedQuery = payload.query?.content ?? "";
+      const loadedOutline = payload.outline ?? "";
+      setQuery(loadedQuery);
+      const queryReferenceFiles = payload.query?.reference_files ?? [];
+      setReferenceDocument(
+        queryReferenceFiles.length
+          ? queryReferenceFiles.map((file) => ({
+              ...file,
+              name: file.name ?? file.file_name,
+              savedReference: true,
+            }))
+          : null,
+      );
       const attachedDocuments = normalizeUploadedDocuments(payload.attached_files ?? []);
       setWorkspaceData((current) => ({
         ...current,
@@ -844,10 +943,11 @@ export function App() {
             : document,
         ),
       }));
-      setOutline(payload.outline ?? "");
-      setOutlineMode("outline");
+      setOutline(loadedOutline);
+      setOutlineMode(!loadedOutline.trim() && loadedQuery.trim() ? "query" : "outline");
       setUseExample(false);
       setSelectedOutlineTemplate("");
+      setSelectedUploadedOutlineTemplate("");
       outlineBeforeExample.current = "";
       setStatus(payload.message || "Manuscript loaded");
     } catch (error) {
@@ -1176,6 +1276,35 @@ export function App() {
     await uploadDocuments(files, true);
   }
 
+  async function uploadOutlineTemplates(files) {
+    const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
+    if (!selectedFiles.length) return true;
+
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId) {
+      setStatus("Start a workspace session before uploading outline templates.");
+      return false;
+    }
+
+    const formData = new FormData();
+    selectedFiles.forEach((file) => formData.append("files", file));
+    formData.append("credentials_id", String(credentialsId));
+
+    setIsUploadingOutlineTemplates(true);
+    setStatus("Uploading templates...");
+    try {
+      const payload = await postForm("/api/uploaded-outline-templates", formData);
+      setUploadedOutlineTemplates(payload.templates ?? []);
+      setStatus(payload.message || "Templates uploaded successfully.");
+      return true;
+    } catch (error) {
+      setStatus(error.message);
+      return false;
+    } finally {
+      setIsUploadingOutlineTemplates(false);
+    }
+  }
+
   function cancelUploadReplacement() {
     setUploadReplacePrompt(null);
     setStatus("Upload cancelled. Existing documents were not replaced.");
@@ -1482,6 +1611,7 @@ export function App() {
         setOutline("");
         setUseExample(false);
         setSelectedOutlineTemplate("");
+        setSelectedUploadedOutlineTemplate("");
         outlineBeforeExample.current = "";
         setLiteratureCollectionName("");
         setIsLiteratureSearchEnabled(false);
@@ -1534,6 +1664,11 @@ export function App() {
         isUploadingDocuments={isUploadingDocuments}
         onAttachUploadedDocuments={attachUploadedDocuments}
         isAttachingUploadedDocuments={isAttachingUploadedDocuments}
+        uploadedTemplates={uploadedOutlineTemplates}
+        isLoadingUploadedTemplates={isLoadingUploadedOutlineTemplates}
+        onUploadedTemplatesUpload={uploadOutlineTemplates}
+        isUploadingTemplates={isUploadingOutlineTemplates}
+        canUploadTemplates={Boolean(authSession?.user?.id)}
         health={systemHealth}
         isHealthLoading={isHealthLoading}
         isCollapsed={isSidebarCollapsed}
@@ -1552,7 +1687,10 @@ export function App() {
           setOutline={updateOutlineFromEditor}
           outlineTemplates={outlineTemplates}
           selectedOutlineTemplate={selectedOutlineTemplate}
+          uploadedOutlineTemplates={uploadedOutlineTemplates}
+          selectedUploadedOutlineTemplate={selectedUploadedOutlineTemplate}
           onOutlineTemplateChange={selectOutlineTemplate}
+          onUploadedOutlineTemplateChange={selectUploadedOutlineTemplate}
           onGenerate={generateOutline}
           onFormat={formatOutline}
           onRun={runStructuredOutline}

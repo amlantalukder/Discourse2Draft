@@ -706,7 +706,10 @@ input[type="radio"] {
 .sidebar-content {
   min-height: 0;
   flex: 1 1 auto;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
   padding: 0 22px 18px;
 }
 
@@ -749,8 +752,12 @@ input[type="radio"] {
 }
 
 .side-section {
-  overflow: visible;
-  margin-bottom: 24px;
+  min-height: 0;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -790,12 +797,19 @@ input[type="radio"] {
 }
 
 .side-section.is-collapsed {
-  margin-bottom: 14px;
+  flex: 0 0 46px;
+  margin-bottom: 0;
   overflow: hidden;
 }
 
 .side-section.is-collapsed header {
   border-bottom: 0;
+}
+
+.side-section-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .side-section-toggle {
@@ -918,7 +932,8 @@ input[type="radio"] {
 }
 
 .document-row:hover,
-.uploaded-row:hover {
+.uploaded-row:hover,
+.uploaded-template-row:hover {
   background: #f3f6fb;
 }
 
@@ -1167,6 +1182,98 @@ time {
   white-space: nowrap;
 }
 
+.selected-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 6px;
+  margin-top: 7px;
+}
+
+.selected-file-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(184, 193, 211, 0.82);
+  border-radius: 999px;
+  background: rgba(248, 250, 253, 0.92);
+  color: #465163;
+  font-size: 10px;
+  font-weight: 720;
+  line-height: 1.25;
+  padding: 3px 7px 3px 6px;
+  box-shadow: 0 1px 2px rgba(44, 54, 74, 0.06);
+}
+
+.selected-file-icon {
+  flex: 0 0 auto;
+  color: #7b8494;
+}
+
+.selected-file-icon-pdf {
+  color: #be5048;
+}
+
+.selected-file-icon-word {
+  color: #386fb9;
+}
+
+.selected-file-icon-csv {
+  color: #2a8a63;
+}
+
+.selected-file-icon-text {
+  color: #69758a;
+}
+
+.selected-file-icon-code {
+  color: #7b5cb9;
+}
+
+.selected-file-icon-archive {
+  color: #9a732d;
+}
+
+.selected-file-short-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-file-more {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 0;
+  text-decoration: underline;
+  box-shadow: none;
+}
+
+.selected-file-more:hover {
+  background: transparent;
+  color: #17766f;
+  box-shadow: none;
+}
+
+.selected-file-dialog-list {
+  display: grid;
+  gap: 7px;
+  max-height: min(320px, 56vh);
+  overflow: auto;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.selected-file-dialog-list li {
+  overflow-wrap: anywhere;
+}
+
 .search-field {
   height: 36px;
   display: flex;
@@ -1211,8 +1318,16 @@ time {
   font-weight: 800;
 }
 
+.uploaded-list,
+.uploaded-template-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
 .attach-files-row {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   margin: 0 14px 12px;
 }
@@ -1233,7 +1348,22 @@ time {
   font-weight: 500;
 }
 
-.uploaded-row > div > span {
+.uploaded-template-row {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 6px 12px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: #394252;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.uploaded-row > div > span,
+.uploaded-template-row > div > span {
   display: block;
   overflow: hidden;
   color: #343c4c;
@@ -1265,6 +1395,10 @@ time {
 
 .file-chip.file {
   background: #667085;
+}
+
+.file-chip.md {
+  background: #2d7f77;
 }
 
 .workspace {
@@ -2082,7 +2216,7 @@ time {
 
 .outline-panel-collapsed .outline-panel-tools {
   grid-auto-flow: column;
-  grid-template-columns: repeat(5, 32px);
+  grid-auto-columns: 32px;
   align-self: center;
 }
 
@@ -2167,7 +2301,7 @@ time {
 
 .outline-editor-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 12px;
 }
 
@@ -2178,13 +2312,8 @@ time {
   gap: 11px;
 }
 
-.query-outline-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.query-outline-actions .tool-button {
-  min-width: 132px;
+.query-input-bottom {
+  display: block;
 }
 
 .outline-panel textarea {
@@ -2210,7 +2339,6 @@ time {
   flex: 0 0 32px;
   display: grid;
   gap: 7px;
-  align-self: flex-end;
 }
 
 .outline-panel-tools .icon-button {
