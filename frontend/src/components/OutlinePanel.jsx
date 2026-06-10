@@ -14,8 +14,9 @@ export function OutlinePanel({
   setReferenceDocument,
   outline,
   setOutline,
-  useExample,
-  setUseExample,
+  outlineTemplates = [],
+  selectedOutlineTemplate = "",
+  onOutlineTemplateChange,
   onGenerate,
   onFormat,
   onRun,
@@ -30,16 +31,24 @@ export function OutlinePanel({
 }) {
   const isQueryMode = mode === "query";
   const isLocked = !hasSelectedFile;
+  const hasTemplates = outlineTemplates.length > 0;
+  const selectedTemplateValue = selectedOutlineTemplate || "";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isOutlineEditorOpen, setIsOutlineEditorOpen] = useState(false);
+  const [isCreatingOutline, setIsCreatingOutline] = useState(false);
+  const [draftOutlineForEditor, setDraftOutlineForEditor] = useState(null);
+  const hasQueryText = query.trim().length > 0;
 
   useEffect(() => {
     setIsCollapsed(false);
     setIsOutlineEditorOpen(false);
+    setIsCreatingOutline(false);
+    setDraftOutlineForEditor(null);
   }, [resetSignal]);
 
   function openOutlineEditor() {
     if (isLocked) return;
+    setDraftOutlineForEditor(null);
     setMode("outline");
     setIsOutlineEditorOpen(true);
   }
@@ -47,7 +56,29 @@ export function OutlinePanel({
   function saveEditedOutline(nextOutline) {
     setOutline(nextOutline);
     setMode("outline");
+    setDraftOutlineForEditor(null);
     setIsOutlineEditorOpen(false);
+  }
+
+  function closeOutlineEditor() {
+    setDraftOutlineForEditor(null);
+    setIsOutlineEditorOpen(false);
+  }
+
+  async function createOutlineFromQuery() {
+    if (isLocked || isRunning || isCreatingOutline || !hasQueryText) return;
+
+    setIsCreatingOutline(true);
+    try {
+      const generatedOutline = await onGenerate?.();
+      if (generatedOutline) {
+        setDraftOutlineForEditor(generatedOutline);
+        setMode("outline");
+        setIsOutlineEditorOpen(true);
+      }
+    } finally {
+      setIsCreatingOutline(false);
+    }
   }
 
   return (
@@ -63,10 +94,21 @@ export function OutlinePanel({
             </button>
           </div>
           {!isQueryMode && (
-            <label className={`use-example ${isLocked ? "use-example-disabled" : ""}`}>
-              <input checked={useExample} onChange={(event) => setUseExample(event.target.checked)} type="checkbox" disabled={isLocked} />
-              <span>Use example</span>
-            </label>
+            <div className={`sample-template-controls ${isLocked ? "sample-template-controls-disabled" : ""}`}>
+              <select
+                aria-label="Sample outline template"
+                value={selectedTemplateValue}
+                onChange={(event) => onOutlineTemplateChange?.(event.target.value)}
+                disabled={isLocked || !hasTemplates}
+              >
+                <option value="">{hasTemplates ? "-- Use sample template --" : "No templates available"}</option>
+                {outlineTemplates.map((template) => (
+                  <option key={template.name} value={template.name}>
+                    {template.label || template.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
         </>
       ) : null}
@@ -75,7 +117,14 @@ export function OutlinePanel({
           isQueryMode ? (
             <div className="query-input-stack">
               <textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder={'Write a query.\n\nYou could start with something like "Write me a draft on quantum computing and its applications"'} spellCheck="false" />
-              <FileUploadControl label="Choose a reference document (optional)" accept=".txt,.pdf,.doc,.docx" files={referenceDocument} onFilesChange={setReferenceDocument} disabled={isLocked} />
+              <FileUploadControl label="Choose a reference document (optional)" accept=".txt,.md,.markdown,.csv,.tsv,.pdf,.docx" files={referenceDocument} onFilesChange={setReferenceDocument} disabled={isLocked || isCreatingOutline} />
+              {hasQueryText ? (
+                <div className="query-outline-actions">
+                  <button className="tool-button primary" type="button" onClick={createOutlineFromQuery} disabled={isLocked || isRunning || isCreatingOutline}>
+                    {isCreatingOutline ? "Creating outline..." : "Create outline"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <textarea value={outline} onChange={(event) => setOutline(event.target.value)} spellCheck="false" />
@@ -109,7 +158,7 @@ export function OutlinePanel({
           {status}
         </div>
       ) : null}
-      <OutlineEditor outline={outline} isOpen={isOutlineEditorOpen} onClose={() => setIsOutlineEditorOpen(false)} onSave={saveEditedOutline} />
+      <OutlineEditor outline={draftOutlineForEditor ?? outline} isOpen={isOutlineEditorOpen} onClose={closeOutlineEditor} onSave={saveEditedOutline} />
     </section>
   );
 }

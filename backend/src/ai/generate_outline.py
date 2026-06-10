@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 import logging
 import re
 
+from ..common import OutlineTAGs
 from ..utils import Config
 from .common import StateOutlineManager, extractLLMResponse, Config
 from .prompts import setPrompt
@@ -18,20 +19,20 @@ class GenerateOutlineSchema(BaseModel):
 # ---------------------------------------------------------------------------
 class GenerateOutline:
 
-    generate_outline_system_prompt = '''
+    generate_outline_system_prompt = f'''
     You are an expert in generating outline for content on a given query.
 
     <Instructions>
-    - Read the given query. 
+    - Read the given query. The query may or may not have additional details. 
     - Generate an outline with section, subsection headers.
     - Each outline must start with a "Title".
     - Do not provide "References" section or any other extra sections or sub-sections that may not have content based on the query. 
-    - Place "[--content--]" tag wherever the content should be written.
-    - If there is section specific instructions in the query, create an "<instructions></instruction>" tag under that specifc section and provide the instructions inside it.
+    - Place "{OutlineTAGs.CONTENT.value}" tag wherever the content should be written.
+    - If there is section specific instructions in the query, create an "{OutlineTAGs.INSTRUCTIONS_START.value}{OutlineTAGs.INSTRUCTIONS_END.value}" tag under that specific section and provide the instructions inside it.
     </Instructions>
 
     <Output format>
-    - The outline must have "[--content--]" tag in place of actual content.
+    - The outline must have "{OutlineTAGs.CONTENT.value}" tag in place of actual content.
     - Generate output in markdown format. Strictly follow the following example.
     </Output format>
 
@@ -43,16 +44,16 @@ class GenerateOutline:
     <Output>
     # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
     ## I. Introduction
-    <instructions>
+    {OutlineTAGs.INSTRUCTIONS_START.value}
      - Provide a brief overview of hypertensive disorders of pregnancy, including their significance and impact on maternal and fetal
      - Provide statistics on prevalence and outcomes.
-    </instructions>
-    [--content--]
+    {OutlineTAGs.INSTRUCTIONS_END.value}
+    {OutlineTAGs.CONTENT.value}
     ### A. Historical Perspective and Evolution of Understanding
-    [--content--]
+    {OutlineTAGs.CONTENT.value}
     ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
     #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
-    [--content--]
+    {OutlineTAGs.CONTENT.value}
     </Output>
     </Example>
     '''
@@ -91,8 +92,8 @@ class GenerateOutline:
         '''LLM generates outline from a given query'''
 
         def contentChecker(response):
-            if '[--content--]' not in response['content']:
-                logging.info(f'Response does not have [--content--] tag, response: {response}')
+            if OutlineTAGs.CONTENT.value not in response['content']:
+                logging.info(f'Response does not have {OutlineTAGs.CONTENT.value} tag, response: {response}')
                 return False
             return True
         

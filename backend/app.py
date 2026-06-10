@@ -1,8 +1,6 @@
 from datetime import datetime
-from enum import Enum
 import asyncio
 import importlib
-import ast
 from copy import deepcopy
 from io import BytesIO
 import json
@@ -18,7 +16,7 @@ from typing import Any, Literal
 from uuid import uuid4
 import zipfile
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
@@ -642,6 +640,127 @@ def _uploaded_file_type(file_name: str | None) -> str:
     if suffix == "pdf":
         return "pdf"
     return suffix or "file"
+
+
+OUTLINE_REFERENCE_ALLOWED_SUFFIXES = {".txt", ".md", ".markdown", ".csv", ".tsv", ".docx", ".pdf"}
+OUTLINE_REFERENCE_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _decode_text_document(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return content.decode("utf-8", errors="ignore")
+
+
+def _extract_docx_text(content: bytes) -> str:
+    from docx import Document
+
+    document = Document(BytesIO(content))
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            row_text = "\t".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+            if row_text:
+                parts.append(row_text)
+    return "\n\n".join(parts).strip()
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(BytesIO(content))
+    return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+
+
+async def _outline_reference_document_details(upload: UploadFile | None) -> str:
+    if upload is None or not upload.filename:
+        return ""
+
+    suffix = Path(upload.filename).suffix.lower()
+    if suffix not in OUTLINE_REFERENCE_ALLOWED_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail="Use a supported reference document format: .txt, .md, .csv, .tsv, .docx, or .pdf.",
+        )
+
+    content = await upload.read()
+    if len(content) > OUTLINE_REFERENCE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Reference document must be 10 MB or smaller.")
+
+    try:
+        if suffix in {".txt", ".md", ".markdown", ".csv", ".tsv"}:
+            details = _decode_text_document(content).strip()
+        elif suffix == ".docx":
+            details = _extract_docx_text(content)
+        elif suffix == ".pdf":
+            details = _extract_pdf_text(content)
+        else:
+            details = ""
+    except Exception:
+        logger.exception("Unable to extract outline reference document text from %s", upload.filename)
+        raise HTTPException(
+            status_code=400,
+            detail="We could not read text from that reference document. Try a text, DOCX, or searchable PDF file.",
+        )
+
+    if not details.strip():
+        raise HTTPException(status_code=400, detail="No readable text was found in that reference document.")
+
+    return details
+
+
+async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        form = await request.form()
+        reference_document = form.get("reference_document")
+        if not (hasattr(reference_document, "filename") and hasattr(reference_document, "read")):
+            reference_document = None
+
+        try:
+            temperature = float(form.get("temperature") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Temperature must be a valid number.")
+
+        return {
+            "query": str(form.get("query") or "").strip(),
+            "model_name": str(form.get("model_name") or "").strip() or None,
+            "temperature": temperature,
+            "instructions": str(form.get("instructions") or ""),
+            "reference_document": reference_document,
+        }
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Outline request was not formatted correctly.")
+
+    try:
+        temperature = float(payload.get("temperature") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Temperature must be a valid number.")
+
+    return {
+        "query": str(payload.get("query") or "").strip(),
+        "model_name": str(payload.get("model_name") or "").strip() or None,
+        "temperature": temperature,
+        "instructions": str(payload.get("instructions") or ""),
+        "reference_document": None,
+    }
+
+
+class _OutlinePromptAdapter:
+    def __init__(self, architecture: Any):
+        self.architecture = architecture
+
+    async def ainvoke(self, input: dict[str, Any]) -> dict[str, Any]:
+        return await self.architecture.ainvoke(_outline_state(query=str(input.get("prompt") or input.get("query") or "")))
 
 
 def _uploaded_file_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -1275,11 +1394,35 @@ def _outline_template_content(template_name: str) -> str:
     if not re.match(r"^[a-zA-Z0-9_-]+$", template_name):
         raise HTTPException(status_code=400, detail="Invalid outline template name.")
 
-    template_path = Path(__file__).resolve().parent / "data" / "outline_templates" / f"{template_name}.md"
+    template_path = _outline_templates_dir() / f"{template_name}.md"
     if not template_path.exists():
         raise HTTPException(status_code=404, detail="Outline template was not found.")
 
     return template_path.read_text()
+
+
+def _outline_templates_dir() -> Path:
+    return Path(__file__).resolve().parent / "data" / "outline_templates"
+
+
+def _outline_templates() -> list[dict[str, str]]:
+    
+    def _get_template_name(str):
+        str = str.replace('_', ' ')
+        return str[0].upper() + str[1:]
+    
+    template_dir = _outline_templates_dir()
+    if not template_dir.exists():
+        return []
+
+    return [
+        {
+            "name": template_path.stem,
+            "label": _get_template_name(template_path.stem),
+        }
+        for template_path in sorted(template_dir.glob("*.md"))
+        if re.match(r"^[a-zA-Z0-9_-]+$", template_path.stem)
+    ]
 
 
 def _un_markdown_text(text: str) -> str:
@@ -1293,41 +1436,15 @@ def _un_markdown_text(text: str) -> str:
 
 
 def _process_outline(outline: str) -> dict[str, Any]:
-    manage_outline_path = Path(__file__).resolve().parent / "src" / "manage_outline.py"
-    source = manage_outline_path.read_text()
-    module = ast.parse(source, filename=str(manage_outline_path))
-    required_names = {"ContentTypes", "SpecialSectionTypes", "insertOutline", "processOutline"}
-    body = [
-        node
-        for node in module.body
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in required_names
-    ]
-    namespace = {
-        "Enum": Enum,
-        "re": re,
-        "unMarkdownText": _un_markdown_text,
-        "print_func_name": lambda func: func,
-    }
-    exec(compile(ast.Module(body=body, type_ignores=[]), str(manage_outline_path), "exec"), namespace)
-    return namespace["processOutline"](outline)
+    from src.manage_outline import processOutline
+
+    return processOutline(outline)
 
 
 def _raw_outline_from_outline_data(outline_data: dict[str, Any]) -> str:
-    manage_outline_path = Path(__file__).resolve().parent / "src" / "manage_outline.py"
-    source = manage_outline_path.read_text()
-    module = ast.parse(source, filename=str(manage_outline_path))
-    required_names = {"ContentTypes", "SpecialSectionTypes", "getRawOutline"}
-    body = [
-        node
-        for node in module.body
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in required_names
-    ]
-    namespace = {
-        "Enum": Enum,
-        "print_func_name": lambda func: func,
-    }
-    exec(compile(ast.Module(body=body, type_ignores=[]), str(manage_outline_path), "exec"), namespace)
-    raw_outline_lines = namespace["getRawOutline"](outline_data, [], 1)
+    from src.manage_outline import getRawOutline
+
+    raw_outline_lines = getRawOutline(outline_data, [], 1)
     return "\n".join(str(line) for line in raw_outline_lines).strip()
 
 
@@ -2028,52 +2145,43 @@ def _mark_first_abstract_section(outline_data: dict[str, Any], agent_abstract_de
     if not outline_data:
         return outline_data, ""
 
-    candidates: list[tuple[str, dict[str, Any], list[Any], bool]] = []
-    existing_abstract = ""
+    title_node = next(iter(outline_data.values()), None)
+    if not isinstance(title_node, dict):
+        return outline_data, ""
 
-    def walk(node: Any, path: list[str]) -> None:
-        nonlocal existing_abstract
-        if not isinstance(node, dict) or existing_abstract:
-            return
-
-        heading = path[-1] if path else ""
-        items = _content_items(node)
-        if items and _section_is_abstract(items):
-            existing_abstract = heading
-            return
-
-        looks_like_abstract = _heading_looks_like_abstract(heading) if heading else False
-        if heading and (looks_like_abstract or (items and _section_needs_ai(items))):
-            candidates.append((heading, node, items, looks_like_abstract))
-
-        for key, value in node.items():
-            if key == OUTLINE_CONTENT_KEY:
-                continue
-            walk(value, [*path, str(key)])
-
-    walk(outline_data, [])
-    if existing_abstract:
-        return outline_data, existing_abstract
-
-    for heading, node, items, looks_like_abstract in candidates:
-        is_abstract = looks_like_abstract
-        if not is_abstract and _section_needs_ai(items):
-            response = agent_abstract_detector.invoke({"current_section": heading})
-            is_abstract = _detector_response_is_abstract(response)
-
-        if not is_abstract:
+    first_section_heading = ""
+    first_section_node: dict[str, Any] | None = None
+    for heading, node in title_node.items():
+        if heading == OUTLINE_CONTENT_KEY:
             continue
+        if isinstance(node, dict):
+            first_section_heading = str(heading)
+            first_section_node = node
+            break
 
-        if not isinstance(node.get(OUTLINE_CONTENT_KEY), list):
-            node[OUTLINE_CONTENT_KEY] = []
-        items = node[OUTLINE_CONTENT_KEY]
-        if not _section_needs_ai(items):
-            _set_content_value(items, OUTLINE_CONTENT_AI, "")
-        if not _section_is_abstract(items):
-            items.insert(0, [OUTLINE_IS_ABSTRACT, True])
-        return outline_data, heading
+    if not first_section_heading or first_section_node is None:
+        return outline_data, ""
 
-    return outline_data, ""
+    items = _content_items(first_section_node)
+    if items and _section_is_abstract(items):
+        return outline_data, first_section_heading
+
+    is_abstract = _heading_looks_like_abstract(first_section_heading)
+    if not is_abstract and _section_needs_ai(items):
+        response = agent_abstract_detector.invoke({"current_section": first_section_heading})
+        is_abstract = _detector_response_is_abstract(response)
+
+    if not is_abstract:
+        return outline_data, ""
+
+    if not isinstance(first_section_node.get(OUTLINE_CONTENT_KEY), list):
+        first_section_node[OUTLINE_CONTENT_KEY] = []
+    items = first_section_node[OUTLINE_CONTENT_KEY]
+    if not _section_needs_ai(items):
+        _set_content_value(items, OUTLINE_CONTENT_AI, "")
+    if not _section_is_abstract(items):
+        items.insert(0, [OUTLINE_IS_ABSTRACT, True])
+    return outline_data, first_section_heading
 
 
 def _safe_architecture_classes() -> tuple[Any, Any, Any]:
@@ -2323,6 +2431,14 @@ async def health() -> dict[str, Any]:
         "chroma_port": Config.env_config.get("CHROMA_PORT"),
         "checked_at": datetime.now().isoformat(),
     }
+
+
+@app.get("/api/outline-templates")
+async def outline_templates() -> dict[str, Any]:
+    try:
+        return {"templates": _outline_templates()}
+    except Exception as exp:
+        raise _api_error("load outline templates", exp)
 
 
 @app.get("/api/outline-templates/{template_name}")
@@ -3733,19 +3849,23 @@ async def delete_generated_file(
 
 
 @app.post("/api/ai/outline")
-async def create_outline(request: OutlineRequest) -> dict[str, Any]:
+async def create_outline(request: Request) -> dict[str, Any]:
     try:
         from src.ai.architecture import OutlineCreatorArchitecture
+        from src.generate import generateOutline
 
-        ref_dir = Path(request.dir_path_ref_files) if request.dir_path_ref_files else None
+        payload = await _outline_payload_from_request(request)
+        if not payload["query"]:
+            raise HTTPException(status_code=400, detail="Write a query before creating an outline.")
+
+        details = await _outline_reference_document_details(payload["reference_document"])
         architecture = OutlineCreatorArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-            dir_path_ref_files=ref_dir,
+            model_name=_model_name(payload["model_name"]),
+            temperature=payload["temperature"],
+            instructions=payload["instructions"],
         )
-        response = await architecture.ainvoke(_outline_state(query=request.query))
-        return {"result": _jsonable(response)}
+        content = await generateOutline(_OutlinePromptAdapter(architecture), query=payload["query"], details=details)
+        return {"result": {"content": _jsonable(content)}}
     except HTTPException:
         raise
     except Exception as exp:

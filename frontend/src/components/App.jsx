@@ -202,6 +202,8 @@ export function App() {
   const [outlineMode, setOutlineMode] = useState("outline");
   const [outline, setOutline] = useState("");
   const [useExample, setUseExample] = useState(false);
+  const [outlineTemplates, setOutlineTemplates] = useState([]);
+  const [selectedOutlineTemplate, setSelectedOutlineTemplate] = useState("");
   const [action, setAction] = useState("Expand");
   const [status, setStatus] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
@@ -270,8 +272,22 @@ export function App() {
       }
     }
 
+    async function loadOutlineTemplates() {
+      try {
+        const payload = await getJSON("/api/outline-templates");
+        if (!isMounted) return;
+        const templates = payload.templates ?? [];
+        setOutlineTemplates(templates);
+      } catch (error) {
+        if (isMounted) {
+          setOutlineTemplates([]);
+        }
+      }
+    }
+
     loadSystemHealth(true);
     loadWorkspaceData();
+    loadOutlineTemplates();
     const healthInterval = window.setInterval(() => loadSystemHealth(false), 30000);
 
     return () => {
@@ -354,20 +370,30 @@ export function App() {
   }, [showLogin, authSession]);
 
   async function generateOutline() {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setStatus("Write a query before creating an outline.");
+      return "";
+    }
+
     setStatus("Generating outline...");
     try {
-      const payload = await postJSON("/api/ai/outline", {
-        query: query.trim() || fileName,
-        model_name: aiSettings?.llm,
-        temperature: Number(aiSettings?.temperature ?? 0),
-        instructions: aiSettings?.instructions ?? "",
-      });
-      const content = payload.result?.content ?? payload.result?.result?.content ?? "";
-      setOutline(content || outline);
-      setOutlineMode("outline");
+      const formData = new FormData();
+      formData.append("query", trimmedQuery);
+      formData.append("model_name", aiSettings?.llm ?? "");
+      formData.append("temperature", String(Number(aiSettings?.temperature ?? 0)));
+      formData.append("instructions", aiSettings?.instructions ?? "");
+      if (referenceDocument) {
+        formData.append("reference_document", referenceDocument);
+      }
+
+      const payload = await postForm("/api/ai/outline", formData);
+      const content = payload.result?.content ?? "";
       setStatus("Outline generated");
+      return content || "";
     } catch (error) {
       setStatus(error.message);
+      return "";
     }
   }
 
@@ -388,23 +414,33 @@ export function App() {
     }
   }
 
-  async function setUseExampleOutline(checked) {
-    if (!checked) {
+  async function selectOutlineTemplate(templateName) {
+    if (!templateName) {
       setUseExample(false);
-      setOutline(outlineBeforeExample.current);
+      setSelectedOutlineTemplate("");
+      if (useExample) {
+        setOutline(outlineBeforeExample.current);
+      }
       outlineBeforeExample.current = "";
       return;
     }
 
-    outlineBeforeExample.current = outline;
+    const selectedTemplate = outlineTemplates.find((template) => template.name === templateName);
+    const templateLabel = selectedTemplate?.label || templateName;
+    if (!useExample) {
+      outlineBeforeExample.current = outline;
+    }
     setUseExample(true);
-    setStatus("Loading example outline...");
+    setSelectedOutlineTemplate(templateName);
+    setOutlineMode("outline");
+    setStatus(`Loading ${templateLabel} template...`);
     try {
-      const payload = await getJSON("/api/outline-templates/example");
+      const payload = await getJSON(`/api/outline-templates/${encodeURIComponent(templateName)}`);
       setOutline(payload.content ?? "");
-      setStatus("Example outline loaded");
+      setStatus(`${templateLabel} template loaded`);
     } catch (error) {
       setUseExample(false);
+      setSelectedOutlineTemplate("");
       setStatus(error.message);
     }
   }
@@ -412,6 +448,7 @@ export function App() {
   function updateOutlineFromEditor(nextOutline) {
     if (useExample) {
       setUseExample(false);
+      setSelectedOutlineTemplate("");
       outlineBeforeExample.current = "";
     }
     setOutline(nextOutline);
@@ -622,6 +659,13 @@ export function App() {
     setStatus("Generation paused. Click Generate to continue with the remaining outline.");
     try {
       const payload = await postJSON(`/api/generation-jobs/${jobId}/pause`, {});
+      if (payload.job) {
+        setWorkspaceData((current) => ({
+          ...current,
+          manuscript: payload.job.manuscript ?? current.manuscript,
+          ref_list: normalizeReferenceList(payload.job.ref_list ?? current.ref_list),
+        }));
+      }
       setStatus(payload.job?.message || generationStatusMessage(payload.job));
     } catch (error) {
       setStatus(error.message);
@@ -640,6 +684,7 @@ export function App() {
     setOutlineMode("outline");
     setOutline("");
     setUseExample(false);
+    setSelectedOutlineTemplate("");
     outlineBeforeExample.current = "";
     setAction("Expand");
     setGeneratedContent("");
@@ -802,6 +847,7 @@ export function App() {
       setOutline(payload.outline ?? "");
       setOutlineMode("outline");
       setUseExample(false);
+      setSelectedOutlineTemplate("");
       outlineBeforeExample.current = "";
       setStatus(payload.message || "Manuscript loaded");
     } catch (error) {
@@ -1435,6 +1481,8 @@ export function App() {
         setFileName("");
         setOutline("");
         setUseExample(false);
+        setSelectedOutlineTemplate("");
+        outlineBeforeExample.current = "";
         setLiteratureCollectionName("");
         setIsLiteratureSearchEnabled(false);
         setGeneratedContent("");
@@ -1502,8 +1550,9 @@ export function App() {
           setReferenceDocument={setReferenceDocument}
           outline={outline}
           setOutline={updateOutlineFromEditor}
-          useExample={useExample}
-          setUseExample={setUseExampleOutline}
+          outlineTemplates={outlineTemplates}
+          selectedOutlineTemplate={selectedOutlineTemplate}
+          onOutlineTemplateChange={selectOutlineTemplate}
           onGenerate={generateOutline}
           onFormat={formatOutline}
           onRun={runStructuredOutline}

@@ -3,9 +3,10 @@ from langchain.output_parsers.fix import OutputFixingParser
 from typing import Dict, List
 from pydantic import BaseModel, Field
 
+from ..common import OutlineTAGs
+from ..utils import Config
 from .common import StateContentManager, extractLLMResponse, GENERATE_CONTENT_INSTRUCTIONS
 from .prompts import setPrompt
-from ..utils import Config
 
 class GenerateContentSchema(BaseModel):
     '''
@@ -37,8 +38,8 @@ class GenerateContent:
     <Instructions>
     {instructions}
     - Read the Previous Content Summary. 
-    - Find the [--content--] tag in Current Section. 
-    - Write output texts that will fit in the [--content--] tag position and that will maintain continuity and relevance with the text above and below it.
+    - Find the {OutlineTAGs.CONTENT.value} tag in Current Section. 
+    - Write output texts that will fit in the {OutlineTAGs.CONTENT.value} tag position and that will maintain continuity and relevance with the text above and below it.
     - Generate unidirectional hierarchical concept flow map of generated content.
 
     - Provide the output in the following format.

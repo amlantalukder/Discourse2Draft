@@ -7,11 +7,12 @@ from langgraph.prebuilt import create_react_agent
 from typing import Dict, List
 from pydantic import BaseModel, Field
 
+from ..common import OutlineTAGs
+from ..utils import Config, print_func_name
 from .llms import getAIModel
 from .common import (StateContentManager, extractLLMResponse,
                      GENERATE_CONTENT_INSTRUCTIONS, CITE_CONTEXT_INSTRUCTIONS)
 from .prompts import setPrompt
-from ..utils import Config, print_func_name
 
 @tool
 @print_func_name
@@ -61,8 +62,8 @@ class GenerateContentGraphRAG:
     <Instructions>
     {instructions}
     - Read the Previous Content Summary.
-    - Find the [--content--] tag in Current Section. 
-    - Write output texts that will fit in the [--content--] tag position and that will maintain continuity and relevance with the text above and below it.
+    - Find the {OutlineTAGs.CONTENT.value} tag in Current Section. 
+    - Write output texts that will fit in the {OutlineTAGs.CONTENT.value} tag position and that will maintain continuity and relevance with the text above and below it.
     - Generate unidirectional hierarchical concept flow map of generated content.
 
     {CITE_CONTEXT_INSTRUCTIONS}
