@@ -185,7 +185,8 @@ export function LoginPage({ onContinue }) {
       const payload = await getJSON("/api/settings/default");
       onContinue({
         status: "anonymous",
-        session: payload.settings?.session,
+        user: payload.user ?? null,
+        session: payload.session ?? payload.settings?.session,
         settings: payload.settings,
         llm_options: payload.llm_options ?? [],
       });

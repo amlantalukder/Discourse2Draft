@@ -5,11 +5,13 @@ import { FileUploadControl } from "./FileUploadControl";
 import { IconButton } from "./IconButton";
 import { OutlineEditor } from "./OutlineEditor";
 
-export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument, setReferenceDocument, outline, setOutline, outlineTemplates = [], selectedOutlineTemplate = "", onOutlineTemplateChange, onGenerate, onFormat, onRun, onRegenerate, onPause, onDownload, isRunning, status, hasSelectedFile = false, hasGeneratedContent = false, resetSignal = 0 }) {
+export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument, setReferenceDocument, outline, setOutline, outlineTemplates = [], selectedOutlineTemplate = "", uploadedOutlineTemplates = [], selectedUploadedOutlineTemplate = "", onOutlineTemplateChange, onUploadedOutlineTemplateChange, onGenerate, onFormat, onRun, onRegenerate, onPause, onDownload, isRunning, status, hasSelectedFile = false, hasGeneratedContent = false, resetSignal = 0 }) {
   const isQueryMode = mode === "query";
   const isLocked = !hasSelectedFile;
   const hasTemplates = outlineTemplates.length > 0;
+  const hasUploadedTemplates = uploadedOutlineTemplates.length > 0;
   const selectedTemplateValue = selectedOutlineTemplate || "";
+  const selectedUploadedTemplateValue = selectedUploadedOutlineTemplate || "";
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isOutlineEditorOpen, setIsOutlineEditorOpen] = useState(false);
   const [isCreatingOutline, setIsCreatingOutline] = useState(false);
@@ -76,6 +78,14 @@ export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument
               <select aria-label="Sample outline template" value={selectedTemplateValue} onChange={(event) => onOutlineTemplateChange?.(event.target.value)} disabled={isLocked || !hasTemplates}>
                 <option value="">{hasTemplates ? "-- Use sample template --" : "No templates available"}</option>
                 {outlineTemplates.map((template) => (
+                  <option key={template.name} value={template.name}>
+                    {template.label || template.name}
+                  </option>
+                ))}
+              </select>
+              <select aria-label="Uploaded outline template" value={selectedUploadedTemplateValue} onChange={(event) => onUploadedOutlineTemplateChange?.(event.target.value)} disabled={isLocked || !hasUploadedTemplates}>
+                <option value="">{hasUploadedTemplates ? "-- Use uploaded template --" : "No uploaded templates"}</option>
+                {uploadedOutlineTemplates.map((template) => (
                   <option key={template.name} value={template.name}>
                     {template.label || template.name}
                   </option>
