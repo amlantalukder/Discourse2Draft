@@ -3,7 +3,6 @@ from langsmith import traceable
 from datetime import datetime
 import asyncio
 import nest_asyncio
-from shiny.express import ui
 from .common import StateContentManager
 from .tools.search_pubmed import search_pubmed_article_async, formatAPA
 from ..vectordb import ChromaDB

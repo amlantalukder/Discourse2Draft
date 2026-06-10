@@ -31,7 +31,7 @@ Quantum computing has its roots in the early 1980s when physicist Richard Feynma
 
 ## Frontend
 
-Frontend was developed with ReactJS and Vite
+Frontend was developed with ReactJS and Vite.
 
 ## Backend
 
@@ -43,7 +43,7 @@ Backend contains agents developed by Langgraph architecture. The graph starts wi
 
 ![alt text](frontend/docs/figures/workflows.jpg)
 
-**Detailed architecture is represented in this [link](docs/README.md).**
+**Detailed architecture is represented in this [link](frontend/docs/README.md).**
 
 ## Running the app
 

@@ -3,6 +3,7 @@ from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
 import logging
 
+from ..common import OutlineTAGs
 from ..utils import Config
 from .common import StateOutlineManager, extractLLMResponse, Config
 from .prompts import setPrompt
@@ -17,18 +18,18 @@ class FormatOutlineSchema(BaseModel):
 # ---------------------------------------------------------------------------
 class FormatOutline:
 
-    format_outline_system_prompt = '''
+    format_outline_system_prompt = f'''
     You are an expert in extracting an structured outline from a given unstructured outline.
 
     <Instructions> 
     - Extract an outline with section, subsection headers.
     - Each outline must start with a which is the top level Title section.
     - Do not create any extra sections or sub-sections that may not be part of the unstructured outline. 
-    - Place "[--content--]" tag wherever the content should be written.
+    - Place "{OutlineTAGs.CONTENT.value}" tag wherever the content should be written.
     </Instructions>
 
     <Output format>
-    - The outline must have "[--content--]" tag in place of actual content.
+    - The outline must have "{OutlineTAGs.CONTENT.value}" tag in place of actual content.
     - Generate output following markdown syntax. Do not wrap the output in code backticks. tStrictly follow the following example.
     </Output format>
 
@@ -40,12 +41,12 @@ class FormatOutline:
     <Output>
     # Title: Hypertensive Disorders of Pregnancy: A Comprehensive Review of Pathophysiology, Clinical Management, Long-Term Implications, and Future Directions
     ## I. Introduction
-    [--content--]
+    {OutlineTAGs.CONTENT.value}
     ### A. Historical Perspective and Evolution of Understanding
-    [--content--]
+    {OutlineTAGs.CONTENT.value}
     ### B. Definition and Significance of Hypertensive Disorders of Pregnancy (HDP)
     #### 1. Global Burden of Disease (Maternal and Perinatal Morbidity & Mortality)
-    [--content--]
+    {OutlineTAGs.CONTENT.value}
     </Output>
     </Example>
     '''
@@ -81,8 +82,8 @@ class FormatOutline:
         '''LLM generates a structured outline from a given unstructured outline'''
 
         def contentChecker(response):
-            if '[--content--]' not in response['content']:
-                logging.info(f'Response does not have [--content--] tag, response: {response}')
+            if OutlineTAGs.CONTENT.value not in response['content']:
+                logging.info(f'Response does not have {OutlineTAGs.CONTENT.value} tag, response: {response}')
                 return False
             return True
         

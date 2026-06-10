@@ -1,21 +1,8 @@
 import re
-from enum import Enum
 
 from .ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
 from .utils import print_func_name
-
-# ---------------------------------------------------------------------------
-class SpecialSectionTypes(Enum):
-    CONTENT = 'content'
-    
-# ---------------------------------------------------------------------------
-class ContentTypes(Enum):
-    IS_ABSTRACT = 'is_abstract'
-    INSTRUCTIONS = 'instructions'
-    CONTENT_USER = 'content_user'
-    CONTENT_AI = 'content_ai'
-    CONTENT_PRE_SUMMARY = 'content_pre_summary'
-    CONCEPT_MAP = 'concept_map'
+from .common import SpecialSectionTypes, ContentTypes, OutlineTAGs
 
 @print_func_name
 def unMarkdownText(text):
@@ -24,7 +11,7 @@ def unMarkdownText(text):
     from markdown import markdown
 
     html = markdown(text)
-    return ''.join(BeautifulSoup(html).findAll(text=True))
+    return ''.join(BeautifulSoup(html, features="html.parser").findAll(text=True))
 
 @print_func_name
 def resetOutline(d):
@@ -58,7 +45,7 @@ def processOutline(outline):
 
     def insertUserContentToOutline(d_outline, outline_items, lines):
         content = '\n'.join(lines).strip()
-        pattern_instructions = r'[--instructions--]([\w\W]*?)[\/--instructions--]'
+        pattern_instructions = rf'{re.escape(OutlineTAGs.INSTRUCTIONS_START.value)}([\w\W]*?){re.escape(OutlineTAGs.INSTRUCTIONS_END.value)}'
         instructions = re.findall(pattern_instructions, content)
         instructions = '\n'.join(map(lambda x: x.strip(), instructions))
         content = re.sub(pattern_instructions, '', content)
@@ -71,7 +58,7 @@ def processOutline(outline):
         return d_outline
     
     d_outline, outline_items = {}, []
-    chunks_leading_to_content = outline.split('[--content--]')
+    chunks_leading_to_content = outline.split(OutlineTAGs.CONTENT.value)
     for i, x in enumerate(chunks_leading_to_content):
         x = x.strip()
         if not x.strip(): continue
@@ -139,9 +126,9 @@ def getRawOutline(d, raw_outline=[], counter=1):
         for k, v in d:
             if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.IS_ABSTRACT.value, ContentTypes.CONCEPT_MAP.value]: continue
             if k == ContentTypes.CONTENT_AI.value:
-                raw_outline.append('[--content--]')
+                raw_outline.append(OutlineTAGs.CONTENT.value)
             elif k == ContentTypes.INSTRUCTIONS.value:
-                raw_outline.append(f'[--instructions--]\n{v}\n[/--instructions--]')
+                raw_outline.append(f'{OutlineTAGs.INSTRUCTIONS_START.value}\n{v}\n{OutlineTAGs.INSTRUCTIONS_END.value}')
             else:
                 raw_outline.append(v)
     else:

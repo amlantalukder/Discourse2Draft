@@ -13,6 +13,20 @@ function normalizeHeadingLevel(value, fallback = 2) {
   return Math.max(1, Math.min(6, level));
 }
 
+function headingLooksLikeAbstract(heading) {
+  const normalized = String(heading ?? "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+  return normalized === "abstract" || normalized === "summary" || normalized === "executive summary" || normalized.startsWith("abstract ");
+}
+
+function isAbstractSection(section) {
+  if (typeof section.is_abstract === "boolean") return section.is_abstract;
+  if (typeof section.isAbstract === "boolean") return section.isAbstract;
+  return headingLooksLikeAbstract(section.heading ?? section.title ?? section.header ?? section.section);
+}
+
 function normalizeSections(sections) {
   return sections.map((section, index) => {
     const fallbackLevel = index === 0 ? 1 : 2;
@@ -23,6 +37,7 @@ function normalizeSections(sections) {
       body: section.body ?? section.content ?? section.text ?? "",
       rawBody: section.raw_body ?? section.rawBody ?? section.body ?? section.content ?? section.text ?? "",
       path: Array.isArray(section.path) ? section.path : [],
+      isAbstract: isAbstractSection(section),
     };
   });
 }
@@ -216,6 +231,13 @@ export function Manuscript({
   const [streamedSections, setStreamedSections] = useState(sections);
 
   useEffect(() => {
+    if (!isGenerating) {
+      streamGenerationChangesRef.current = false;
+      streamedSectionsRef.current = sections;
+      setStreamedSections(sections);
+      return undefined;
+    }
+
     if (isGenerating) {
       streamGenerationChangesRef.current = true;
     }
@@ -297,7 +319,7 @@ export function Manuscript({
           });
 
           return (
-            <section key={`${section.heading}-${section.level}-${index}`} className={index === 1 ? "abstract-block" : ""}>
+            <section key={`${section.heading}-${section.level}-${index}`} className={section.isAbstract ? "abstract-block" : ""}>
               {section.heading ? <ManuscriptHeading level={section.level}>{section.heading}</ManuscriptHeading> : null}
               {paragraphs.map((paragraph, paragraphIndex) => {
                 const id = paragraphId(section, index, paragraphIndex);

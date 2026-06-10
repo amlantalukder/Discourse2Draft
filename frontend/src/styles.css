@@ -2133,6 +2133,33 @@ time {
   font-weight: 650;
 }
 
+.sample-template-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 13px;
+}
+
+.sample-template-controls select {
+  min-width: min(360px, 100%);
+  max-width: 100%;
+  border: 1px solid #c8d0e3;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2c3442;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 650;
+  padding: 7px 32px 7px 10px;
+}
+
+.sample-template-controls select:disabled {
+  background: rgba(246, 248, 252, 0.72);
+  color: #9aa3b3;
+  cursor: default;
+}
+
 .use-example-disabled {
   color: #9aa3b3;
   cursor: default;
@@ -2149,6 +2176,15 @@ time {
   flex: 1 1 auto;
   display: grid;
   gap: 11px;
+}
+
+.query-outline-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.query-outline-actions .tool-button {
+  min-width: 132px;
 }
 
 .outline-panel textarea {

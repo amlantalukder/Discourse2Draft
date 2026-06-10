@@ -5,7 +5,7 @@ from .utils import print_func_name
 from .manage_outline import SpecialSectionTypes, ContentTypes
 from .common import formatCitations
 from .db import selectFromDB, vector_db_collections_type
-from .ai.architecture import AbstractSectionDetectorArchitecture, ContentWriterArchitecture, AbstractWriterArchitecture
+from .ai.architecture import AbstractSectionDetectorArchitecture, ContentWriterArchitecture, AbstractWriterArchitecture, OutlineCreatorArchitecture
 from .ai.tools.search_pubmed import formatAPA
 
 @print_func_name
@@ -157,3 +157,18 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
         content_for_frontend = content
 
     return content, content_summary, concept_map, ref_list, sanitizeContent(content_for_frontend)
+
+@print_func_name
+async def generateOutline(agent: OutlineCreatorArchitecture, query: str, details: str = ''):
+
+    prompt = f'''\
+            <Query>
+            {query}
+            </Query>
+            
+            <Details>
+            {details}
+            </Details>'''
+    
+    response = await agent.ainvoke({'prompt': prompt})
+    return response['content']

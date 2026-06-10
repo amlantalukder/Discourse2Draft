@@ -4,6 +4,7 @@ from typing import List, Dict
 from pydantic import BaseModel, Field
 import logging
 
+from ..common import OutlineTAGs
 from ..utils import Config
 from .common import (StateContentManager, extractLLMResponse, ReferenceSchema, 
                      GENERATE_CONTENT_INSTRUCTIONS, CITE_CONTEXT_INSTRUCTIONS)
@@ -45,8 +46,8 @@ class GenerateContentRAG:
     <Instructions>
     {instructions}
     - Read the Previous Content Summary.
-    - Find the [--content--] tag in Current Section. 
-    - Write output texts that will fit in the [--content--] tag position and that will maintain continuity and relevance with the text above and below it.
+    - Find the {OutlineTAGs.CONTENT.value} tag in Current Section. 
+    - Write output texts that will fit in the {OutlineTAGs.CONTENT.value} tag position and that will maintain continuity and relevance with the text above and below it.
     - Generate unidirectional hierarchical concept flow map of generated content.
     
     {CITE_CONTEXT_INSTRUCTIONS}

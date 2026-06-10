@@ -2,12 +2,31 @@ import json
 import re
 import logging
 from docx import Document
+from enum import Enum
 
 from .utils import Config, print_func_name
-from .manage_outline import SpecialSectionTypes, ContentTypes
 from .vectordb import ChromaDB
 from .db import selectFromDB, vector_db_collections_status, vector_db_collections_type
 from .ai.tools.search_pubmed import formatAPA
+
+# ---------------------------------------------------------------------------
+class OutlineTAGs(Enum):
+    INSTRUCTIONS_START = '[--instructions--]'
+    INSTRUCTIONS_END = '[/--instructions--]'
+    CONTENT = '[--content--]'
+
+# ---------------------------------------------------------------------------
+class SpecialSectionTypes(Enum):
+    CONTENT = 'content'
+    
+# ---------------------------------------------------------------------------
+class ContentTypes(Enum):
+    IS_ABSTRACT = 'is_abstract'
+    INSTRUCTIONS = 'instructions'
+    CONTENT_USER = 'content_user'
+    CONTENT_AI = 'content_ai'
+    CONTENT_PRE_SUMMARY = 'content_pre_summary'
+    CONCEPT_MAP = 'concept_map'
 
 @print_func_name
 def formatCitations(text):
