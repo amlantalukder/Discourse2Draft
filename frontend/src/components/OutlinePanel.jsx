@@ -1,34 +1,11 @@
-import { PanelTopClose, PanelTopOpen, Pause, Pencil, Play, RefreshCw } from "./FontAwesomeIcons";
+import { FilePlus2, PanelTopClose, PanelTopOpen, Pause, Pencil, Play, RefreshCw } from "./FontAwesomeIcons";
 import { useEffect, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { FileUploadControl } from "./FileUploadControl";
 import { IconButton } from "./IconButton";
 import { OutlineEditor } from "./OutlineEditor";
 
-export function OutlinePanel({
-  mode,
-  setMode,
-  query,
-  setQuery,
-  referenceDocument,
-  setReferenceDocument,
-  outline,
-  setOutline,
-  outlineTemplates = [],
-  selectedOutlineTemplate = "",
-  onOutlineTemplateChange,
-  onGenerate,
-  onFormat,
-  onRun,
-  onRegenerate,
-  onPause,
-  onDownload,
-  isRunning,
-  status,
-  hasSelectedFile = false,
-  hasGeneratedContent = false,
-  resetSignal = 0,
-}) {
+export function OutlinePanel({ mode, setMode, query, setQuery, referenceDocument, setReferenceDocument, outline, setOutline, outlineTemplates = [], selectedOutlineTemplate = "", onOutlineTemplateChange, onGenerate, onFormat, onRun, onRegenerate, onPause, onDownload, isRunning, status, hasSelectedFile = false, hasGeneratedContent = false, resetSignal = 0 }) {
   const isQueryMode = mode === "query";
   const isLocked = !hasSelectedFile;
   const hasTemplates = outlineTemplates.length > 0;
@@ -38,6 +15,7 @@ export function OutlinePanel({
   const [isCreatingOutline, setIsCreatingOutline] = useState(false);
   const [draftOutlineForEditor, setDraftOutlineForEditor] = useState(null);
   const hasQueryText = query.trim().length > 0;
+  const hasOutlineText = outline.trim().length > 0;
 
   useEffect(() => {
     setIsCollapsed(false);
@@ -95,12 +73,7 @@ export function OutlinePanel({
           </div>
           {!isQueryMode && (
             <div className={`sample-template-controls ${isLocked ? "sample-template-controls-disabled" : ""}`}>
-              <select
-                aria-label="Sample outline template"
-                value={selectedTemplateValue}
-                onChange={(event) => onOutlineTemplateChange?.(event.target.value)}
-                disabled={isLocked || !hasTemplates}
-              >
+              <select aria-label="Sample outline template" value={selectedTemplateValue} onChange={(event) => onOutlineTemplateChange?.(event.target.value)} disabled={isLocked || !hasTemplates}>
                 <option value="">{hasTemplates ? "-- Use sample template --" : "No templates available"}</option>
                 {outlineTemplates.map((template) => (
                   <option key={template.name} value={template.name}>
@@ -117,14 +90,9 @@ export function OutlinePanel({
           isQueryMode ? (
             <div className="query-input-stack">
               <textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder={'Write a query.\n\nYou could start with something like "Write me a draft on quantum computing and its applications"'} spellCheck="false" />
-              <FileUploadControl label="Choose a reference document (optional)" accept=".txt,.md,.markdown,.csv,.tsv,.pdf,.docx" files={referenceDocument} onFilesChange={setReferenceDocument} disabled={isLocked || isCreatingOutline} />
-              {hasQueryText ? (
-                <div className="query-outline-actions">
-                  <button className="tool-button primary" type="button" onClick={createOutlineFromQuery} disabled={isLocked || isRunning || isCreatingOutline}>
-                    {isCreatingOutline ? "Creating outline..." : "Create outline"}
-                  </button>
-                </div>
-              ) : null}
+              <div className="query-input-bottom">
+                <FileUploadControl label="Choose reference documents (optional)" accept=".txt,.md,.markdown,.csv,.tsv,.pdf,.docx" files={referenceDocument} onFilesChange={setReferenceDocument} disabled={isLocked || isCreatingOutline} />
+              </div>
             </div>
           ) : (
             <textarea value={outline} onChange={(event) => setOutline(event.target.value)} spellCheck="false" />
@@ -135,7 +103,12 @@ export function OutlinePanel({
           <IconButton label={isCollapsed ? "Show outline panel" : "Hide outline panel"} onClick={() => setIsCollapsed((current) => !current)}>
             {isCollapsed ? <PanelTopOpen size={18} /> : <PanelTopClose size={18} />}
           </IconButton>
-          <IconButton label="Edit outline" onClick={openOutlineEditor} disabled={isLocked || isRunning}>
+          {isQueryMode ? (
+            <IconButton label={isCreatingOutline ? "Creating outline..." : "Create outline"} onClick={createOutlineFromQuery} disabled={isLocked || isRunning || isCreatingOutline || !hasQueryText}>
+              <FilePlus2 size={18} />
+            </IconButton>
+          ) : null}
+          <IconButton label="Edit outline" onClick={openOutlineEditor} disabled={isLocked || isRunning || !hasOutlineText}>
             <Pencil size={18} />
           </IconButton>
           <IconButton label="Regenerate" onClick={onRegenerate} disabled={isLocked || isQueryMode || isRunning || !hasGeneratedContent}>

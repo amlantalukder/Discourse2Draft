@@ -81,6 +81,15 @@ function normalizeUploadedDocuments(documents = []) {
   }));
 }
 
+function selectedReferenceUploads(referenceDocument) {
+  if (typeof File === "undefined") return [];
+  if (referenceDocument instanceof File) return [referenceDocument];
+  if (Array.isArray(referenceDocument)) {
+    return referenceDocument.filter((document) => document instanceof File);
+  }
+  return [];
+}
+
 function normalizeReferenceList(refList = []) {
   const seen = new Set();
   return (Array.isArray(refList) ? refList : [])
@@ -380,12 +389,15 @@ export function App() {
     try {
       const formData = new FormData();
       formData.append("query", trimmedQuery);
+      if (generatedFile?.id) {
+        formData.append("generated_file_id", String(generatedFile.id));
+      }
       formData.append("model_name", aiSettings?.llm ?? "");
       formData.append("temperature", String(Number(aiSettings?.temperature ?? 0)));
       formData.append("instructions", aiSettings?.instructions ?? "");
-      if (referenceDocument) {
-        formData.append("reference_document", referenceDocument);
-      }
+      selectedReferenceUploads(referenceDocument).forEach((referenceUpload) => {
+        formData.append("reference_documents", referenceUpload);
+      });
 
       const payload = await postForm("/api/ai/outline", formData);
       const content = payload.result?.content ?? "";
@@ -826,6 +838,19 @@ export function App() {
       setIsLiteratureSearchEnabled(Boolean(payload.literature_search?.collection_name));
       setLiteratureCollectionName(payload.literature_search?.collection_name ?? "");
       setFileName(loadedFile.file_name ?? selectedFile.file_name);
+      const loadedQuery = payload.query?.content ?? "";
+      const loadedOutline = payload.outline ?? "";
+      setQuery(loadedQuery);
+      const queryReferenceFiles = payload.query?.reference_files ?? [];
+      setReferenceDocument(
+        queryReferenceFiles.length
+          ? queryReferenceFiles.map((file) => ({
+              ...file,
+              name: file.name ?? file.file_name,
+              savedReference: true,
+            }))
+          : null,
+      );
       const attachedDocuments = normalizeUploadedDocuments(payload.attached_files ?? []);
       setWorkspaceData((current) => ({
         ...current,
@@ -844,8 +869,8 @@ export function App() {
             : document,
         ),
       }));
-      setOutline(payload.outline ?? "");
-      setOutlineMode("outline");
+      setOutline(loadedOutline);
+      setOutlineMode(!loadedOutline.trim() && loadedQuery.trim() ? "query" : "outline");
       setUseExample(false);
       setSelectedOutlineTemplate("");
       outlineBeforeExample.current = "";

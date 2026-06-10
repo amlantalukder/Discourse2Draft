@@ -11,7 +11,14 @@ import {
   faDownload,
   faEye,
   faEyeSlash,
+  faFile,
   faFileCirclePlus,
+  faFileCode,
+  faFileCsv,
+  faFileLines,
+  faFilePdf,
+  faFileWord,
+  faFileZipper,
   faFloppyDisk,
   faKey,
   faMagnifyingGlass,
@@ -59,7 +66,14 @@ export const CornerDownRight = makeIcon(faTurnDown);
 export const Download = makeIcon(faDownload);
 export const Eye = makeIcon(faEye);
 export const EyeOff = makeIcon(faEyeSlash);
+export const File = makeIcon(faFile);
+export const FileCode = makeIcon(faFileCode);
+export const FileCsv = makeIcon(faFileCsv);
+export const FileLines = makeIcon(faFileLines);
+export const FilePdf = makeIcon(faFilePdf);
 export const FilePlus2 = makeIcon(faFileCirclePlus);
+export const FileWord = makeIcon(faFileWord);
+export const FileZipper = makeIcon(faFileZipper);
 export const GitBranch = makeIcon(faCodeBranch);
 export const GitMerge = makeIcon(faCodeMerge);
 export const Github = makeIcon(faGithub);

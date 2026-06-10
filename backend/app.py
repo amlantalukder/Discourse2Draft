@@ -675,7 +675,60 @@ def _extract_pdf_text(content: bytes) -> str:
     return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
 
 
-async def _outline_reference_document_details(upload: UploadFile | None) -> str:
+def _query_file_path(generated_file_id: int) -> Path:
+    return Config.DIR_CONTENTS / f"query_{generated_file_id}.md"
+
+
+def _query_reference_dir(generated_file_id: int) -> Path:
+    return Config.DIR_CONTENTS / f"ref_files_for_query_{generated_file_id}"
+
+
+def _query_details_for_generated_file(generated_file_id: int) -> dict[str, Any]:
+    query_path = _query_file_path(generated_file_id)
+    reference_dir = _query_reference_dir(generated_file_id)
+    reference_files = []
+    if reference_dir.exists():
+        reference_files = [
+            {
+                "name": path.name,
+                "size": path.stat().st_size,
+                "last_modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                "saved_reference": True,
+            }
+            for path in sorted(reference_dir.iterdir())
+            if path.is_file()
+        ]
+
+    return {
+        "content": query_path.read_text(encoding="utf-8") if query_path.exists() else "",
+        "file_name": query_path.name,
+        "reference_files": reference_files,
+    }
+
+
+def _save_query_text(generated_file_id: int | None, query: str) -> Path | None:
+    if generated_file_id is None:
+        return None
+
+    query_path = _query_file_path(generated_file_id)
+    query_path.parent.mkdir(parents=True, exist_ok=True)
+    query_path.write_text(query.strip(), encoding="utf-8")
+    return query_path
+
+
+def _save_query_reference_file(generated_file_id: int | None, upload: UploadFile, content: bytes) -> Path | None:
+    if generated_file_id is None:
+        return None
+
+    reference_dir = _query_reference_dir(generated_file_id)
+    reference_dir.mkdir(parents=True, exist_ok=True)
+    file_name = _safe_uploaded_file_name(upload.filename)
+    destination = reference_dir / file_name
+    destination.write_bytes(content)
+    return destination
+
+
+async def _outline_reference_document_details(upload: UploadFile | None, generated_file_id: int | None = None) -> str:
     if upload is None or not upload.filename:
         return ""
 
@@ -689,6 +742,8 @@ async def _outline_reference_document_details(upload: UploadFile | None) -> str:
     content = await upload.read()
     if len(content) > OUTLINE_REFERENCE_MAX_BYTES:
         raise HTTPException(status_code=400, detail="Reference document must be 10 MB or smaller.")
+
+    _save_query_reference_file(generated_file_id, upload, content)
 
     try:
         if suffix in {".txt", ".md", ".markdown", ".csv", ".tsv"}:
@@ -712,13 +767,35 @@ async def _outline_reference_document_details(upload: UploadFile | None) -> str:
     return details
 
 
+async def _outline_reference_documents_details(uploads: list[UploadFile], generated_file_id: int | None = None) -> str:
+    detail_blocks = []
+    for upload in uploads:
+        details = await _outline_reference_document_details(upload, generated_file_id)
+        if details.strip():
+            detail_blocks.append(f"# Reference file: {_safe_uploaded_file_name(upload.filename)}\n\n{details.strip()}")
+    return "\n\n".join(detail_blocks).strip()
+
+
 async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
+    def parse_generated_file_id(value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            generated_file_id = int(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Generated file id must be a valid integer.")
+        if generated_file_id <= 0:
+            raise HTTPException(status_code=400, detail="Generated file id must be a valid integer.")
+        return generated_file_id
+
     content_type = request.headers.get("content-type", "")
     if "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
-        reference_document = form.get("reference_document")
-        if not (hasattr(reference_document, "filename") and hasattr(reference_document, "read")):
-            reference_document = None
+        reference_documents = [
+            upload
+            for upload in [*form.getlist("reference_documents"), *form.getlist("reference_document")]
+            if hasattr(upload, "filename") and hasattr(upload, "read")
+        ]
 
         try:
             temperature = float(form.get("temperature") or 0)
@@ -730,7 +807,8 @@ async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
             "model_name": str(form.get("model_name") or "").strip() or None,
             "temperature": temperature,
             "instructions": str(form.get("instructions") or ""),
-            "reference_document": reference_document,
+            "reference_documents": reference_documents,
+            "generated_file_id": parse_generated_file_id(form.get("generated_file_id")),
         }
 
     try:
@@ -751,7 +829,8 @@ async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
         "model_name": str(payload.get("model_name") or "").strip() or None,
         "temperature": temperature,
         "instructions": str(payload.get("instructions") or ""),
-        "reference_document": None,
+        "reference_documents": [],
+        "generated_file_id": parse_generated_file_id(payload.get("generated_file_id")),
     }
 
 
@@ -2784,6 +2863,7 @@ async def generated_file_manuscript(
             "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
             "attached_files": _attached_uploaded_documents(generated_file_id),
             "outline": raw_outline,
+            "query": _query_details_for_generated_file(generated_file_id),
             "source_exists": source_exists,
             "message": "" if source_exists else "No manuscript content has been saved for this file yet.",
         }
@@ -3858,7 +3938,8 @@ async def create_outline(request: Request) -> dict[str, Any]:
         if not payload["query"]:
             raise HTTPException(status_code=400, detail="Write a query before creating an outline.")
 
-        details = await _outline_reference_document_details(payload["reference_document"])
+        _save_query_text(payload["generated_file_id"], payload["query"])
+        details = await _outline_reference_documents_details(payload["reference_documents"], payload["generated_file_id"])
         architecture = OutlineCreatorArchitecture(
             model_name=_model_name(payload["model_name"]),
             temperature=payload["temperature"],
