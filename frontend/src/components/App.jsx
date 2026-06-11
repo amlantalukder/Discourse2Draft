@@ -174,6 +174,7 @@ export function App() {
   const outlineBeforeExample = useRef("");
   const pauseRequestedRef = useRef(false);
   const activeGenerationJobRef = useRef("");
+  const generationSyncInFlightRef = useRef(false);
   const [showLogin, setShowLogin] = useState(!initialAuthSession);
   const [authSession, setAuthSession] = useState(initialAuthSession);
   const [aiSettings, setAiSettings] = useState(initialAuthSession?.settings ?? null);
@@ -224,6 +225,7 @@ export function App() {
   const [currentGenerationJobId, setCurrentGenerationJobId] = useState("");
   const [selectedParagraph, setSelectedParagraph] = useState(null);
   const [updatingParagraphId, setUpdatingParagraphId] = useState("");
+  const [manuscriptSyncVersion, setManuscriptSyncVersion] = useState(0);
   const [workspaceResetVersion, setWorkspaceResetVersion] = useState(0);
   const [isWriting, setIsWriting] = useState(false);
   const [workspaceData, setWorkspaceData] = useState({
@@ -404,6 +406,24 @@ export function App() {
       isMounted = false;
     };
   }, [showLogin, authSession]);
+
+  useEffect(() => {
+    const hasActiveJob = Boolean(currentGenerationJobId || activeGenerationJobRef.current);
+    if (!hasActiveJob) return undefined;
+
+    function syncWhenVisible() {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      syncActiveGenerationJobFromBackend({ jumpToLatest: true });
+    }
+
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    window.addEventListener("focus", syncWhenVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+      window.removeEventListener("focus", syncWhenVisible);
+    };
+  }, [currentGenerationJobId]);
 
   async function generateOutline() {
     const trimmedQuery = query.trim();
@@ -591,6 +611,64 @@ export function App() {
     }
   }
 
+  function applyGenerationJobSnapshot(job, savedFile = null, { jumpToLatest = false } = {}) {
+    if (!job) return;
+
+    const jobFile = job.generated_file ?? savedFile;
+    if (jobFile) {
+      setGeneratedFile(jobFile);
+    }
+    setCurrentWritingSection(job.current_section ?? "");
+    setStatus(generationStatusMessage(job));
+    setWorkspaceData((current) => {
+      const generatedDocuments = current.generated_documents ?? [];
+      return {
+        ...current,
+        manuscript: job.manuscript ?? current.manuscript,
+        ref_list: normalizeReferenceList(job.ref_list ?? current.ref_list),
+        generated_documents: generatedDocuments.map((document) =>
+          String(document.id) === String(jobFile?.id ?? savedFile?.id ?? generatedFile?.id)
+            ? {
+                ...document,
+                date: formatDocumentDate(jobFile?.update_date ?? document.update_date ?? document.date),
+                last_modified: formatDocumentDate(jobFile?.update_date ?? document.update_date ?? document.date),
+                name: jobFile?.file_name ?? document.name,
+                file_name: jobFile?.file_name ?? document.file_name,
+                status: jobFile?.status ?? document.status,
+              }
+            : document,
+        ),
+      };
+    });
+
+    if (jumpToLatest) {
+      setManuscriptSyncVersion((current) => current + 1);
+    }
+  }
+
+  async function syncActiveGenerationJobFromBackend({ jumpToLatest = false } = {}) {
+    const jobId = currentGenerationJobId || activeGenerationJobRef.current;
+    if (!jobId || pauseRequestedRef.current || generationSyncInFlightRef.current) return;
+
+    generationSyncInFlightRef.current = true;
+    try {
+      const payload = await getJSON(`/api/generation-jobs/${jobId}`);
+      const job = payload.job;
+      applyGenerationJobSnapshot(job, null, { jumpToLatest });
+
+      if (job?.status === "completed" || job?.status === "error" || job?.status === "paused") {
+        activeGenerationJobRef.current = "";
+        setCurrentGenerationJobId("");
+        setCurrentWritingSection("");
+        setIsSavingOutline(false);
+      }
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      generationSyncInFlightRef.current = false;
+    }
+  }
+
   async function runStructuredOutline(mode = "remaining") {
     if (!generatedFile?.id) {
       setStatus("Save this file before running the structured outline.");
@@ -627,27 +705,7 @@ export function App() {
       activeGenerationJobRef.current = jobId;
       setCurrentGenerationJobId(jobId);
       const savedFile = job?.generated_file ?? generatedFile;
-      setGeneratedFile(savedFile);
-      setWorkspaceData((current) => {
-        const generatedDocuments = current.generated_documents ?? [];
-        return {
-          ...current,
-          manuscript: job?.manuscript ?? current.manuscript,
-          ref_list: normalizeReferenceList(job?.ref_list ?? current.ref_list),
-          generated_documents: generatedDocuments.map((document) =>
-            String(document.id) === String(savedFile.id)
-              ? {
-                  ...document,
-                  date: formatDocumentDate(savedFile.update_date),
-                  name: savedFile.file_name ?? document.name,
-                  status: savedFile.status ?? "running",
-                }
-              : document,
-          ),
-        };
-      });
-      setCurrentWritingSection(job?.current_section ?? "");
-      setStatus(generationStatusMessage(job));
+      applyGenerationJobSnapshot(job, savedFile);
 
       while ((job?.status === "queued" || job?.status === "running") && !pauseRequestedRef.current) {
         await wait(1200);
@@ -655,24 +713,7 @@ export function App() {
         const jobPayload = await getJSON(`/api/generation-jobs/${job.id}`);
         if (pauseRequestedRef.current) break;
         job = jobPayload.job;
-        setCurrentWritingSection(job?.current_section ?? "");
-        setStatus(generationStatusMessage(job));
-        setWorkspaceData((current) => {
-          const generatedDocuments = current.generated_documents ?? [];
-          return {
-            ...current,
-            manuscript: job?.manuscript ?? current.manuscript,
-            ref_list: normalizeReferenceList(job?.ref_list ?? current.ref_list),
-            generated_documents: generatedDocuments.map((document) =>
-              String(document.id) === String(savedFile.id)
-                ? {
-                    ...document,
-                    status: job?.generated_file?.status ?? document.status,
-                  }
-                : document,
-            ),
-          };
-        });
+        applyGenerationJobSnapshot(job, savedFile);
       }
 
       if (pauseRequestedRef.current) {
@@ -687,9 +728,6 @@ export function App() {
         throw new Error(job.error || "Content generation stopped before it finished.");
       }
 
-      if (job?.generated_file) {
-        setGeneratedFile(job.generated_file);
-      }
       setCurrentWritingSection("");
       setStatus(generationStatusMessage(job));
     } catch (error) {
@@ -1738,7 +1776,7 @@ export function App() {
           onRemoveAttachedFile={removeAttachedFile}
           hasSelectedParagraphText={Boolean(selectedParagraph?.text)}
         />
-        <Manuscript manuscript={workspaceData.manuscript} refList={workspaceData.ref_list} generatedContent={generatedContent} isGenerating={isSavingOutline} currentWritingSection={currentWritingSection} selectedParagraphId={selectedParagraph?.id ?? ""} updatingParagraphId={updatingParagraphId} onParagraphSelectionChange={setSelectedParagraph} />
+        <Manuscript manuscript={workspaceData.manuscript} refList={workspaceData.ref_list} generatedContent={generatedContent} isGenerating={isSavingOutline} currentWritingSection={currentWritingSection} selectedParagraphId={selectedParagraph?.id ?? ""} syncVersion={manuscriptSyncVersion} updatingParagraphId={updatingParagraphId} onParagraphSelectionChange={setSelectedParagraph} />
       </main>
       <SettingsPanel settings={aiSettings} modelOptions={llmOptions} isOpen={isSettingsPanelOpen} isSaving={isSavingSettings} onClose={() => setIsSettingsPanelOpen(false)} onSave={saveSettings} />
       {isChangePasswordOpen && authSession?.user?.email ? (

@@ -210,6 +210,7 @@ export function Manuscript({
   isGenerating = false,
   currentWritingSection = "",
   selectedParagraphId = "",
+  syncVersion = 0,
   updatingParagraphId = "",
   onParagraphSelectionChange,
 }) {
@@ -228,9 +229,18 @@ export function Manuscript({
 
   const streamedSectionsRef = useRef(sections);
   const streamGenerationChangesRef = useRef(false);
+  const lastSyncVersionRef = useRef(syncVersion);
   const [streamedSections, setStreamedSections] = useState(sections);
 
   useEffect(() => {
+    if (syncVersion !== lastSyncVersionRef.current) {
+      lastSyncVersionRef.current = syncVersion;
+      streamGenerationChangesRef.current = false;
+      streamedSectionsRef.current = sections;
+      setStreamedSections(sections);
+      return undefined;
+    }
+
     if (!isGenerating) {
       streamGenerationChangesRef.current = false;
       streamedSectionsRef.current = sections;
@@ -274,7 +284,7 @@ export function Manuscript({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isGenerating, sections]);
+  }, [isGenerating, sections, syncVersion]);
 
   const visibleSections = streamedSections;
   const activeStreamingIndex = visibleSections.findIndex((section, index) => section.body !== (sections[index]?.body ?? ""));

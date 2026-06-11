@@ -93,11 +93,6 @@ class ContentRequest(AIRequestBase):
     concept_map: dict[str, Any] = Field(default_factory=dict)
 
 
-class OutlineRequest(AIRequestBase):
-    query: str
-    dir_path_ref_files: str | None = None
-
-
 class OutlineFormatRequest(AIRequestBase):
     outline_unstructured: str
     query: str = ""
@@ -2610,6 +2605,9 @@ async def _run_generation_job(
         job["task"] = None
 
 
+# Health and bootstrap
+
+
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
     checks = {
@@ -2628,6 +2626,9 @@ async def health() -> dict[str, Any]:
         "chroma_port": Config.env_config.get("CHROMA_PORT"),
         "checked_at": datetime.now().isoformat(),
     }
+
+
+# Outline templates
 
 
 @app.get("/api/outline-templates")
@@ -2703,6 +2704,9 @@ async def uploaded_outline_template(template_name: str, credentials_id: int | No
         raise _api_error("load uploaded outline template", exp)
 
 
+# Workspace bootstrap
+
+
 @app.get("/api/workspace")
 async def workspace_data() -> dict[str, Any]:
     return {
@@ -2712,6 +2716,9 @@ async def workspace_data() -> dict[str, Any]:
         "generated_documents": [],
         "uploaded_documents": [],
     }
+
+
+# Authentication
 
 
 @app.post("/api/auth/login")
@@ -2914,6 +2921,9 @@ async def change_password(request: ChangePasswordRequest) -> dict[str, Any]:
         raise _api_error("change password", exp)
 
 
+# Settings
+
+
 @app.get("/api/settings/default")
 async def default_settings(session: str | None = Query(None)) -> dict[str, Any]:
     try:
@@ -2998,6 +3008,9 @@ async def update_settings(
         raise _api_error("update settings", exp)
 
 
+# Generated files and manuscripts
+
+
 @app.get("/api/generated-files")
 async def generated_files(
     email: str | None = Query(None),
@@ -3014,6 +3027,168 @@ async def generated_files(
         raise
     except Exception as exp:
         raise _api_error("load generated files", exp)
+
+
+@app.post("/api/generated-files")
+async def create_generated_file(request: GeneratedFileRequest) -> dict[str, Any]:
+    try:
+        from src import db
+
+        email = _validate_email(request.email) if request.email else ""
+        session = "" if email else request.session.strip()
+        if not email and not session:
+            raise HTTPException(status_code=400, detail="A session is required to save a file.")
+        file_name = request.file_name.strip()
+        if not file_name:
+            raise HTTPException(status_code=400, detail="File name is required.")
+
+        if email:
+            if request.settings_id is None:
+                raise HTTPException(status_code=400, detail="Settings id is required for signed-in users.")
+            owner_fields, owner_values, _, _ = _owner_filter_fields(email=email, session=session)
+            settings = db.selectFromDB(
+                table_name="settings",
+                field_names=["id", *owner_fields],
+                field_values=[[request.settings_id], *owner_values],
+                limit=1,
+            )
+            if not _records_from_dataframe(settings):
+                raise HTTPException(status_code=404, detail="Settings row was not found for this session.")
+
+        valid_architectures = {item.value for item in db.generated_files_ai_architecture}
+        if request.ai_architecture not in valid_architectures:
+            raise HTTPException(status_code=400, detail="Invalid AI architecture.")
+
+        now = datetime.now()
+        inserted_ids = db.insertIntoDB(
+            table_name="generated_files",
+            field_names=[
+                "email",
+                "session",
+                "file_name",
+                "status",
+                "settings_id",
+                "ai_architecture",
+                "create_date",
+                "update_date",
+            ],
+            field_values=[
+                [email],
+                [session],
+                [file_name],
+                [db.generated_files_status.CREATED.value],
+                [request.settings_id],
+                [request.ai_architecture],
+                [now],
+                [now],
+            ],
+        )
+        generated_file = {
+            "id": inserted_ids[0] if inserted_ids else None,
+            "email": email,
+            "session": session,
+            "file_name": file_name,
+            "status": db.generated_files_status.CREATED.value,
+            "settings_id": request.settings_id,
+            "ai_architecture": request.ai_architecture,
+            "create_date": now,
+            "update_date": now,
+        }
+        return {"status": "saved", "generated_file": _jsonable(generated_file)}
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("save generated file", exp)
+
+
+@app.patch("/api/generated-files/{generated_file_id}")
+async def update_generated_file(generated_file_id: int, request: GeneratedFileUpdateRequest) -> dict[str, Any]:
+    try:
+        from src import db
+
+        file_name = request.file_name.strip()
+        if not file_name:
+            raise HTTPException(status_code=400, detail="File name is required.")
+
+        existing = db.selectFromDB(
+            table_name="generated_files",
+            field_names=["id"],
+            field_values=[[generated_file_id]],
+            limit=1,
+        )
+        if not _records_from_dataframe(existing):
+            raise HTTPException(status_code=404, detail="Generated file was not found.")
+
+        now = datetime.now()
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["file_name", "update_date"],
+            update_values=[file_name, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+        updated = db.selectFromDB(
+            table_name="generated_files",
+            field_names=["id"],
+            field_values=[[generated_file_id]],
+            limit=1,
+        )
+        records = _records_from_dataframe(updated)
+        return {"status": "saved", "generated_file": _generated_file_record(records[0])}
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("update generated file", exp)
+
+
+@app.delete("/api/generated-files/{generated_file_id}")
+async def delete_generated_file(
+    generated_file_id: int,
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+) -> dict[str, Any]:
+    try:
+        from src import db
+
+        generated_file = _generated_file_by_id(generated_file_id, email=email, session=session)
+        now = datetime.now()
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["status", "update_date"],
+            update_values=[db.generated_files_status.DELETED.value, now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        active_collections = db.selectFromDB(
+            table_name="vector_db_collections",
+            field_names=["generated_files_id", "status"],
+            field_values=[[generated_file_id], [db.vector_db_collections_status.ACTIVE.value]],
+        )
+        for collection in _records_from_dataframe(active_collections):
+            _delete_vector_collection_record(collection, now)
+
+        records = _generated_records_for_owner(
+            email=generated_file.get("email") or email,
+            session=generated_file.get("session") or session,
+            limit=1000,
+        )
+        return {
+            "status": "deleted",
+            "generated_file": _generated_file_record(
+                {
+                    **generated_file,
+                    "status": db.generated_files_status.DELETED.value,
+                    "update_date": now,
+                }
+            ),
+            "generated_documents": [_generated_document_detail(record) for record in records],
+            "message": "Generated document removed.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("remove generated file", exp)
 
 
 @app.get("/api/generated-files/{generated_file_id}/manuscript")
@@ -3672,6 +3847,9 @@ async def generate_generated_file(
         raise _api_error("start content generation", exp)
 
 
+# Generation jobs
+
+
 @app.get("/api/generation-jobs/{job_id}")
 async def generation_job(job_id: str) -> dict[str, Any]:
     job = GENERATION_JOBS.get(job_id)
@@ -3703,6 +3881,9 @@ async def pause_generation_job(job_id: str) -> dict[str, Any]:
             _finalize_generation_task(job)
 
     return {"job": _job_snapshot(job)}
+
+
+# Uploaded documents
 
 
 @app.get("/api/uploaded-files")
@@ -3939,166 +4120,7 @@ async def delete_uploaded_file(
         raise _api_error("delete uploaded document", exp)
 
 
-@app.post("/api/generated-files")
-async def create_generated_file(request: GeneratedFileRequest) -> dict[str, Any]:
-    try:
-        from src import db
-
-        email = _validate_email(request.email) if request.email else ""
-        session = "" if email else request.session.strip()
-        if not email and not session:
-            raise HTTPException(status_code=400, detail="A session is required to save a file.")
-        file_name = request.file_name.strip()
-        if not file_name:
-            raise HTTPException(status_code=400, detail="File name is required.")
-
-        if email:
-            if request.settings_id is None:
-                raise HTTPException(status_code=400, detail="Settings id is required for signed-in users.")
-            owner_fields, owner_values, _, _ = _owner_filter_fields(email=email, session=session)
-            settings = db.selectFromDB(
-                table_name="settings",
-                field_names=["id", *owner_fields],
-                field_values=[[request.settings_id], *owner_values],
-                limit=1,
-            )
-            if not _records_from_dataframe(settings):
-                raise HTTPException(status_code=404, detail="Settings row was not found for this session.")
-
-        valid_architectures = {item.value for item in db.generated_files_ai_architecture}
-        if request.ai_architecture not in valid_architectures:
-            raise HTTPException(status_code=400, detail="Invalid AI architecture.")
-
-        now = datetime.now()
-        inserted_ids = db.insertIntoDB(
-            table_name="generated_files",
-            field_names=[
-                "email",
-                "session",
-                "file_name",
-                "status",
-                "settings_id",
-                "ai_architecture",
-                "create_date",
-                "update_date",
-            ],
-            field_values=[
-                [email],
-                [session],
-                [file_name],
-                [db.generated_files_status.CREATED.value],
-                [request.settings_id],
-                [request.ai_architecture],
-                [now],
-                [now],
-            ],
-        )
-        generated_file = {
-            "id": inserted_ids[0] if inserted_ids else None,
-            "email": email,
-            "session": session,
-            "file_name": file_name,
-            "status": db.generated_files_status.CREATED.value,
-            "settings_id": request.settings_id,
-            "ai_architecture": request.ai_architecture,
-            "create_date": now,
-            "update_date": now,
-        }
-        return {"status": "saved", "generated_file": _jsonable(generated_file)}
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("save generated file", exp)
-
-
-@app.patch("/api/generated-files/{generated_file_id}")
-async def update_generated_file(generated_file_id: int, request: GeneratedFileUpdateRequest) -> dict[str, Any]:
-    try:
-        from src import db
-
-        file_name = request.file_name.strip()
-        if not file_name:
-            raise HTTPException(status_code=400, detail="File name is required.")
-
-        existing = db.selectFromDB(
-            table_name="generated_files",
-            field_names=["id"],
-            field_values=[[generated_file_id]],
-            limit=1,
-        )
-        if not _records_from_dataframe(existing):
-            raise HTTPException(status_code=404, detail="Generated file was not found.")
-
-        now = datetime.now()
-        db.updateDB(
-            table_name="generated_files",
-            update_fields=["file_name", "update_date"],
-            update_values=[file_name, now],
-            select_fields=["id"],
-            select_values=[[generated_file_id]],
-        )
-        updated = db.selectFromDB(
-            table_name="generated_files",
-            field_names=["id"],
-            field_values=[[generated_file_id]],
-            limit=1,
-        )
-        records = _records_from_dataframe(updated)
-        return {"status": "saved", "generated_file": _generated_file_record(records[0])}
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("update generated file", exp)
-
-
-@app.delete("/api/generated-files/{generated_file_id}")
-async def delete_generated_file(
-    generated_file_id: int,
-    email: str | None = Query(None),
-    session: str | None = Query(None),
-) -> dict[str, Any]:
-    try:
-        from src import db
-
-        generated_file = _generated_file_by_id(generated_file_id, email=email, session=session)
-        now = datetime.now()
-        db.updateDB(
-            table_name="generated_files",
-            update_fields=["status", "update_date"],
-            update_values=[db.generated_files_status.DELETED.value, now],
-            select_fields=["id"],
-            select_values=[[generated_file_id]],
-        )
-
-        active_collections = db.selectFromDB(
-            table_name="vector_db_collections",
-            field_names=["generated_files_id", "status"],
-            field_values=[[generated_file_id], [db.vector_db_collections_status.ACTIVE.value]],
-        )
-        for collection in _records_from_dataframe(active_collections):
-            _delete_vector_collection_record(collection, now)
-
-        records = _generated_records_for_owner(
-            email=generated_file.get("email") or email,
-            session=generated_file.get("session") or session,
-            limit=1000,
-        )
-        return {
-            "status": "deleted",
-            "generated_file": _generated_file_record(
-                {
-                    **generated_file,
-                    "status": db.generated_files_status.DELETED.value,
-                    "update_date": now,
-                }
-            ),
-            "generated_documents": [_generated_document_detail(record) for record in records],
-            "message": "Generated document removed.",
-        }
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("remove generated file", exp)
+# AI outline utilities
 
 
 @app.post("/api/ai/outline")
@@ -4144,33 +4166,6 @@ async def format_outline(request: OutlineFormatRequest) -> dict[str, Any]:
         raise
     except Exception as exp:
         raise _api_error("format outline", exp)
-
-
-@app.post("/api/ai/content")
-async def write_content(request: ContentRequest) -> dict[str, Any]:
-    try:
-        from src.ai.architecture import ContentWriterArchitecture
-
-        if request.architecture_type == "rag" and not request.collection_name and not request.collection_name_lit_search:
-            raise HTTPException(
-                status_code=400,
-                detail="RAG content generation needs an attached-document collection or a literature-search collection. Attach files or enable Literature Search, then try again.",
-            )
-
-        architecture = ContentWriterArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-            type=request.architecture_type,
-            collection_name=request.collection_name,
-            collection_name_lit_search=request.collection_name_lit_search,
-        )
-        response = await architecture.ainvoke(_content_state(request))
-        return {"result": _jsonable(response)}
-    except HTTPException:
-        raise
-    except Exception as exp:
-        raise _api_error("write content", exp)
 
 
 frontend_dist_paths = [
