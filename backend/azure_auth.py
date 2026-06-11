@@ -21,6 +21,7 @@ from src.utils import Config
 logger = logging.getLogger("discourse2draft.azure_auth")
 
 STATE_TTL_SECONDS = 10 * 60
+DEFAULT_AZURE_AUTH_LOGIN_BUTTON_LABEL = "Login with Azure credentials"
 REQUIRED_AZURE_AUTH_ENV_KEYS = (
     "AZURE_AUTH_TENANT_ID",
     "AZURE_AUTH_APPLICATION_CLIENT_ID",
@@ -77,9 +78,14 @@ def azure_auth_status() -> dict[str, Any]:
         for key in REQUIRED_AZURE_AUTH_ENV_KEYS
         if not str(Config.env_config.get(key) or "").strip()
     ]
+    login_button_label = str(
+        Config.env_config.get("AZURE_AUTH_LOGIN_BUTTON_LABEL")
+        or DEFAULT_AZURE_AUTH_LOGIN_BUTTON_LABEL
+    ).strip()
     return {
         "enabled": not missing_keys,
         "missing": missing_keys,
+        "login_button_label": login_button_label or DEFAULT_AZURE_AUTH_LOGIN_BUTTON_LABEL,
     }
 
 

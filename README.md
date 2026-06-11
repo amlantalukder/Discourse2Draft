@@ -96,17 +96,6 @@ SIMILARITY_THRESHOLD = 0.3
 NUM_DOCS_MAX = 5
 ```
 
-#### Other settings
-
-```yaml
-# NCBI (Optional, required for access of higher number of articles from PubMed)
-NCBI_API_KEY=<NCBI API key>
-
-# Mail service (Mailgun) (Optional, required for password retrieval during authentication)
-MAILGUN_DOMAIN=<Mailgun domain>
-MAILGUN_API_KEY=<Mailgun API key>
-```
-
 #### Database settings
 
 ```yaml
@@ -133,6 +122,30 @@ DB_HOST = 'postgres'
 DB_USER = 'postgres'
 DB_PASSWORD = 'root'
 DB_PORT = 5432
+```
+
+#### Other settings (optional)
+
+```yaml
+# Langfuse (Optional, used for debugging)
+LANGFUSE_SECRET_KEY=<Secret key for Langfuse>
+LANGFUSE_PUBLIC_KEY=<Public key for Langfuse>
+LANGFUSE_HOST=<URL to Langfuse instance>
+LANGFUSE_TRACING=<Enable tracing in Langfuse, set to True or False>
+
+# NCBI (Optional, required for access of higher number of articles from PubMed)
+NCBI_API_KEY=<NCBI API key>
+
+# Mail service (Mailgun) (Optional, required for password retrieval during authentication)
+MAILGUN_DOMAIN=<Mailgun domain>
+MAILGUN_API_KEY=<Mailgun API key>
+
+# Login with azure (Optional)
+AZURE_AUTH_APPLICATION_CLIENT_ID =
+AZURE_AUTH_CLIENT_SECRET =
+AZURE_AUTH_TENANT_ID =
+AZURE_AUTH_REDIRECT_URI =
+AZURE_AUTH_LOGIN_BUTTON_LABEL = 'Login with Azure credentials'
 ```
 
 ### Run app

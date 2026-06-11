@@ -4,10 +4,11 @@ import { getJSON, postJSON } from "../api/client";
 import { azureSignInUrl, clearAzureAuthCallback, completeAzureSignIn, getAzureAuthStatus, readAzureAuthCallback } from "../auth/azureAuth";
 import { AboutPage } from "./AboutPage";
 import { TopBar } from "./TopBar";
-import nihSymbol from "../../docs/figures/NIH-Symbol.png";
+import azureSymbol from "../../docs/figures/azure_login_logo.png";
 
 const PASSWORD_RULE = 'Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?"{}[]|<>).';
 const EMPTY_FORGOT_FORM = { email: "", code: "", password: "", confirm_password: "" };
+const DEFAULT_AZURE_LOGIN_BUTTON_LABEL = "Login with Azure credentials";
 
 function PasswordInput({ value, onChange, autoComplete, label }) {
   const [isVisible, setIsVisible] = useState(false);
@@ -41,36 +42,39 @@ export function LoginPage({ onContinue }) {
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
-  const [nihLoginStatus, setNihLoginStatus] = useState({
+  const [azureLoginStatus, setAzureLoginStatus] = useState({
     enabled: false,
     isLoading: true,
-    message: "Checking NIH login...",
+    label: DEFAULT_AZURE_LOGIN_BUTTON_LABEL,
+    message: "Checking Azure login...",
   });
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadNihLoginStatus() {
+    async function loadAzureLoginStatus() {
       try {
         const payload = await getAzureAuthStatus();
         if (!isMounted) return;
         const isEnabled = Boolean(payload.enabled);
-        setNihLoginStatus({
+        setAzureLoginStatus({
           enabled: isEnabled,
           isLoading: false,
-          message: isEnabled ? "" : "NIH login is not configured for this server.",
+          label: payload.login_button_label || DEFAULT_AZURE_LOGIN_BUTTON_LABEL,
+          message: isEnabled ? "" : "Azure login is not configured for this server.",
         });
       } catch (error) {
         if (!isMounted) return;
-        setNihLoginStatus({
+        setAzureLoginStatus({
           enabled: false,
           isLoading: false,
-          message: "NIH login is not available right now.",
+          label: DEFAULT_AZURE_LOGIN_BUTTON_LABEL,
+          message: "Azure login is not available right now.",
         });
       }
     }
 
-    loadNihLoginStatus();
+    loadAzureLoginStatus();
 
     return () => {
       isMounted = false;
@@ -89,7 +93,7 @@ export function LoginPage({ onContinue }) {
 
     let isMounted = true;
     async function finishAzureSignIn() {
-      setAuthMessage("Completing NIH login...");
+      setAuthMessage("Completing Azure login...");
       setAuthError("");
       setIsSubmitting(true);
       try {
@@ -273,19 +277,19 @@ export function LoginPage({ onContinue }) {
     return <p className={`auth-feedback ${authError ? "auth-feedback-error" : ""}`}>{authError || authMessage}</p>;
   }
 
-  function handleNihLoginClick(event) {
-    if (nihLoginStatus.enabled && !nihLoginStatus.isLoading && !isSubmitting) return;
+  function handleAzureLoginClick(event) {
+    if (azureLoginStatus.enabled && !azureLoginStatus.isLoading && !isSubmitting) return;
 
     event.preventDefault();
-    if (!nihLoginStatus.isLoading) {
+    if (!azureLoginStatus.isLoading) {
       setAuthMessage("");
-      setAuthError(nihLoginStatus.message || "NIH login is not available right now.");
+      setAuthError(azureLoginStatus.message || "Azure login is not available right now.");
     }
   }
 
   function renderLogin() {
-    const isNihLoginDisabled = isSubmitting || nihLoginStatus.isLoading || !nihLoginStatus.enabled;
-    const nihLoginTitle = nihLoginStatus.isLoading ? "Checking NIH login..." : nihLoginStatus.message || "Login with NIH credentials";
+    const isAzureLoginDisabled = isSubmitting || azureLoginStatus.isLoading || !azureLoginStatus.enabled;
+    const azureLoginTitle = azureLoginStatus.isLoading ? "Checking Azure login..." : azureLoginStatus.message || azureLoginStatus.label;
 
     return (
       <form className="auth-card auth-card-login" onSubmit={handleLogin}>
@@ -312,12 +316,12 @@ export function LoginPage({ onContinue }) {
           </button>
         </div>
 
-        {!isNihLoginDisabled && (
-          <a aria-disabled={isNihLoginDisabled} className={`tool-button auth-sso-button ${isNihLoginDisabled ? "auth-sso-button-disabled" : ""}`} href={isNihLoginDisabled ? "#" : azureSignInUrl()} onClick={handleNihLoginClick} tabIndex={isNihLoginDisabled ? -1 : 0} title={nihLoginTitle}>
-            <span className="nih-logo-mark" aria-hidden="true">
-              <img src={nihSymbol} alt="" />
+        {!isAzureLoginDisabled && (
+          <a aria-disabled={isAzureLoginDisabled} className={`tool-button auth-sso-button ${isAzureLoginDisabled ? "auth-sso-button-disabled" : ""}`} href={isAzureLoginDisabled ? "#" : azureSignInUrl()} onClick={handleAzureLoginClick} tabIndex={isAzureLoginDisabled ? -1 : 0} title={azureLoginTitle}>
+            <span className="azure-logo-mark" aria-hidden="true">
+              <img src={azureSymbol} alt="" />
             </span>
-            <span>Login with NIH credentials</span>
+            <span>{azureLoginStatus.label}</span>
           </a>
         )}
 

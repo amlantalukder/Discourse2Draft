@@ -2818,10 +2818,10 @@ async def azure_session(http_request: Request, request: AzureSessionRequest) -> 
     try:
         from azure_auth import exchange_code_for_claims_from_state, user_from_claims
 
-        logger.info("Completing NIH login session exchange")
+        logger.info("Completing Azure login session exchange")
         claims = exchange_code_for_claims_from_state(http_request, request.code, request.state)
         credential = _credential_for_azure_user(user_from_claims(claims))
-        logger.info("NIH login session completed for %s", credential.get("email"))
+        logger.info("Azure login session completed for %s", credential.get("email"))
         return {"status": "authenticated", "auth_provider": "azure", **_auth_payload(credential)}
     except HTTPException:
         raise
