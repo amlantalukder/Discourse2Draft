@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "./FontAwesomeIcons";
 import { getJSON, postJSON } from "../api/client";
+import { azureSignInUrl, clearAzureAuthCallback, completeAzureSignIn, getAzureAuthStatus, readAzureAuthCallback } from "../auth/azureAuth";
 import { AboutPage } from "./AboutPage";
 import { TopBar } from "./TopBar";
+import nihSymbol from "../../docs/figures/NIH-Symbol.png";
 
 const PASSWORD_RULE = 'Password must contain at least 8 characters, with at least one letter, one number, and one special character (!_@#$%^&*(),.?"{}[]|<>).';
 const EMPTY_FORGOT_FORM = { email: "", code: "", password: "", confirm_password: "" };
@@ -15,13 +17,7 @@ function PasswordInput({ value, onChange, autoComplete, label }) {
       <span>{label}</span>
       <span className="password-input-wrap">
         <input type={isVisible ? "text" : "password"} autoComplete={autoComplete} required value={value} onChange={onChange} />
-        <button
-          aria-label={isVisible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          className="password-toggle"
-          onClick={() => setIsVisible((current) => !current)}
-          title={isVisible ? "Hide password" : "Show password"}
-          type="button"
-        >
+        <button aria-label={isVisible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`} className="password-toggle" onClick={() => setIsVisible((current) => !current)} title={isVisible ? "Hide password" : "Show password"} type="button">
           {isVisible ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </span>
@@ -45,6 +41,80 @@ export function LoginPage({ onContinue }) {
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [nihLoginStatus, setNihLoginStatus] = useState({
+    enabled: false,
+    isLoading: true,
+    message: "Checking NIH login...",
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadNihLoginStatus() {
+      try {
+        const payload = await getAzureAuthStatus();
+        if (!isMounted) return;
+        const isEnabled = Boolean(payload.enabled);
+        setNihLoginStatus({
+          enabled: isEnabled,
+          isLoading: false,
+          message: isEnabled ? "" : "NIH login is not configured for this server.",
+        });
+      } catch (error) {
+        if (!isMounted) return;
+        setNihLoginStatus({
+          enabled: false,
+          isLoading: false,
+          message: "NIH login is not available right now.",
+        });
+      }
+    }
+
+    loadNihLoginStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const callback = readAzureAuthCallback();
+    if (!callback) return;
+
+    if (callback.error) {
+      setAuthError(callback.error);
+      clearAzureAuthCallback();
+      return;
+    }
+
+    let isMounted = true;
+    async function finishAzureSignIn() {
+      setAuthMessage("Completing NIH login...");
+      setAuthError("");
+      setIsSubmitting(true);
+      try {
+        const payload = await completeAzureSignIn(callback.code, callback.state);
+        if (isMounted) {
+          clearAzureAuthCallback();
+          onContinue(payload);
+        }
+      } catch (error) {
+        if (isMounted) {
+          clearAzureAuthCallback();
+          setAuthError(error.message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsSubmitting(false);
+        }
+      }
+    }
+
+    finishAzureSignIn();
+    return () => {
+      isMounted = false;
+    };
+  }, [onContinue]);
 
   function switchAuthView(nextView) {
     setAuthView(nextView);
@@ -203,7 +273,20 @@ export function LoginPage({ onContinue }) {
     return <p className={`auth-feedback ${authError ? "auth-feedback-error" : ""}`}>{authError || authMessage}</p>;
   }
 
+  function handleNihLoginClick(event) {
+    if (nihLoginStatus.enabled && !nihLoginStatus.isLoading && !isSubmitting) return;
+
+    event.preventDefault();
+    if (!nihLoginStatus.isLoading) {
+      setAuthMessage("");
+      setAuthError(nihLoginStatus.message || "NIH login is not available right now.");
+    }
+  }
+
   function renderLogin() {
+    const isNihLoginDisabled = isSubmitting || nihLoginStatus.isLoading || !nihLoginStatus.enabled;
+    const nihLoginTitle = nihLoginStatus.isLoading ? "Checking NIH login..." : nihLoginStatus.message || "Login with NIH credentials";
+
     return (
       <form className="auth-card auth-card-login" onSubmit={handleLogin}>
         <h1>Login</h1>
@@ -228,6 +311,15 @@ export function LoginPage({ onContinue }) {
             Forgot Password
           </button>
         </div>
+
+        {!isNihLoginDisabled && (
+          <a aria-disabled={isNihLoginDisabled} className={`tool-button auth-sso-button ${isNihLoginDisabled ? "auth-sso-button-disabled" : ""}`} href={isNihLoginDisabled ? "#" : azureSignInUrl()} onClick={handleNihLoginClick} tabIndex={isNihLoginDisabled ? -1 : 0} title={nihLoginTitle}>
+            <span className="nih-logo-mark" aria-hidden="true">
+              <img src={nihSymbol} alt="" />
+            </span>
+            <span>Login with NIH credentials</span>
+          </a>
+        )}
 
         <button className="auth-link" type="button" onClick={handleContinueWithoutLogin} disabled={isSubmitting}>
           {isSubmitting ? "Loading Settings" : "Continue Without Login"}
@@ -291,31 +383,14 @@ export function LoginPage({ onContinue }) {
 
         <label className="auth-field auth-field-short">
           <span>Email</span>
-          <input
-            type="email"
-            autoComplete="email"
-            disabled={forgotStep !== "email" || isSubmitting}
-            required
-            value={forgotForm.email}
-            onChange={updateForm(setForgotForm, "email")}
-          />
+          <input type="email" autoComplete="email" disabled={forgotStep !== "email" || isSubmitting} required value={forgotForm.email} onChange={updateForm(setForgotForm, "email")} />
         </label>
 
         {forgotStep !== "email" ? (
           <label className="auth-field auth-code-field">
             <span>Activation code</span>
             <span className="auth-code-input-row">
-              <input
-                type="text"
-                autoComplete="one-time-code"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                disabled={forgotStep === "password" || isSubmitting}
-                required
-                value={forgotForm.code}
-                onChange={updateForm(setForgotForm, "code")}
-              />
+              <input type="text" autoComplete="one-time-code" inputMode="numeric" maxLength={6} pattern="[0-9]{6}" disabled={forgotStep === "password" || isSubmitting} required value={forgotForm.code} onChange={updateForm(setForgotForm, "code")} />
               <button className="tool-button auth-resend-button" type="button" disabled={isSubmitting} onClick={handleResendResetCode}>
                 {isSubmitting ? "Sending" : "Resend"}
               </button>
@@ -326,12 +401,7 @@ export function LoginPage({ onContinue }) {
         {forgotStep === "password" ? (
           <>
             <PasswordInput label="New password" autoComplete="new-password" value={forgotForm.password} onChange={updateForm(setForgotForm, "password")} />
-            <PasswordInput
-              label="Confirm new password"
-              autoComplete="new-password"
-              value={forgotForm.confirm_password}
-              onChange={updateForm(setForgotForm, "confirm_password")}
-            />
+            <PasswordInput label="Confirm new password" autoComplete="new-password" value={forgotForm.confirm_password} onChange={updateForm(setForgotForm, "confirm_password")} />
             <p className="auth-note">{PASSWORD_RULE}</p>
           </>
         ) : null}

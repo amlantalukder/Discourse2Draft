@@ -1703,6 +1703,7 @@ export function App() {
       <TopBar
         accountLabel={authSession?.user?.email ?? "Anonymous session"}
         isGuest={authSession?.status === "anonymous" || !authSession?.user?.email}
+        canChangePassword={authSession?.auth_provider !== "azure"}
         onChangePassword={() => setIsChangePasswordOpen(true)}
         onHelp={() => setIsAboutOpen(true)}
         onLogout={logout}

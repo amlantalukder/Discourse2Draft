@@ -4,7 +4,7 @@ import { IconButton } from "./IconButton";
 
 const GITHUB_URL = "https://github.com/amlantalukder/Discourse2Draft";
 
-export function TopBar({ accountLabel = "Anonymous", isGuest = false, isLoginPage = false, onChangePassword, onHelp, onLogout }) {
+export function TopBar({ accountLabel = "Anonymous", isGuest = false, canChangePassword = true, isLoginPage = false, onChangePassword, onHelp, onLogout }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const AccountActionIcon = isGuest ? LogIn : LogOut;
   const accountActionLabel = isGuest ? "Login" : "Logout";
@@ -36,7 +36,7 @@ export function TopBar({ accountLabel = "Anonymous", isGuest = false, isLoginPag
             {isAccountMenuOpen ? (
               <div className="account-popover" role="menu">
                 <span>{accountLabel}</span>
-                {!isGuest ? (
+                {!isGuest && canChangePassword ? (
                   <button className="account-menu-button" type="button" role="menuitem" onClick={handleChangePassword}>
                     <KeyRound size={15} />
                     <span>Change Password</span>

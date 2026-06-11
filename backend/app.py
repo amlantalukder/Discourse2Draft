@@ -19,7 +19,7 @@ import zipfile
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from src.utils import Config
@@ -132,6 +132,11 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     password: str
     confirm_password: str
+
+
+class AzureSessionRequest(BaseModel):
+    code: str
+    state: str
 
 
 class GeneratedFileRequest(BaseModel):
@@ -427,6 +432,37 @@ def _public_user(record: dict[str, Any]) -> dict[str, Any]:
         "email": record.get("email"),
         "first_name": record.get("first_name"),
         "last_name": record.get("last_name"),
+    }
+
+
+def _credential_for_azure_user(user: dict[str, str]) -> dict[str, Any]:
+    from src import db
+
+    email = _validate_email(user["email"])
+    existing = _credential_by_email(email)
+    if existing is not None:
+        return existing
+
+    now = datetime.now()
+    inserted_ids = db.insertIntoDB(
+        table_name="credentials",
+        field_names=["email", "first_name", "last_name", "password", "create_date", "update_date"],
+        field_values=[
+            [email],
+            [user.get("first_name") or "Azure"],
+            [user.get("last_name") or "User"],
+            [db.encryptPassword(uuid4().hex)],
+            [now],
+            [now],
+        ],
+    )
+    return {
+        "id": int(inserted_ids[0]) if inserted_ids else None,
+        "email": email,
+        "first_name": user.get("first_name") or "Azure",
+        "last_name": user.get("last_name") or "User",
+        "create_date": now,
+        "update_date": now,
     }
 
 
@@ -2736,6 +2772,61 @@ async def login(request: LoginRequest) -> dict[str, Any]:
         raise
     except Exception as exp:
         raise _api_error("authenticate user", exp)
+
+
+@app.get("/api/auth/azure/login")
+async def azure_login(request: Request) -> RedirectResponse:
+    try:
+        from azure_auth import azure_login_redirect
+
+        return azure_login_redirect(request)
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("start Azure sign-in", exp)
+
+
+@app.get("/api/auth/azure/status")
+async def azure_status() -> dict[str, Any]:
+    try:
+        from azure_auth import azure_auth_status
+
+        return azure_auth_status()
+    except Exception as exp:
+        raise _api_error("check Azure sign-in", exp)
+
+
+@app.get("/api/auth/azure/callback")
+async def azure_auth_callback(
+    request: Request,
+    code: str | None = Query(None),
+    state: str | None = Query(None),
+    error: str | None = Query(None),
+) -> RedirectResponse:
+    try:
+        from azure_auth import azure_callback_redirect
+
+        return azure_callback_redirect(request, code=code, state=state, error=error)
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("complete Azure sign-in", exp)
+
+
+@app.post("/api/auth/azure/session")
+async def azure_session(http_request: Request, request: AzureSessionRequest) -> dict[str, Any]:
+    try:
+        from azure_auth import exchange_code_for_claims_from_state, user_from_claims
+
+        logger.info("Completing NIH login session exchange")
+        claims = exchange_code_for_claims_from_state(http_request, request.code, request.state)
+        credential = _credential_for_azure_user(user_from_claims(claims))
+        logger.info("NIH login session completed for %s", credential.get("email"))
+        return {"status": "authenticated", "auth_provider": "azure", **_auth_payload(credential)}
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("authenticate with Azure", exp)
 
 
 @app.post("/api/auth/create-account")

@@ -49,7 +49,7 @@ function formatErrorDetail(detail, fallback) {
   return friendlyMessage(detail, fallback);
 }
 
-function apiUrl(path) {
+export function apiUrl(path) {
   if (/^https?:\/\//i.test(path)) return path;
 
   const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
@@ -63,12 +63,27 @@ function apiUrl(path) {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-async function fetchJSON(path, options) {
+async function fetchJSON(path, options = {}) {
   let response;
+  const { timeoutMs, ...fetchOptions } = options ?? {};
+  let timeoutId;
+  if (timeoutMs) {
+    const controller = new AbortController();
+    fetchOptions.signal = controller.signal;
+    timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  }
+
   try {
-    response = await fetch(apiUrl(path), options);
+    response = await fetch(apiUrl(path), fetchOptions);
   } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("The backend is taking too long to finish signing you in. Please try again.");
+    }
     throw new Error("Backend is not reachable. Start the backend server and try again.");
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
   }
 
   const payload = await response.json().catch(() => ({}));
@@ -111,11 +126,12 @@ export async function getJSON(path) {
   return fetchJSON(path);
 }
 
-export async function postJSON(path, body) {
+export async function postJSON(path, body, options = {}) {
   return fetchJSON(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    ...options,
   });
 }
 
