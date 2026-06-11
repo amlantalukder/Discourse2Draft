@@ -1,9 +1,9 @@
 import re
 
-from .ai.architecture import OutlineCreatorArchitecture, OutlineFormatterArchitecture
 from .utils import print_func_name
 from .common import SpecialSectionTypes, ContentTypes, OutlineTAGs
 
+# ---------------------------------------------------------------------------
 @print_func_name
 def unMarkdownText(text):
 
@@ -13,6 +13,7 @@ def unMarkdownText(text):
     html = markdown(text)
     return ''.join(BeautifulSoup(html, features="html.parser").findAll(text=True))
 
+# ---------------------------------------------------------------------------
 @print_func_name
 def resetOutline(d):
     
@@ -26,6 +27,7 @@ def resetOutline(d):
 
     return d
 
+# ---------------------------------------------------------------------------
 @print_func_name
 def insertOutline(d, outline_items):
 
@@ -40,6 +42,7 @@ def insertOutline(d, outline_items):
 
     return d
 
+# ---------------------------------------------------------------------------
 @print_func_name
 def processOutline(outline):
 
@@ -96,29 +99,7 @@ def processOutline(outline):
 
     return d_outline
 
-@print_func_name
-def generateOutlineByAI(query, dir_path_ref_files=None):
-    '''
-    Use AI to generate outline from a given query
-    '''
-    agent = OutlineCreatorArchitecture(dir_path_ref_files=dir_path_ref_files)   
-    response = agent.invoke({'query': query})
-    outline = response['content']
-
-    return outline
-
-@print_func_name
-def processOutlineByAI(outline):
-    '''
-    Use AI to process outline into structured format
-    '''
-    agent = OutlineFormatterArchitecture()
-    response = agent.invoke({'outline_unstructured': outline})
-    outline_structured = response['content']
-    print(outline_structured)
-    
-    return outline_structured
-
+# ---------------------------------------------------------------------------
 @print_func_name
 def getRawOutline(d, raw_outline=[], counter=1):
 

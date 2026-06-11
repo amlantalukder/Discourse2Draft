@@ -89,8 +89,8 @@ GENERATE_CONTENT_INSTRUCTIONS = '''\
     
     <Form>
     - Only paragraphs — no headings, no numbering, no bullet points, no embedded outline codes.
-    - You may use multiple paragraphs if needed to cover the content deeply and coherently. 
-    - If not absolutely necessary, do not split related content into different paragraphs to maintain consistency.
+    - You may use multiple paragraphs if needed to cover the content deeply and coherently.
+    - If not absolutely necessary, do not split related content into separate paragraphs as that will lose consistency.
     </Form>
 
     <Writing Depth and Style>

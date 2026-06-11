@@ -290,17 +290,17 @@ function deleteSection(sections, sectionId) {
 }
 
 function contentLabel(type) {
-  if (type === "instructions") return "Instructions before AI";
-  if (type === "userContentBefore") return "User content before AI";
-  if (type === "userContentAfter") return "User content after AI";
-  return "Reserve for AI content";
+  if (type === "instructions") return "Instructions for AI";
+  if (type === "userContentBefore") return "Content before AI";
+  if (type === "userContentAfter") return "Content after AI";
+  return "Room for AI content";
 }
 
 function contentPreview(section, type) {
   if (type === "instructions") return section.instructions.trim() || "Instructions";
-  if (type === "userContentBefore") return section.userContentBefore.trim() || "User content before AI";
-  if (type === "userContentAfter") return section.userContentAfter.trim() || "User content after AI";
-  return "[Reserve for AI content]";
+  if (type === "userContentBefore") return section.userContentBefore.trim() || "Content before AI";
+  if (type === "userContentAfter") return section.userContentAfter.trim() || "Content after AI";
+  return "[Room for AI content]";
 }
 
 function availableContentTypes(section) {

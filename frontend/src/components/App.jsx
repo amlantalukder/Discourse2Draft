@@ -753,6 +753,26 @@ export function App() {
     }
   }
 
+  function resetManuscriptForOutlineReplacement() {
+    pauseRequestedRef.current = true;
+    activeGenerationJobRef.current = "";
+    setGeneratedContent("");
+    setCurrentWritingSection("");
+    setCurrentGenerationJobId("");
+    setSelectedParagraph(null);
+    setUpdatingParagraphId("");
+    setIsWriting(false);
+    setIsSavingOutline(false);
+    setIsConceptMapOpen(false);
+    setWorkspaceData((current) => ({
+      ...current,
+      manuscript: [],
+      ref_list: [],
+      concept_maps: [],
+    }));
+    setStatus("Manuscript reset because the outline is being replaced.");
+  }
+
   function resetDocumentWorkspace(nextStatus = "") {
     pauseRequestedRef.current = true;
     activeGenerationJobRef.current = "";
@@ -1692,6 +1712,7 @@ export function App() {
           onOutlineTemplateChange={selectOutlineTemplate}
           onUploadedOutlineTemplateChange={selectUploadedOutlineTemplate}
           onGenerate={generateOutline}
+          onReplaceOutlineConfirm={resetManuscriptForOutlineReplacement}
           onFormat={formatOutline}
           onRun={runStructuredOutline}
           onRegenerate={regenerateStructuredOutline}

@@ -1938,14 +1938,14 @@ def _process_manuscript_citations(
     manuscript: list[dict[str, Any]],
     attached_references: dict[str, str],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    from src.generate import processCitation, sanitizeContent
+    from src.common import processCitation, sanitizeContent
 
     current_ref_list = []
     processed_manuscript = []
     for section in manuscript:
         section_body = str(section.get("body") or "")
         if attached_references and "CITE(" in section_body:
-            section_body, current_ref_list = processCitation(section_body, current_ref_list, attached_references)
+            section_body, current_ref_list = processCitation(section_body, attached_references, current_ref_list, enable_html_link_format=True)
         section_body = sanitizeContent(section_body)
         processed_manuscript.append({**section, "body": section_body})
 

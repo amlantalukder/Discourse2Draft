@@ -17,7 +17,11 @@ function itemMatchesSearch(item, query, fields) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
 
-  return fields.some((field) => String(item?.[field] ?? "").toLowerCase().includes(normalizedQuery));
+  return fields.some((field) =>
+    String(item?.[field] ?? "")
+      .toLowerCase()
+      .includes(normalizedQuery),
+  );
 }
 
 function healthStatus(check, isLoading) {
@@ -266,7 +270,7 @@ export function Sidebar({
         <section className={`side-section uploaded-templates ${isUploadedTemplatesExpanded ? "" : "is-collapsed"}`}>
           <header>
             <button className="side-section-toggle" type="button" aria-expanded={isUploadedTemplatesExpanded} onClick={() => setIsUploadedTemplatesExpanded((current) => !current)}>
-              <span>Uploaded templates</span>
+              <span>Uploaded outline templates</span>
             </button>
             <button className="section-collapse-button" type="button" aria-label={isUploadedTemplatesExpanded ? "Collapse uploaded templates" : "Expand uploaded templates"} aria-expanded={isUploadedTemplatesExpanded} onClick={() => setIsUploadedTemplatesExpanded((current) => !current)}>
               <ChevronDown size={17} />
@@ -285,17 +289,17 @@ export function Sidebar({
               ) : null}
               <div className="uploaded-template-list">
                 {!canUploadTemplates ? <p className="empty-panel-message">Start a workspace session to upload outline templates.</p> : null}
-                {canUploadTemplates && filteredUploadedTemplates.length ? (
-                  filteredUploadedTemplates.map((template) => (
-                    <div className="uploaded-template-row" key={template.name} title={template.file_name ?? template.label ?? template.name}>
-                      <span className="file-chip md">md</span>
-                      <div>
-                        <span>{template.label || template.name}</span>
-                        {template.file_name ? <time>{template.file_name}</time> : null}
+                {canUploadTemplates && filteredUploadedTemplates.length
+                  ? filteredUploadedTemplates.map((template) => (
+                      <div className="uploaded-template-row" key={template.name} title={template.file_name ?? template.label ?? template.name}>
+                        <span className="file-chip md">md</span>
+                        <div>
+                          <span>{template.label || template.name}</span>
+                          {template.file_name ? <time>{template.file_name}</time> : null}
+                        </div>
                       </div>
-                    </div>
-                  ))
-                ) : null}
+                    ))
+                  : null}
                 {canUploadTemplates && uploadedTemplates.length && !filteredUploadedTemplates.length ? <p className="empty-panel-message">No matching uploaded templates.</p> : null}
                 {canUploadTemplates && !uploadedTemplates.length && !isLoadingUploadedTemplates && !isUploadingTemplates ? <p className="empty-panel-message">No uploaded templates yet.</p> : null}
                 {isLoadingUploadedTemplates || isUploadingTemplates ? (

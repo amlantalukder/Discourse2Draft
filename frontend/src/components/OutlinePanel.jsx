@@ -22,6 +22,7 @@ export function OutlinePanel({
   onOutlineTemplateChange,
   onUploadedOutlineTemplateChange,
   onGenerate,
+  onReplaceOutlineConfirm,
   onFormat,
   onRun,
   onRegenerate,
@@ -98,6 +99,11 @@ export function OutlinePanel({
     } finally {
       setIsCreatingOutline(false);
     }
+  }
+
+  function confirmCreateOutlineFromQuery() {
+    onReplaceOutlineConfirm?.();
+    createOutlineFromQuery();
   }
 
   return (
@@ -196,11 +202,11 @@ export function OutlinePanel({
           {
             label: "Create new outline",
             variant: "danger",
-            onClick: createOutlineFromQuery,
+            onClick: confirmCreateOutlineFromQuery,
           },
         ]}
       >
-        <p>This file already has a saved outline in the "Structured Outline" tab. Creating a new outline will replace the current outline after you review and save it in the outline editor.</p>
+        <p>This file already has a saved outline in the "Structured Outline" tab. Creating a new outline will reset the current manuscript and replace the outline after you review and save it in the outline editor.</p>
       </ConfirmDialog>
     </section>
   );
