@@ -34,6 +34,7 @@ class StateContentManager(TypedDict):
 # ---------------------------------------------------------------------------
 class StateOutlineManager(TypedDict):
     query: str
+    details: str
     steps: Annotated[List[str], add]
     reference_summary: str
     content: str

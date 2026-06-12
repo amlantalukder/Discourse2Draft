@@ -66,6 +66,8 @@ class GenerateOutline:
     <Query>
     {{query}}
     </Query>
+                                                                
+    {{details}}
                                               
     <Instructions>
     {instructions}
@@ -99,7 +101,9 @@ class GenerateOutline:
         
         return_vals = extractLLMResponse(task_name = 'Generate Outline', 
                                   chain = self.generate_outline_chain,
-                                  kargs = {'query': state['query'], 'reference_summary': state.get('reference_summary', '')},
+                                  kargs = {'query': state['query'], 
+                                           'details': f'<Details>\n{state['details']}\n</Details>' if state['details'] else '', 
+                                           'reference_summary': state.get('reference_summary', '')},
                                   keys_to_find = ['content'],
                                   value_names = ['content'],
                                   additionalCheckingFunc=contentChecker)

@@ -1,9 +1,8 @@
 import pandas as pd
 import hashlib
 import sqlalchemy as sa
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import DateTime
-from sqlalchemy.orm import mapped_column, Mapped, Session
+from sqlalchemy.orm import mapped_column, Mapped, Session, declarative_base
 from sqlalchemy_utils import database_exists, create_database
 from datetime import datetime
 from typing import Literal, List, Optional
