@@ -519,20 +519,6 @@ def _settings_record(record: dict[str, Any]) -> dict[str, Any]:
         "update_date": record.get("update_date"),
     }
 
-
-def _default_settings() -> dict[str, Any]:
-    return {
-        "id": None,
-        "email": None,
-        "session": uuid4().hex,
-        "llm": _required_default_model(),
-        "temperature": 0.0,
-        "instructions": "",
-        "create_date": None,
-        "update_date": None,
-    }
-
-
 def _create_guest_auth_payload(session: str | None = None) -> dict[str, Any]:
     from src import db
 
@@ -1651,16 +1637,6 @@ async def _save_uploaded_outline_template(credentials_id: int, upload: UploadFil
         "file_name": template_path.name,
         "last_modified": datetime.fromtimestamp(template_path.stat().st_mtime).isoformat(),
     }
-
-
-def _un_markdown_text(text: str) -> str:
-    try:
-        from bs4 import BeautifulSoup
-        from markdown import markdown
-
-        return "".join(BeautifulSoup(markdown(text), features="html.parser").find_all(text=True))
-    except Exception:
-        return re.sub(r"[*_`#>\[\]()]", "", text)
 
 
 def _process_outline(outline: str) -> dict[str, Any]:
