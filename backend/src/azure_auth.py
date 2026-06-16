@@ -18,7 +18,7 @@ from fastapi.responses import RedirectResponse
 from src.utils import Config
 
 
-logger = logging.getLogger("discourse2draft.azure_auth")
+logger = logging.getLogger(f"{Config.APP_NAME_AS_PREFIX}.azure_auth")
 
 STATE_TTL_SECONDS = 10 * 60
 DEFAULT_AZURE_AUTH_LOGIN_BUTTON_LABEL = "Login with Azure credentials"
