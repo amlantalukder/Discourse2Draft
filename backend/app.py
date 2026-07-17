@@ -6,7 +6,7 @@ import types
 from typing import Any
 
 import app_utils
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -110,6 +110,35 @@ async def uploaded_outline_template(template_name: str, credentials_id: int | No
 @app.get("/api/workspace")
 async def workspace_data() -> dict[str, Any]:
     return await app_utils._handle_workspace_data()
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Maintainer tools
+# ---------------------------------------------------------------------------------------------------------------
+
+@app.get("/api/maintainer/logs")
+async def maintainer_logs(
+    email: str | None = Query(None),
+    session: str | None = Query(None),
+    x_maintainer_token: str | None = Header(None),
+    search: str | None = Query(None),
+    status: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    sort_by: app_utils.LogSortField = Query("date"),
+    sort_dir: app_utils.SortDirection = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=10, le=100),
+) -> dict[str, Any]:
+    return await app_utils._handle_maintainer_logs(email, session, x_maintainer_token, search, status, date_from, date_to, sort_by, sort_dir, page, page_size)
+
+
+@app.post("/api/maintainer/logs/clear")
+async def clear_maintainer_logs(
+    request: app_utils.MaintainerLogClearRequest,
+    x_maintainer_token: str | None = Header(None),
+) -> dict[str, Any]:
+    return await app_utils._handle_clear_maintainer_logs(request, x_maintainer_token)
 
 
 # ---------------------------------------------------------------------------------------------------------------

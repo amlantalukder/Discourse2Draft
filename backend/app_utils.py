@@ -33,6 +33,7 @@ from src.auth import (
     reset_password as auth_reset_password,
     send_password_reset_code,
     validate_email as _validate_email,
+    validate_maintainer_access,
     verify_reset_code as auth_verify_reset_code,
 )
 from src.utils import Config
@@ -73,10 +74,12 @@ class GeneratedFileRequest(BaseModel):
     settings_id: int | None = None
     file_name: str
     ai_architecture: Literal["base", "rag", "graphrag"] = "base"
+    replace: bool = False
 
 
 class GeneratedFileUpdateRequest(BaseModel):
     file_name: str
+    replace: bool = False
 
 
 class GeneratedFileLiteratureSearchRequest(BaseModel):
@@ -113,12 +116,20 @@ class GeneratedFileParagraphUpdateRequest(AIRequestBase):
 
 
 DownloadFormat = Literal["md", "docx", "latex"]
+LogSortField = Literal["date", "status", "message"]
+SortDirection = Literal["asc", "desc"]
 
 
 class SettingsUpdateRequest(BaseModel):
     llm: str
     temperature: float = Field(ge=0, le=2)
     instructions: str = ""
+
+
+class MaintainerLogClearRequest(BaseModel):
+    email: str
+    session: str
+    entry_ids: list[int] = Field(default_factory=list)
 
 
 def _required_default_model() -> str:
@@ -164,6 +175,81 @@ def _api_error(action: str, exp: Exception) -> HTTPException:
     logger.exception("Unable to %s", action)
     status_code, detail = _friendly_error_detail(action, exp)
     return HTTPException(status_code=status_code, detail=detail)
+
+
+_LOG_LINE_PATTERN = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<status>[A-Z]+)\] (?P<message>.*)$")
+
+
+def _parse_log_date(value: str | None, end_of_day: bool = False) -> datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    for date_format in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(text, date_format)
+            if date_format == "%Y-%m-%d" and end_of_day:
+                return parsed.replace(hour=23, minute=59, second=59)
+            return parsed
+        except ValueError:
+            continue
+    raise HTTPException(status_code=400, detail="Use YYYY-MM-DD for log date filters.")
+
+
+def _log_entries() -> list[dict[str, Any]]:
+    log_file_path = Config.DIR_HOME / "logs" / "app.log"
+    if not log_file_path.exists():
+        return []
+
+    entries: list[dict[str, Any]] = []
+    entry_id = 0
+    with log_file_path.open("r", encoding="utf-8", errors="replace") as fp:
+        for line in fp:
+            clean_line = line.rstrip("\n")
+            match = _LOG_LINE_PATTERN.match(clean_line)
+            if match:
+                entries.append(
+                    {
+                        "id": entry_id,
+                        "date": match.group("date"),
+                        "status": match.group("status"),
+                        "message": match.group("message"),
+                        "_lines": [line],
+                    }
+                )
+                entry_id += 1
+                continue
+
+            if entries and clean_line.strip():
+                entries[-1]["message"] = f"{entries[-1]['message']}\n{clean_line}"
+                entries[-1]["_lines"].append(line)
+
+    return entries
+
+
+def _public_log_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in entry.items() if not key.startswith("_")}
+
+
+def _clear_log_entries(entry_ids: list[int]) -> int:
+    ids_to_remove = {int(entry_id) for entry_id in entry_ids}
+    if not ids_to_remove:
+        raise HTTPException(status_code=400, detail="Select at least one log entry to clear.")
+
+    log_file_path = Config.DIR_HOME / "logs" / "app.log"
+    entries = _log_entries()
+    removed_count = sum(1 for entry in entries if int(entry["id"]) in ids_to_remove)
+    if removed_count == 0:
+        raise HTTPException(status_code=404, detail="Selected log entries were not found.")
+
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_file_path.open("w", encoding="utf-8") as fp:
+        for entry in entries:
+            if int(entry["id"]) in ids_to_remove:
+                continue
+            for line in entry.get("_lines", []):
+                fp.write(line if line.endswith("\n") else f"{line}\n")
+
+    return removed_count
 
 
 def _service_health(status: str, label: str, message: str) -> dict[str, str]:
@@ -428,6 +514,47 @@ def _generated_file_by_id(
     return records[0]
 
 
+def _duplicate_generated_file_for_owner(
+    file_name: str,
+    email: str | None = None,
+    session: str | None = None,
+    exclude_id: int | None = None,
+) -> dict[str, Any] | None:
+    normalized_name = file_name.strip().casefold()
+    if not normalized_name:
+        return None
+
+    records = _generated_records_for_owner(email=email, session=session, limit=1000)
+    for record in records:
+        if exclude_id is not None and str(record.get("id")) == str(exclude_id):
+            continue
+        if str(record.get("file_name") or "").strip().casefold() == normalized_name:
+            return record
+    return None
+
+
+def _mark_generated_file_replaced(record: dict[str, Any], now: datetime | None = None) -> None:
+    from src import db
+
+    generated_file_id = int(record["id"])
+    now = now or datetime.now()
+    db.updateDB(
+        table_name="generated_files",
+        update_fields=["status", "update_date"],
+        update_values=[db.generated_files_status.DELETED.value, now],
+        select_fields=["id"],
+        select_values=[[generated_file_id]],
+    )
+
+    active_collections = db.selectFromDB(
+        table_name="vector_db_collections",
+        field_names=["generated_files_id", "status"],
+        field_values=[[generated_file_id], [db.vector_db_collections_status.ACTIVE.value]],
+    )
+    for collection in _records_from_dataframe(active_collections):
+        _delete_vector_collection_record(collection, now)
+
+
 def _uploaded_file_type(file_name: str | None) -> str:
     suffix = Path(file_name or "").suffix.lower().lstrip(".")
     if suffix in {"doc", "docx"}:
@@ -627,15 +754,6 @@ async def _outline_payload_from_request(request: Request) -> dict[str, Any]:
         "reference_documents": [],
         "generated_file_id": parse_generated_file_id(payload.get("generated_file_id")),
     }
-
-
-class _OutlinePromptAdapter:
-    def __init__(self, architecture: Any):
-        self.architecture = architecture
-
-    async def ainvoke(self, input: dict[str, Any]) -> dict[str, Any]:
-        return await self.architecture.ainvoke(_outline_state(query=str(input.get("prompt") or input.get("query") or "")))
-
 
 def _uploaded_file_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -2441,6 +2559,94 @@ async def _handle_workspace_data():
     }
 
 
+async def _handle_maintainer_logs(
+    email,
+    session,
+    token,
+    search,
+    status,
+    date_from,
+    date_to,
+    sort_by: LogSortField,
+    sort_dir: SortDirection,
+    page,
+    page_size,
+):
+    try:
+        validate_maintainer_access(email, session, token)
+        entries = _log_entries()
+        available_statuses = sorted({entry["status"] for entry in entries if entry.get("status")})
+        normalized_search = (search or "").strip().lower()
+        normalized_status = (status or "").strip().upper()
+        from_date = _parse_log_date(date_from)
+        to_date = _parse_log_date(date_to, end_of_day=True)
+
+        filtered_entries = entries
+        if normalized_search:
+            filtered_entries = [
+                entry
+                for entry in filtered_entries
+                if normalized_search in f"{entry.get('date', '')} {entry.get('status', '')} {entry.get('message', '')}".lower()
+            ]
+        if normalized_status and normalized_status != "ALL":
+            filtered_entries = [entry for entry in filtered_entries if entry.get("status") == normalized_status]
+        if from_date or to_date:
+            next_entries = []
+            for entry in filtered_entries:
+                entry_date = _parse_log_date(entry.get("date"))
+                if entry_date is None:
+                    continue
+                if from_date and entry_date < from_date:
+                    continue
+                if to_date and entry_date > to_date:
+                    continue
+                next_entries.append(entry)
+            filtered_entries = next_entries
+
+        reverse = sort_dir == "desc"
+        filtered_entries = sorted(
+            filtered_entries,
+            key=lambda entry: str(entry.get(sort_by, "")).lower(),
+            reverse=reverse,
+        )
+
+        total = len(filtered_entries)
+        current_page = max(int(page), 1)
+        current_page_size = max(min(int(page_size), 100), 10)
+        total_pages = max((total + current_page_size - 1) // current_page_size, 1)
+        if current_page > total_pages:
+            current_page = total_pages
+        start = (current_page - 1) * current_page_size
+        end = start + current_page_size
+
+        return {
+            "entries": [_public_log_entry(entry) for entry in filtered_entries[start:end]],
+            "total": total,
+            "page": current_page,
+            "page_size": current_page_size,
+            "total_pages": total_pages,
+            "statuses": available_statuses,
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("load application logs", exp)
+
+
+async def _handle_clear_maintainer_logs(request: MaintainerLogClearRequest, token):
+    try:
+        validate_maintainer_access(request.email, request.session, token)
+        removed_count = _clear_log_entries(request.entry_ids)
+        return {
+            "message": f"Cleared {removed_count} log {'entry' if removed_count == 1 else 'entries'}.",
+            "removed_count": removed_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("clear application logs", exp)
+
+
 async def _handle_login(request):
     try:
         return authenticate_user(request.email, request.password)
@@ -2644,6 +2850,25 @@ async def _handle_create_generated_file(request):
             raise HTTPException(status_code=400, detail="Invalid AI architecture.")
 
         now = datetime.now()
+        replaced_generated_file = None
+        duplicate = _duplicate_generated_file_for_owner(file_name, email=email, session=session)
+        if duplicate:
+            if not request.replace:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "duplicate_generated_file",
+                        "message": f"A generated document named {file_name} already exists. Replace it?",
+                        "generated_file": _generated_file_record(duplicate),
+                    },
+                )
+            _mark_generated_file_replaced(duplicate, now)
+            replaced_generated_file = {
+                **duplicate,
+                "status": db.generated_files_status.DELETED.value,
+                "update_date": now,
+            }
+
         inserted_ids = db.insertIntoDB(
             table_name="generated_files",
             field_names=[
@@ -2678,7 +2903,11 @@ async def _handle_create_generated_file(request):
             "create_date": now,
             "update_date": now,
         }
-        return {"status": "saved", "generated_file": _jsonable(generated_file)}
+        return {
+            "status": "saved",
+            "generated_file": _jsonable(generated_file),
+            "replaced_generated_file": _jsonable(_generated_file_record(replaced_generated_file)) if replaced_generated_file else None,
+        }
     except HTTPException:
         raise
     except Exception as exp:
@@ -2699,10 +2928,36 @@ async def _handle_update_generated_file(generated_file_id, request):
             field_values=[[generated_file_id]],
             limit=1,
         )
-        if not _records_from_dataframe(existing):
+        existing_records = _records_from_dataframe(existing)
+        if not existing_records:
             raise HTTPException(status_code=404, detail="Generated file was not found.")
+        existing_record = existing_records[0]
 
         now = datetime.now()
+        replaced_generated_file = None
+        duplicate = _duplicate_generated_file_for_owner(
+            file_name,
+            email=existing_record.get("email") or None,
+            session=existing_record.get("session") or None,
+            exclude_id=generated_file_id,
+        )
+        if duplicate:
+            if not request.replace:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "duplicate_generated_file",
+                        "message": f"A generated document named {file_name} already exists. Replace it?",
+                        "generated_file": _generated_file_record(duplicate),
+                    },
+                )
+            _mark_generated_file_replaced(duplicate, now)
+            replaced_generated_file = {
+                **duplicate,
+                "status": db.generated_files_status.DELETED.value,
+                "update_date": now,
+            }
+
         db.updateDB(
             table_name="generated_files",
             update_fields=["file_name", "update_date"],
@@ -2717,7 +2972,11 @@ async def _handle_update_generated_file(generated_file_id, request):
             limit=1,
         )
         records = _records_from_dataframe(updated)
-        return {"status": "saved", "generated_file": _generated_file_record(records[0])}
+        return {
+            "status": "saved",
+            "generated_file": _generated_file_record(records[0]),
+            "replaced_generated_file": _generated_file_record(replaced_generated_file) if replaced_generated_file else None,
+        }
     except HTTPException:
         raise
     except Exception as exp:
@@ -2751,6 +3010,7 @@ async def _handle_delete_generated_file(generated_file_id, email, session):
             session=generated_file.get("session") or session,
             limit=1000,
         )
+        deleted_file_name = str(generated_file.get("file_name") or "Untitled")
         return {
             "status": "deleted",
             "generated_file": _generated_file_record(
@@ -2761,7 +3021,7 @@ async def _handle_delete_generated_file(generated_file_id, email, session):
                 }
             ),
             "generated_documents": [_generated_document_detail(record) for record in records],
-            "message": "Generated document removed.",
+            "message": f'Generated document "{deleted_file_name}" removed.',
         }
     except HTTPException:
         raise
@@ -3647,7 +3907,7 @@ async def _handle_create_outline(request):
             temperature=payload["temperature"],
             instructions=payload["instructions"],
         )
-        content = await generateOutline(_OutlinePromptAdapter(architecture), query=payload["query"], details=details)
+        content = await generateOutline(architecture, query=payload["query"], details=details)
         return {"result": {"content": _jsonable(content)}}
     except HTTPException:
         raise

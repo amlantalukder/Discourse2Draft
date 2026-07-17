@@ -84,6 +84,26 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def maintainer_emails() -> set[str]:
+    configured = Config.env_config.get("APP_MAINTAINER_EMAILS", "")
+    return {
+        normalize_email(email)
+        for email in re.split(r"[,;\s]+", configured)
+        if email.strip()
+    }
+
+
+def is_maintainer_email(email: str | None) -> bool:
+    if not email:
+        return False
+    return normalize_email(email) in maintainer_emails()
+
+
+def validate_maintainer_access(email: str | None, session: str | None, token: str | None = None) -> None:
+    if not email or not session or not is_maintainer_email(email):
+        raise HTTPException(status_code=403, detail="Maintainer access is required.")
+
+
 def validate_email(email: str) -> str:
     normalized = normalize_email(email)
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
@@ -158,11 +178,13 @@ def credential_by_id(credentials_id: int) -> dict[str, Any] | None:
 
 
 def public_user(record: dict[str, Any]) -> dict[str, Any]:
+    email = record.get("email")
     return {
         "id": record.get("id"),
-        "email": record.get("email"),
+        "email": email,
         "first_name": record.get("first_name"),
         "last_name": record.get("last_name"),
+        "is_maintainer": is_maintainer_email(str(email)) if email else False,
     }
 
 
@@ -231,11 +253,15 @@ def create_default_settings(email: str, session_id: str | None = None) -> dict[s
 
 def auth_payload(credential: dict[str, Any]) -> dict[str, Any]:
     settings = create_default_settings(str(credential["email"]))
-    return {
+    email = str(credential["email"])
+    is_maintainer = is_maintainer_email(email)
+    payload = {
         "user": public_user(credential),
         "session": settings["session"],
         "settings": settings,
+        "is_maintainer": is_maintainer,
     }
+    return payload
 
 
 def create_guest_auth_payload(session: str | None = None) -> dict[str, Any]:
@@ -272,9 +298,11 @@ def create_guest_auth_payload(session: str | None = None) -> dict[str, Any]:
             "email": None,
             "first_name": "Guest",
             "last_name": "User",
+            "is_maintainer": False,
         },
         "session": settings["session"],
         "settings": settings,
+        "is_maintainer": False,
     }
 
 

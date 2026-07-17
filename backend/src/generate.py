@@ -93,6 +93,6 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
 # ---------------------------------------------------------------------------
 @print_func_name
 async def generateOutline(agent: OutlineCreatorArchitecture, query: str, details: str = ''):
-    
+
     response = await agent.ainvoke({'query': query, 'details': details})
     return response['content']
