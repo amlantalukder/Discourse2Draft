@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronRight } from "./FontAwesomeIcons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const STREAM_DELAY_MS = 50;
@@ -161,9 +162,15 @@ function clearDocumentSelection() {
   window.getSelection?.()?.removeAllRanges();
 }
 
-function renderParagraphContent(paragraph) {
+function referenceIndexFromCitationLabel(label) {
+  const match = String(label ?? "").match(/\d+/);
+  if (!match) return -1;
+  return Math.max(0, Number.parseInt(match[0], 10) - 1);
+}
+
+function renderParagraphContent(paragraph, onCitationClick) {
   const text = String(paragraph ?? "");
-  const citationPattern = /<a\s+href="#:~:text=References">([^<]+)<\/a>/g;
+  const citationPattern = /<a\b[^>]*href=["']#:~:text=References["'][^>]*>([^<]+)<\/a>/g;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -173,7 +180,16 @@ function renderParagraphContent(paragraph) {
       parts.push(text.slice(lastIndex, match.index));
     }
     parts.push(
-      <a href="#References" className="manuscript-citation" key={`${match.index}-${match[1]}`}>
+      <a
+        href="#:~:text=References"
+        className="manuscript-citation"
+        key={`${match.index}-${match[1]}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onCitationClick?.(referenceIndexFromCitationLabel(match[1]));
+        }}
+      >
         {match[1]}
       </a>,
     );
@@ -215,6 +231,60 @@ function renderReference(reference) {
   return parts.length ? parts : text;
 }
 
+function ManuscriptReferencesPanel({ references = [], highlightedReferenceIndex = -1, isExpanded = false, onExpandedChange }) {
+  const panelRef = useRef(null);
+  const referenceRefs = useRef(new Map());
+  const visibleReferences = references.filter((reference) => String(reference ?? "").trim());
+
+  useEffect(() => {
+    if (!isExpanded || highlightedReferenceIndex < 0) return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      const targetElement = referenceRefs.current.get(highlightedReferenceIndex);
+      targetElement?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [highlightedReferenceIndex, isExpanded]);
+
+  if (!visibleReferences.length) return null;
+
+  return (
+    <section className={`manuscript-references-panel ${isExpanded ? "is-expanded" : ""}`} id="References" aria-labelledby="manuscript-references-title" ref={panelRef}>
+      <button className="manuscript-references-toggle" type="button" aria-expanded={isExpanded} aria-controls="manuscript-references-body" onClick={() => onExpandedChange?.(!isExpanded)}>
+        <span className="manuscript-references-title" id="manuscript-references-title">
+          References
+          <span>{visibleReferences.length}</span>
+        </span>
+        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {isExpanded ? (
+        <div className="manuscript-references-body" id="manuscript-references-body">
+          <ol>
+            {visibleReferences.map((reference, index) => (
+              <li
+                className={highlightedReferenceIndex === index ? "manuscript-reference-highlighted" : ""}
+                id={`Reference-${index + 1}`}
+                key={`${index}-${reference}`}
+                ref={(element) => {
+                  if (element) {
+                    referenceRefs.current.set(index, element);
+                  } else {
+                    referenceRefs.current.delete(index);
+                  }
+                }}
+              >
+                {renderReference(reference)}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function Manuscript({
   manuscript = [],
   refList = [],
@@ -245,6 +315,13 @@ export function Manuscript({
   const shellRef = useRef(null);
   const sectionRefs = useRef(new Map());
   const [streamedSections, setStreamedSections] = useState(sections);
+  const [isReferencesExpanded, setIsReferencesExpanded] = useState(false);
+  const [highlightedReferenceIndex, setHighlightedReferenceIndex] = useState(-1);
+
+  useEffect(() => {
+    setIsReferencesExpanded(false);
+    setHighlightedReferenceIndex(-1);
+  }, [refList]);
 
   useEffect(() => {
     if (syncVersion !== lastSyncVersionRef.current) {
@@ -352,71 +429,88 @@ export function Manuscript({
     onParagraphSelectionChange?.(null);
   }
 
+  function handleManuscriptClickCapture(event) {
+    const citationLink = event.target.closest?.("a[href]");
+    if (!citationLink) return;
+
+    const href = citationLink.getAttribute("href") ?? "";
+    const isReferencesLink = citationLink.classList.contains("manuscript-citation") || href === "#References" || href.includes("#:~:text=References");
+    if (!isReferencesLink) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    handleCitationClick(referenceIndexFromCitationLabel(citationLink.textContent));
+  }
+
+  function handleCitationClick(referenceIndex) {
+    clearDocumentSelection();
+    onParagraphSelectionChange?.(null);
+    setIsReferencesExpanded(true);
+    setHighlightedReferenceIndex(referenceIndex);
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("References")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }
+
   return (
-    <div className="manuscript-shell" onClick={handleShellClick} ref={shellRef}>
-      <article className="manuscript" id="preview">
-        {visibleSections.map((section, index) => {
-          const sectionKey = sectionDomKey(section, index);
-          const paragraphs = splitBodyIntoParagraphs(section.body);
-          const showLoadingDots = shouldShowLoadingDots({
-            index,
-            section,
-            targetSection: sections[index],
-            currentWritingSection,
-            isActiveStreamingSection: index === activeStreamingIndex,
-          });
+    <div className="manuscript-area">
+      <div className="manuscript-shell" onClick={handleShellClick} onClickCapture={handleManuscriptClickCapture} ref={shellRef}>
+        <article className="manuscript" id="preview">
+          {visibleSections.map((section, index) => {
+            const sectionKey = sectionDomKey(section, index);
+            const paragraphs = splitBodyIntoParagraphs(section.body);
+            const showLoadingDots = shouldShowLoadingDots({
+              index,
+              section,
+              targetSection: sections[index],
+              currentWritingSection,
+              isActiveStreamingSection: index === activeStreamingIndex,
+            });
 
-          return (
-            <section
-              key={sectionKey}
-              className={section.isAbstract ? "abstract-block" : ""}
-              ref={(element) => {
-                if (element) {
-                  sectionRefs.current.set(sectionKey, element);
-                } else {
-                  sectionRefs.current.delete(sectionKey);
-                }
-              }}
-            >
-              {section.heading ? <ManuscriptHeading level={section.level}>{section.heading}</ManuscriptHeading> : null}
-              {paragraphs.map((paragraph, paragraphIndex) => {
-                const id = paragraphId(section, index, paragraphIndex);
-                const isUpdatingParagraph = updatingParagraphId === id;
+            return (
+              <section
+                key={sectionKey}
+                className={section.isAbstract ? "abstract-block" : ""}
+                ref={(element) => {
+                  if (element) {
+                    sectionRefs.current.set(sectionKey, element);
+                  } else {
+                    sectionRefs.current.delete(sectionKey);
+                  }
+                }}
+              >
+                {section.heading ? <ManuscriptHeading level={section.level}>{section.heading}</ManuscriptHeading> : null}
+                {paragraphs.map((paragraph, paragraphIndex) => {
+                  const id = paragraphId(section, index, paragraphIndex);
+                  const isUpdatingParagraph = updatingParagraphId === id;
 
-                return (
-                  <p
-                    className={`manuscript-paragraph ${selectedParagraphId === id ? "manuscript-paragraph-selected" : ""} ${isUpdatingParagraph ? "manuscript-paragraph-updating" : ""}`.trim()}
-                    key={id}
-                    onClick={(event) => handleParagraphClick(event, section, index, paragraph, paragraphIndex)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleParagraphClick(event, section, index, paragraph, paragraphIndex);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={selectedParagraphId === id}
-                  >
-                    {isUpdatingParagraph ? <LoadingDots inline /> : renderParagraphContent(paragraph)}
-                  </p>
-                );
-              })}
-              {showLoadingDots ? <LoadingDots /> : null}
-            </section>
-          );
-        })}
-      </article>
-      {refList.length ? (
-        <section className="manuscript-references-panel" id="References" aria-labelledby="manuscript-references-title">
-          <h2 id="manuscript-references-title">References</h2>
-          <ol>
-            {refList.map((reference, index) => (
-              <li key={`${index}-${reference}`}>{renderReference(reference)}</li>
-            ))}
-          </ol>
-        </section>
-      ) : null}
+                  return (
+                    <p
+                      className={`manuscript-paragraph ${selectedParagraphId === id ? "manuscript-paragraph-selected" : ""} ${isUpdatingParagraph ? "manuscript-paragraph-updating" : ""}`.trim()}
+                      key={id}
+                      onClick={(event) => handleParagraphClick(event, section, index, paragraph, paragraphIndex)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleParagraphClick(event, section, index, paragraph, paragraphIndex);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedParagraphId === id}
+                    >
+                      {isUpdatingParagraph ? <LoadingDots inline /> : renderParagraphContent(paragraph, handleCitationClick)}
+                    </p>
+                  );
+                })}
+                {showLoadingDots ? <LoadingDots /> : null}
+              </section>
+            );
+          })}
+        </article>
+      </div>
+      <ManuscriptReferencesPanel references={refList} highlightedReferenceIndex={highlightedReferenceIndex} isExpanded={isReferencesExpanded} onExpandedChange={setIsReferencesExpanded} />
     </div>
   );
 }

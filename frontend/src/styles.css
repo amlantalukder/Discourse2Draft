@@ -4132,7 +4132,16 @@ time {
   font-weight: 700;
 }
 
+.manuscript-area {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: #fbfbfd;
+}
+
 .manuscript-shell {
+  min-height: 0;
   overflow: auto;
   background: #fbfbfd;
   color: #454c5a;
@@ -4247,26 +4256,63 @@ time {
 }
 
 .manuscript-references-panel {
-  margin: 0 34px 42px;
-  border: 1px solid #d6dbe9;
-  border-radius: 8px;
+  border-top: 1px solid #d6dbe9;
   background: #ffffff;
-  padding: 18px 20px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 -8px 20px rgba(32, 39, 52, 0.06);
 }
 
-.manuscript-references-panel h2 {
-  margin: 0 0 12px;
+.manuscript-references-toggle {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 0;
+  background: #f6f8fc;
   color: #303849;
-  font-size: 14px;
+  font-family: var(--font-ui);
+  padding: 0 28px 0 34px;
+}
+
+.manuscript-references-toggle:hover {
+  background: #eef3f8;
+}
+
+.manuscript-references-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #303849;
+  font-size: 13px;
   font-weight: 850;
+}
+
+.manuscript-references-title span {
+  min-width: 22px;
+  display: inline-flex;
+  justify-content: center;
+  border: 1px solid rgba(43, 157, 149, 0.24);
+  border-radius: 999px;
+  background: #e8f6f5;
+  color: var(--accent-strong);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.manuscript-references-body {
+  max-height: min(34vh, 340px);
+  overflow: auto;
+  padding: 16px 34px 20px 56px;
+  scrollbar-color: #b9c0ce transparent;
 }
 
 .manuscript-references-panel ol {
   display: grid;
   gap: 9px;
   margin: 0;
-  padding-left: 22px;
+  padding-left: 0;
 }
 
 .manuscript-references-panel li,
@@ -4274,6 +4320,22 @@ time {
   color: #4a5160;
   font-size: 11px;
   line-height: 1.65;
+}
+
+.manuscript-references-panel li {
+  scroll-margin: 12px;
+  border-radius: 7px;
+  padding: 5px 7px;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.manuscript-reference-highlighted {
+  background: #e8f6f5;
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    0 4px 12px rgba(25, 31, 44, 0.08);
 }
 
 .manuscript-reference-link {
@@ -4755,7 +4817,11 @@ time {
     padding: 22px 14px 42px;
   }
 
-  .manuscript-references-panel {
-    margin: 0 14px 28px;
+  .manuscript-references-toggle {
+    padding: 0 14px;
+  }
+
+  .manuscript-references-body {
+    padding: 14px 16px 18px 34px;
   }
 }
