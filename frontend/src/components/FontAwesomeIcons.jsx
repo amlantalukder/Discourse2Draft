@@ -2,6 +2,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGithub } from "@fortawesome/free-brands-svg-icons";
 import {
   faArrowsRotate,
+  faAnglesLeft,
+  faAnglesRight,
   faChevronUp,
   faChevronDown,
   faChevronLeft,
@@ -9,6 +11,7 @@ import {
   faCodeBranch,
   faCodeMerge,
   faDownload,
+  faEraser,
   faEye,
   faEyeSlash,
   faFile,
@@ -59,11 +62,15 @@ function makeIcon(icon) {
 }
 
 export const AlertTriangle = makeIcon(faTriangleExclamation);
+export const ChevronsLeft = makeIcon(faAnglesLeft);
+export const ChevronsRight = makeIcon(faAnglesRight);
 export const ChevronDown = makeIcon(faChevronDown);
 export const ChevronLeft = makeIcon(faChevronLeft);
 export const ChevronRight = makeIcon(faChevronRight);
+export const ChevronUp = makeIcon(faChevronUp);
 export const CornerDownRight = makeIcon(faTurnDown);
 export const Download = makeIcon(faDownload);
+export const Eraser = makeIcon(faEraser);
 export const Eye = makeIcon(faEye);
 export const EyeOff = makeIcon(faEyeSlash);
 export const File = makeIcon(faFile);
@@ -90,7 +97,6 @@ export const Pencil = makeIcon(faPenNib);
 export const Play = makeIcon(faPlay);
 export const Plus = makeIcon(faPlus);
 export const RefreshCw = makeIcon(faArrowsRotate);
-export const RotateCcw = makeIcon(faArrowsRotate);
 export const Save = makeIcon(faFloppyDisk);
 export const Search = makeIcon(faMagnifyingGlass);
 export const SlidersHorizontal = makeIcon(faSliders);

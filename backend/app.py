@@ -103,6 +103,21 @@ async def uploaded_outline_template(template_name: str, credentials_id: int | No
     return await app_utils._handle_uploaded_outline_template(template_name, credentials_id)
 
 
+@app.patch("/api/uploaded-outline-templates/{template_name}")
+async def update_uploaded_outline_template(template_name: str, request: app_utils.UploadedOutlineTemplateUpdateRequest) -> dict[str, Any]:
+    return await app_utils._handle_update_uploaded_outline_template(template_name, request)
+
+
+@app.patch("/api/uploaded-outline-templates/{template_name}/rename")
+async def rename_uploaded_outline_template(template_name: str, request: app_utils.UploadedOutlineTemplateRenameRequest) -> dict[str, Any]:
+    return await app_utils._handle_rename_uploaded_outline_template(template_name, request)
+
+
+@app.delete("/api/uploaded-outline-templates/{template_name}")
+async def delete_uploaded_outline_template(template_name: str, credentials_id: int | None = Query(None)) -> dict[str, Any]:
+    return await app_utils._handle_delete_uploaded_outline_template(template_name, credentials_id)
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # Workspace bootstrap
 # ---------------------------------------------------------------------------------------------------------------
@@ -376,6 +391,11 @@ async def upload_uploaded_files(
     return await app_utils._handle_upload_uploaded_files(files, email, session, replace)
 
 
+@app.patch("/api/uploaded-files/{uploaded_file_id}")
+async def update_uploaded_file(uploaded_file_id: int, request: app_utils.UploadedFileUpdateRequest) -> dict[str, Any]:
+    return await app_utils._handle_update_uploaded_file(uploaded_file_id, request)
+
+
 @app.delete("/api/uploaded-files/{uploaded_file_id}")
 async def delete_uploaded_file(
     uploaded_file_id: int,
@@ -392,6 +412,11 @@ async def delete_uploaded_file(
 @app.post("/api/ai/outline")
 async def create_outline(request: Request) -> dict[str, Any]:
     return await app_utils._handle_create_outline(request)
+
+
+@app.post("/api/ai/outline/import")
+async def import_outline(file: UploadFile = File(...), credentials_id: int | None = Form(None)) -> dict[str, Any]:
+    return await app_utils._handle_import_outline(file, credentials_id)
 
 
 @app.post("/api/ai/outline/format")

@@ -52,7 +52,7 @@ def formatCitations(text):
 # ---------------------------------------------------------------------------
 @print_func_name
 def processCitation(content, attached_references, ref_list=[], return_latex_style=False, enable_html_link_format=False):
-
+    
     def formatCitationText(citation_text):
         if enable_html_link_format:
             return f'<a href="#:~:text=References">{citation_text}</a>'

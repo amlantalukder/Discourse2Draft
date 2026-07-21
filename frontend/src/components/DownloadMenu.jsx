@@ -8,7 +8,7 @@ const downloadOptions = [
   { format: "latex", label: "LaTeX package", extension: ".zip", group: "Main text + bibliography" },
 ];
 
-export function DownloadMenu({ label = "Download", disabled = false, onDownload, menuAlign = "right" }) {
+export function DownloadMenu({ label = "Download", disabled = false, onDownload, menuAlign = "right", showLabel = false }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState({});
   const menuRef = useRef(null);
@@ -66,7 +66,7 @@ export function DownloadMenu({ label = "Download", disabled = false, onDownload,
 
   return (
     <div className={`download-menu download-menu-${menuAlign}`} ref={menuRef}>
-      <IconButton label={label} type="button" disabled={disabled} onClick={() => setIsOpen((current) => !current)}>
+      <IconButton label={label} type="button" disabled={disabled} onClick={() => setIsOpen((current) => !current)} showLabel={showLabel}>
         <Download size={18} />
       </IconButton>
       {isOpen && !disabled ? (

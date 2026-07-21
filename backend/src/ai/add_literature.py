@@ -17,7 +17,7 @@ class AddLiterature:
     @print_func_name
     def addLiteratureToVectorDBCollection(self, literature_list: list[dict]):
 
-        docs = [Document(page_content=lit['body'].strip(), metadata={'app_file_id': lit['ref_doi'], 'app_file_name': lit['ref']}) for lit in literature_list]
+        docs = [Document(page_content=lit['body'].strip(), metadata={'app_file_id': lit['ref_doi'], 'app_file_type': 'literature'}) for lit in literature_list]
         self.db.add(docs=docs)
     
     @print_func_name

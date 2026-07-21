@@ -24,6 +24,19 @@ function friendlyMessage(message, fallback) {
   return text;
 }
 
+function friendlyStatusMessage(status) {
+  if (status === 400) return "That request could not be completed. Please check the information and try again.";
+  if (status === 401) return "Please log in or continue as guest before trying again.";
+  if (status === 403) return "You do not have permission to do that.";
+  if (status === 404) return "I could not find the requested item. It may have been moved or removed.";
+  if (status === 409) return "That action conflicts with the current state. Please refresh and try again.";
+  if (status === 413) return "That upload is too large. Please choose a smaller file.";
+  if (status === 422) return "Some required information is missing or invalid. Please check the form and try again.";
+  if (status === 429) return "Too many requests were sent at once. Please wait a moment and try again.";
+  if (status >= 500) return "The server had trouble completing that request. Please try again in a moment.";
+  return "Something went wrong while processing your request. Please try again.";
+}
+
 function formatErrorDetail(detail, fallback) {
   if (!detail) return friendlyMessage(fallback);
   if (typeof detail === "string") return friendlyMessage(detail, fallback);
@@ -88,7 +101,7 @@ async function fetchJSON(path, options = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(formatErrorDetail(payload.detail, `Request failed with ${response.status}`));
+    const error = new Error(formatErrorDetail(payload.detail, friendlyStatusMessage(response.status)));
     error.status = response.status;
     error.detail = payload.detail;
     throw error;
@@ -109,29 +122,30 @@ export async function getBlob(path) {
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
       const payload = await response.json().catch(() => ({}));
-      const error = new Error(formatErrorDetail(payload.detail, `Request failed with ${response.status}`));
+      const error = new Error(formatErrorDetail(payload.detail, friendlyStatusMessage(response.status)));
       error.status = response.status;
       error.detail = payload.detail;
       throw error;
     }
 
     const message = await response.text().catch(() => "");
-    throw new Error(friendlyMessage(message, `Request failed with ${response.status}`));
+    throw new Error(friendlyMessage(message, friendlyStatusMessage(response.status)));
   }
 
   return response.blob();
 }
 
-export async function getJSON(path) {
-  return fetchJSON(path);
+export async function getJSON(path, options = {}) {
+  return fetchJSON(path, options);
 }
 
 export async function postJSON(path, body, options = {}) {
+  const { headers = {}, ...fetchOptions } = options;
   return fetchJSON(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
-    ...options,
+    ...fetchOptions,
   });
 }
 

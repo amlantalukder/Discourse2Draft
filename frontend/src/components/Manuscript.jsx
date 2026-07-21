@@ -42,11 +42,23 @@ function normalizeSections(sections) {
   });
 }
 
-function alignStreamedSections(currentSections, targetSections) {
+function sameHeading(left, right) {
+  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
+}
+
+function alignStreamedSections(currentSections, targetSections, currentWritingSection = "") {
   return targetSections.map((section, index) => {
     const current = currentSections[index];
     const targetBody = section.body ?? "";
     const currentBody = current?.heading === section.heading && current?.level === section.level ? (current.body ?? "") : "";
+    const shouldStreamSection = currentWritingSection ? sameHeading(section.heading, currentWritingSection) : false;
+
+    if (!shouldStreamSection) {
+      return {
+        ...section,
+        body: targetBody,
+      };
+    }
 
     return {
       ...section,
@@ -55,8 +67,8 @@ function alignStreamedSections(currentSections, targetSections) {
   });
 }
 
-function advanceOneWord(currentSections, targetSections) {
-  const nextSections = alignStreamedSections(currentSections, targetSections);
+function advanceOneWord(currentSections, targetSections, currentWritingSection = "") {
+  const nextSections = alignStreamedSections(currentSections, targetSections, currentWritingSection);
   const sectionIndex = nextSections.findIndex((section, index) => section.body !== (targetSections[index]?.body ?? ""));
 
   if (sectionIndex === -1) {
@@ -78,12 +90,8 @@ function advanceOneWord(currentSections, targetSections) {
   };
 }
 
-function sameHeading(left, right) {
-  return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase();
-}
-
-function hasStreamingDelta(currentSections, targetSections) {
-  return alignStreamedSections(currentSections, targetSections).some((section, index) => section.body !== (targetSections[index]?.body ?? ""));
+function hasStreamingDelta(currentSections, targetSections, currentWritingSection = "") {
+  return alignStreamedSections(currentSections, targetSections, currentWritingSection).some((section, index) => section.body !== (targetSections[index]?.body ?? ""));
 }
 
 function shouldShowLoadingDots({ index, section, targetSection, currentWritingSection, isActiveStreamingSection }) {
@@ -133,6 +141,10 @@ function splitBodyIntoParagraphs(body) {
 
 function paragraphId(section, sectionIndex, paragraphIndex) {
   return `${section.heading}-${section.level}-${sectionIndex}-${paragraphIndex}`;
+}
+
+function sectionDomKey(section, sectionIndex) {
+  return `${section.heading}-${section.level}-${sectionIndex}`;
 }
 
 function selectParagraphContents(element) {
@@ -230,6 +242,8 @@ export function Manuscript({
   const streamedSectionsRef = useRef(sections);
   const streamGenerationChangesRef = useRef(false);
   const lastSyncVersionRef = useRef(syncVersion);
+  const shellRef = useRef(null);
+  const sectionRefs = useRef(new Map());
   const [streamedSections, setStreamedSections] = useState(sections);
 
   useEffect(() => {
@@ -253,8 +267,8 @@ export function Manuscript({
     }
 
     const shouldStream = streamGenerationChangesRef.current;
-    const alignedSections = alignStreamedSections(streamedSectionsRef.current, sections);
-    const hasPendingStream = hasStreamingDelta(streamedSectionsRef.current, sections);
+    const alignedSections = alignStreamedSections(streamedSectionsRef.current, sections, currentWritingSection);
+    const hasPendingStream = hasStreamingDelta(streamedSectionsRef.current, sections, currentWritingSection);
 
     if (!shouldStream || !hasPendingStream) {
       streamGenerationChangesRef.current = false;
@@ -268,7 +282,7 @@ export function Manuscript({
     setStreamedSections(alignedSections);
 
     function streamNextWord() {
-      const result = advanceOneWord(streamedSectionsRef.current, sections);
+      const result = advanceOneWord(streamedSectionsRef.current, sections, currentWritingSection);
       streamedSectionsRef.current = result.sections;
       setStreamedSections(result.sections);
 
@@ -284,9 +298,32 @@ export function Manuscript({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isGenerating, sections, syncVersion]);
+  }, [currentWritingSection, isGenerating, sections, syncVersion]);
 
   const visibleSections = streamedSections;
+  const activeWritingSectionIndex = currentWritingSection ? visibleSections.findIndex((section) => sameHeading(section.heading, currentWritingSection)) : -1;
+
+  useEffect(() => {
+    if (!isGenerating || !currentWritingSection || activeWritingSectionIndex < 0) return undefined;
+
+    const targetSection = visibleSections[activeWritingSectionIndex];
+    const targetElement = sectionRefs.current.get(sectionDomKey(targetSection, activeWritingSectionIndex));
+    const shellElement = shellRef.current;
+    if (!targetElement || !shellElement) return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const shellRect = shellElement.getBoundingClientRect();
+      const targetRect = targetElement.getBoundingClientRect();
+      const targetTop = targetRect.top - shellRect.top + shellElement.scrollTop - 18;
+      shellElement.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeWritingSectionIndex, currentWritingSection, isGenerating]);
+
   const activeStreamingIndex = visibleSections.findIndex((section, index) => section.body !== (sections[index]?.body ?? ""));
 
   function handleParagraphClick(event, section, sectionIndex, paragraph, paragraphIndex) {
@@ -316,9 +353,10 @@ export function Manuscript({
   }
 
   return (
-    <div className="manuscript-shell" onClick={handleShellClick}>
+    <div className="manuscript-shell" onClick={handleShellClick} ref={shellRef}>
       <article className="manuscript" id="preview">
         {visibleSections.map((section, index) => {
+          const sectionKey = sectionDomKey(section, index);
           const paragraphs = splitBodyIntoParagraphs(section.body);
           const showLoadingDots = shouldShowLoadingDots({
             index,
@@ -329,7 +367,17 @@ export function Manuscript({
           });
 
           return (
-            <section key={`${section.heading}-${section.level}-${index}`} className={section.isAbstract ? "abstract-block" : ""}>
+            <section
+              key={sectionKey}
+              className={section.isAbstract ? "abstract-block" : ""}
+              ref={(element) => {
+                if (element) {
+                  sectionRefs.current.set(sectionKey, element);
+                } else {
+                  sectionRefs.current.delete(sectionKey);
+                }
+              }}
+            >
               {section.heading ? <ManuscriptHeading level={section.level}>{section.heading}</ManuscriptHeading> : null}
               {paragraphs.map((paragraph, paragraphIndex) => {
                 const id = paragraphId(section, index, paragraphIndex);

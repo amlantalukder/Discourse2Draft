@@ -68,6 +68,33 @@ DEFAULT_AI_TEMPERATURE=0
 DEFAULT_AI_INSTRUCTIONS=''
 ```
 
+The DEFAULT_AI_MODEL is a mandatory settings. But a list of LLMs to be shown in the app settings UI can be provided via `backend/config/llms.json`. Here is an example of the json file.
+
+```json
+{
+  "OpenAI": {
+    "azure-gpt-5": "GPT-5",
+    "azure-o3": "o3",
+    "azure-o1-mini": "o1-mini"
+  },
+  "Anthropic": {
+    "claude-3-7-sonnet": "Claude 3.7 sonnet",
+    "claude-3-5-sonnet": "Claude 3.5 sonnet"
+  },
+  "Google": {
+    "gemini-3-pro": "Gemini 3 Pro",
+    "gemini-3-flash": "Gemini 3 Flash"
+  },
+  "Meta": {
+    "llama4-scout-17b-instruct": "Llama 4 scout 17B instruct",
+    "llama3-3-70b": "Llama 3.3 70B"
+  },
+  "Mistral": {
+    "mistral-large-3": "Mistral Large 3"
+  }
+}
+```
+
 #### RAG and content generation settings
 
 ```yaml

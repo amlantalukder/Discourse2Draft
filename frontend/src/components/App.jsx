@@ -1,4 +1,4 @@
-import { AlertTriangle, FilePlus2, GitMerge, RefreshCw, Trash2, Upload } from "./FontAwesomeIcons";
+import { AlertTriangle, FilePlus2, GitMerge, RefreshCw, Save, Trash2, Upload } from "./FontAwesomeIcons";
 import { useEffect, useRef, useState } from "react";
 import { deleteJSON, getBlob, getJSON, patchJSON, postForm, postJSON } from "../api/client";
 import { AboutPage } from "./AboutPage";
@@ -6,12 +6,16 @@ import { ActionStrip } from "./ActionStrip";
 import { ChangePasswordDialog } from "./ChangePasswordDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ConceptMapPanel } from "./ConceptMapPanel";
+import { DraftFlowPanel } from "./DraftFlowPanel";
 import { GeneratedDocumentsView } from "./GeneratedDocumentsView";
 import { Manuscript } from "./Manuscript";
+import { MaintainerLogsPage } from "./MaintainerLogsPage";
 import { LoginPage } from "./LoginPage";
+import { OutlineEditor } from "./OutlineEditor";
 import { OutlinePanel } from "./OutlinePanel";
 import { Sidebar } from "./Sidebar";
 import { SettingsPanel } from "./SettingsPanel";
+import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
@@ -143,6 +147,10 @@ function authOwnerQuery(authSession) {
   return params.toString();
 }
 
+function isMaintainerAuthSession(authSession) {
+  return Boolean(authSession?.is_maintainer || authSession?.user?.is_maintainer);
+}
+
 function safeDownloadName(value) {
   return (value || "generated-document").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "generated-document";
 }
@@ -182,6 +190,7 @@ export function App() {
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isMaintainerLogsOpen, setIsMaintainerLogsOpen] = useState(false);
   const [isConceptMapOpen, setIsConceptMapOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isGeneratedDocumentsViewOpen, setIsGeneratedDocumentsViewOpen] = useState(false);
@@ -204,6 +213,8 @@ export function App() {
   const [removeAttachedFilePrompt, setRemoveAttachedFilePrompt] = useState(null);
   const [deleteUploadedFilePrompt, setDeleteUploadedFilePrompt] = useState(null);
   const [deleteGeneratedFilePrompt, setDeleteGeneratedFilePrompt] = useState(null);
+  const [saveBeforeNextPrompt, setSaveBeforeNextPrompt] = useState(false);
+  const [replaceGeneratedFilePrompt, setReplaceGeneratedFilePrompt] = useState(null);
   const [enableLiteratureSearchPrompt, setEnableLiteratureSearchPrompt] = useState(null);
   const [disableLiteratureSearchPrompt, setDisableLiteratureSearchPrompt] = useState(null);
   const [literatureCollectionName, setLiteratureCollectionName] = useState("");
@@ -211,15 +222,20 @@ export function App() {
   const [fileName, setFileName] = useState("");
   const [query, setQuery] = useState("");
   const [referenceDocument, setReferenceDocument] = useState(null);
-  const [outlineMode, setOutlineMode] = useState("outline");
+  const [workspaceFlowStep, setWorkspaceFlowStep] = useState("topic");
+  const [isCreatingOutline, setIsCreatingOutline] = useState(false);
+  const [isImportingOutline, setIsImportingOutline] = useState(false);
   const [outline, setOutline] = useState("");
   const [useExample, setUseExample] = useState(false);
   const [outlineTemplates, setOutlineTemplates] = useState([]);
   const [uploadedOutlineTemplates, setUploadedOutlineTemplates] = useState([]);
+  const [editingUploadedOutlineTemplate, setEditingUploadedOutlineTemplate] = useState(null);
+  const [editingUploadedOutlineTemplateContent, setEditingUploadedOutlineTemplateContent] = useState("");
   const [selectedOutlineTemplate, setSelectedOutlineTemplate] = useState("");
   const [selectedUploadedOutlineTemplate, setSelectedUploadedOutlineTemplate] = useState("");
   const [action, setAction] = useState("Expand");
   const [status, setStatus] = useState("");
+  const [globalStatus, setGlobalStatus] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
   const [currentWritingSection, setCurrentWritingSection] = useState("");
   const [currentGenerationJobId, setCurrentGenerationJobId] = useState("");
@@ -282,7 +298,7 @@ export function App() {
         setOutline(payload.outline_template ?? "");
       } catch (error) {
         if (isMounted) {
-          setStatus(error.message);
+          setGlobalStatus(error.message);
         }
       }
     }
@@ -363,7 +379,7 @@ export function App() {
         setUploadedOutlineTemplates(uploadedTemplatesPayload.templates ?? []);
       } catch (error) {
         if (isMounted) {
-          setStatus(error.message);
+          setGlobalStatus(error.message);
           setUploadedOutlineTemplates([]);
         }
       } finally {
@@ -395,7 +411,7 @@ export function App() {
         setLlmOptions(payload.llm_options ?? []);
       } catch (error) {
         if (isMounted) {
-          setStatus(error.message);
+          setGlobalStatus(error.message);
         }
       }
     }
@@ -456,6 +472,144 @@ export function App() {
     }
   }
 
+  async function generateOutlineForFlow() {
+    setIsCreatingOutline(true);
+    try {
+      const content = await generateOutline();
+      if (content) {
+        updateOutlineFromEditor(content);
+        setStatus("Outline generated. Review it, then click Next.");
+      }
+      return content;
+    } finally {
+      setIsCreatingOutline(false);
+    }
+  }
+
+  async function uploadOutlineForFlow(file) {
+    if (!file) return "";
+
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId) {
+      setGlobalStatus("Start a workspace session before uploading an outline.");
+      return "";
+    }
+
+    setIsImportingOutline(true);
+    setStatus(`Importing outline from ${file.name}...`);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("credentials_id", String(credentialsId));
+
+      const payload = await postForm("/api/ai/outline/import", formData);
+      const content = payload.result?.content ?? "";
+      if (content) {
+        resetManuscriptForOutlineReplacement();
+        updateOutlineFromEditor(content);
+        setUploadedOutlineTemplates((current) => payload.templates ?? current);
+        if (payload.result?.template?.name) {
+          setSelectedUploadedOutlineTemplate(payload.result.template.name);
+          setSelectedOutlineTemplate("");
+          setUseExample(true);
+        }
+        setStatus(payload.message || "Outline imported. Review it, then click Next.");
+      } else {
+        setStatus("No outline headings were found in that file.");
+      }
+      return content || "";
+    } catch (error) {
+      setStatus(error.message);
+      return "";
+    } finally {
+      setIsImportingOutline(false);
+    }
+  }
+
+  function advanceFromQueryStep() {
+    if (!query.trim()) {
+      setStatus("Tell me what to write about before continuing.");
+      return;
+    }
+
+    const trimmedFileName = fileName.trim();
+    if (!trimmedFileName) {
+      setStatus("Save a file name to continue.");
+      return;
+    }
+
+    const savedFileName = String(generatedFile?.file_name ?? generatedFile?.name ?? "").trim();
+    if (!generatedFile?.id || savedFileName !== trimmedFileName) {
+      setSaveBeforeNextPrompt(true);
+      setStatus("Save this file name before continuing.");
+      return;
+    }
+
+    setWorkspaceFlowStep("outline-preference");
+    setStatus("");
+  }
+
+  function cancelSaveBeforeNext() {
+    setSaveBeforeNextPrompt(false);
+    setStatus("Save the file name when you are ready to continue.");
+  }
+
+  async function confirmSaveBeforeNext() {
+    setSaveBeforeNextPrompt(false);
+    const savedFile = await saveGeneratedFile({ continueAfterSave: true });
+    if (savedFile?.id) {
+      setWorkspaceFlowStep("outline-preference");
+      setStatus("");
+    }
+  }
+
+  function cancelReplaceGeneratedFile() {
+    setReplaceGeneratedFilePrompt(null);
+    setStatus("File name was not replaced.");
+  }
+
+  async function confirmReplaceGeneratedFile() {
+    const prompt = replaceGeneratedFilePrompt;
+    setReplaceGeneratedFilePrompt(null);
+    const savedFile = await saveGeneratedFile({ replace: true, continueAfterSave: Boolean(prompt?.continueAfterSave) });
+    if (savedFile?.id && prompt?.continueAfterSave) {
+      setWorkspaceFlowStep("outline-preference");
+      setStatus("");
+    }
+  }
+
+  function returnToTopicStep() {
+    setWorkspaceFlowStep("topic");
+    setStatus("");
+  }
+
+  function completeOutlineFlow() {
+    if (!outline.trim()) {
+      setStatus("Add or generate a structured outline before continuing.");
+      return;
+    }
+    setWorkspaceFlowStep("ready");
+    setStatus("Structured outline ready. Save the file, then generate when ready.");
+  }
+
+  function returnToOutlinePreferenceStep() {
+    setWorkspaceFlowStep("outline-preference");
+    setStatus("");
+  }
+
+  function startOutlineFlowOver() {
+    resetManuscriptForOutlineReplacement();
+    setQuery("");
+    setReferenceDocument(null);
+    setOutline("");
+    setUseExample(false);
+    setSelectedOutlineTemplate("");
+    setSelectedUploadedOutlineTemplate("");
+    outlineBeforeExample.current = "";
+    setWorkspaceFlowStep("topic");
+    setStatus("Start over with a new query.");
+  }
+
   async function formatOutline() {
     setStatus("Formatting outline...");
     try {
@@ -492,7 +646,6 @@ export function App() {
     setUseExample(true);
     setSelectedOutlineTemplate(templateName);
     setSelectedUploadedOutlineTemplate("");
-    setOutlineMode("outline");
     setStatus(`Loading ${templateLabel} template...`);
     try {
       const payload = await getJSON(`/api/outline-templates/${encodeURIComponent(templateName)}`);
@@ -520,7 +673,7 @@ export function App() {
     const credentialsId = authSession?.user?.id;
     if (!credentialsId) {
       setSelectedUploadedOutlineTemplate("");
-      setStatus("Start a workspace session before using uploaded templates.");
+      setGlobalStatus("Start a workspace session before using uploaded templates.");
       return;
     }
 
@@ -532,7 +685,6 @@ export function App() {
     setUseExample(true);
     setSelectedUploadedOutlineTemplate(templateName);
     setSelectedOutlineTemplate("");
-    setOutlineMode("outline");
     setStatus(`Loading ${templateLabel} template...`);
     try {
       const payload = await getJSON(`/api/uploaded-outline-templates/${encodeURIComponent(templateName)}?credentials_id=${encodeURIComponent(credentialsId)}`);
@@ -595,9 +747,7 @@ export function App() {
         setGeneratedFile(nextGeneratedFile);
         setWorkspaceData((current) => ({
           ...current,
-          generated_documents: current.generated_documents.map((document) =>
-            document.id === nextGeneratedFile.id ? { ...document, ...nextGeneratedFile } : document,
-          ),
+          generated_documents: current.generated_documents.map((document) => (document.id === nextGeneratedFile.id ? { ...document, ...nextGeneratedFile } : document)),
         }));
       }
       setGeneratedContent("");
@@ -705,7 +855,7 @@ export function App() {
       activeGenerationJobRef.current = jobId;
       setCurrentGenerationJobId(jobId);
       const savedFile = job?.generated_file ?? generatedFile;
-      applyGenerationJobSnapshot(job, savedFile);
+      applyGenerationJobSnapshot(job, savedFile, { jumpToLatest: mode === "remaining" });
 
       while ((job?.status === "queued" || job?.status === "running") && !pauseRequestedRef.current) {
         await wait(1200);
@@ -820,7 +970,7 @@ export function App() {
     setFileName("");
     setQuery("");
     setReferenceDocument(null);
-    setOutlineMode("outline");
+    setWorkspaceFlowStep("topic");
     setOutline("");
     setUseExample(false);
     setSelectedOutlineTemplate("");
@@ -840,6 +990,8 @@ export function App() {
     setAttachFilesPrompt(null);
     setRemoveAttachedFilePrompt(null);
     setDeleteGeneratedFilePrompt(null);
+    setSaveBeforeNextPrompt(false);
+    setReplaceGeneratedFilePrompt(null);
     setDisableLiteratureSearchPrompt(null);
     setIsConceptMapOpen(false);
     setIsRegenerateConfirmOpen(false);
@@ -884,6 +1036,8 @@ export function App() {
     saveStoredAuthSession(sessionPayload);
     setAiSettings(sessionPayload?.settings ?? null);
     setLlmOptions(sessionPayload?.llm_options ?? []);
+    setGlobalStatus("");
+    setIsMaintainerLogsOpen(false);
     setShowLogin(false);
   }
 
@@ -896,6 +1050,7 @@ export function App() {
     setLiteratureCollectionName("");
     setIsLiteratureSearchEnabled(false);
     setFileName("");
+    setQuery("");
     setReferenceDocument(null);
     setGeneratedContent("");
     setCurrentWritingSection("");
@@ -915,17 +1070,22 @@ export function App() {
     setIsAttachingUploadedDocuments(false);
     setUploadedOutlineTemplates([]);
     setSelectedUploadedOutlineTemplate("");
+    setWorkspaceFlowStep("topic");
     setUploadReplacePrompt(null);
     setAttachFilesPrompt(null);
     setRemoveAttachedFilePrompt(null);
     setDeleteUploadedFilePrompt(null);
     setDeleteGeneratedFilePrompt(null);
+    setSaveBeforeNextPrompt(false);
+    setReplaceGeneratedFilePrompt(null);
     setEnableLiteratureSearchPrompt(null);
     setDisableLiteratureSearchPrompt(null);
     setStatus("");
+    setGlobalStatus("");
     setIsSettingsPanelOpen(false);
     setIsChangePasswordOpen(false);
     setIsAboutOpen(false);
+    setIsMaintainerLogsOpen(false);
     setIsRegenerateConfirmOpen(false);
     setShowLogin(true);
     setWorkspaceData((current) => ({
@@ -1002,7 +1162,7 @@ export function App() {
         ),
       }));
       setOutline(loadedOutline);
-      setOutlineMode(!loadedOutline.trim() && loadedQuery.trim() ? "query" : "outline");
+      setWorkspaceFlowStep(loadedOutline.trim() ? "ready" : loadedQuery.trim() ? "outline-preference" : "topic");
       setUseExample(false);
       setSelectedOutlineTemplate("");
       setSelectedUploadedOutlineTemplate("");
@@ -1198,12 +1358,12 @@ export function App() {
         return nextSession;
       });
       setIsSettingsPanelOpen(false);
-      setStatus("Settings updated for this session");
+      setGlobalStatus("Settings updated for this session");
       return;
     }
 
     setIsSavingSettings(true);
-    setStatus("Saving settings...");
+    setGlobalStatus("Saving settings...");
     try {
       const email = encodeURIComponent(authSession.user.email);
       const session = encodeURIComponent(authSession.session);
@@ -1221,26 +1381,28 @@ export function App() {
         llm_options: payload.llm_options ?? authSession.llm_options ?? llmOptions,
       });
       setIsSettingsPanelOpen(false);
-      setStatus("Settings saved");
+      setGlobalStatus("Settings saved");
     } catch (error) {
-      setStatus(error.message);
+      setGlobalStatus(error.message);
     } finally {
       setIsSavingSettings(false);
     }
   }
 
-  async function saveGeneratedFile() {
+  async function saveGeneratedFile(options = {}) {
+    const replace = Boolean(options?.replace);
+    const continueAfterSave = Boolean(options?.continueAfterSave);
     const isGuest = authSession?.status === "anonymous";
     const isSignedIn = Boolean(authSession?.user?.email && authSession?.settings?.id);
     if (!authSession?.session || (!isGuest && !isSignedIn)) {
       setStatus("Log in or continue as guest before saving this file.");
-      return;
+      return null;
     }
 
     const trimmedFileName = fileName.trim();
     if (!trimmedFileName) {
       setStatus("Enter a file name before saving.");
-      return;
+      return null;
     }
 
     setIsSavingFile(true);
@@ -1250,6 +1412,7 @@ export function App() {
       const payload = generatedFile?.id
         ? await patchJSON(`/api/generated-files/${generatedFile.id}`, {
             file_name: trimmedFileName,
+            replace,
           })
         : await postJSON("/api/generated-files", {
             email: authSession.user?.email ?? null,
@@ -1257,9 +1420,11 @@ export function App() {
             settings_id: authSession.settings?.id ?? null,
             file_name: trimmedFileName,
             ai_architecture: "base",
+            replace,
           });
 
       const savedFile = payload.generated_file;
+      const replacedGeneratedFileId = payload.replaced_generated_file?.id;
       setGeneratedFile(savedFile);
       setIsLiteratureSearchEnabled(wasCreatingFile ? false : isLiteratureSearchEnabled);
       if (wasCreatingFile || !isLiteratureSearchEnabled) {
@@ -1270,7 +1435,10 @@ export function App() {
         const generatedDocuments = current.generated_documents ?? [];
         const previousDocument = generatedDocuments.find((document) => String(document.id) === String(savedFile.id));
         const savedDocument = generatedFileToDocument({ ...(previousDocument ?? {}), ...savedFile });
-        const withoutSavedDocument = generatedDocuments.filter((document) => String(document.id) !== String(savedDocument.id));
+        const withoutSavedDocument = generatedDocuments.filter((document) => {
+          const documentId = String(document.id);
+          return documentId !== String(savedDocument.id) && documentId !== String(replacedGeneratedFileId);
+        });
         return {
           ...current,
           generated_documents: [savedDocument, ...withoutSavedDocument],
@@ -1278,8 +1446,19 @@ export function App() {
         };
       });
       setStatus("File saved");
+      return savedFile;
     } catch (error) {
+      if (error.status === 409 && error.detail?.reason === "duplicate_generated_file") {
+        setReplaceGeneratedFilePrompt({
+          fileName: trimmedFileName,
+          existingFile: error.detail.generated_file ?? null,
+          continueAfterSave,
+        });
+        setStatus(error.message);
+        return null;
+      }
       setStatus(error.message);
+      return null;
     } finally {
       setIsSavingFile(false);
     }
@@ -1291,7 +1470,7 @@ export function App() {
 
     const ownerQuery = authOwnerQuery(authSession);
     if (!ownerQuery) {
-      setStatus("Log in or continue as guest before uploading documents.");
+      setGlobalStatus("Log in or continue as guest before uploading documents.");
       return false;
     }
 
@@ -1305,23 +1484,23 @@ export function App() {
     formData.append("replace", replace ? "true" : "false");
 
     setIsUploadingDocuments(true);
-    setStatus(replace ? "Replacing uploaded document..." : "Uploading documents...");
+    setGlobalStatus(replace ? "Replacing uploaded document..." : "Uploading documents...");
     try {
       const payload = await postForm("/api/uploaded-files", formData);
       setWorkspaceData((current) => ({
         ...current,
         uploaded_documents: normalizeUploadedDocuments(payload.uploaded_documents),
       }));
-      setStatus(payload.message || "Documents uploaded successfully.");
+      setGlobalStatus(payload.message || "Documents uploaded successfully.");
       return true;
     } catch (error) {
       if (error.status === 409) {
         const duplicates = Array.isArray(error.detail?.duplicates) ? error.detail.duplicates : selectedFiles.map((file) => file.name);
         setUploadReplacePrompt({ files: selectedFiles, duplicates });
-        setStatus(error.message);
+        setGlobalStatus(error.message);
         return true;
       }
-      setStatus(error.message);
+      setGlobalStatus(error.message);
       return false;
     } finally {
       setIsUploadingDocuments(false);
@@ -1340,7 +1519,7 @@ export function App() {
 
     const credentialsId = authSession?.user?.id;
     if (!credentialsId) {
-      setStatus("Start a workspace session before uploading outline templates.");
+      setGlobalStatus("Start a workspace session before uploading outline templates.");
       return false;
     }
 
@@ -1349,23 +1528,188 @@ export function App() {
     formData.append("credentials_id", String(credentialsId));
 
     setIsUploadingOutlineTemplates(true);
-    setStatus("Uploading templates...");
+    setGlobalStatus("Uploading templates...");
     try {
       const payload = await postForm("/api/uploaded-outline-templates", formData);
       setUploadedOutlineTemplates(payload.templates ?? []);
-      setStatus(payload.message || "Templates uploaded successfully.");
+      setGlobalStatus(payload.message || "Templates uploaded successfully.");
       return true;
     } catch (error) {
-      setStatus(error.message);
+      setGlobalStatus(error.message);
       return false;
     } finally {
       setIsUploadingOutlineTemplates(false);
     }
   }
 
+  async function renameGeneratedDocument(document, nextName) {
+    if (!document?.id) {
+      setGlobalStatus("Select a generated document before renaming it.");
+      return false;
+    }
+
+    setGlobalStatus("Renaming generated document...");
+    try {
+      const payload = await patchJSON(`/api/generated-files/${document.id}`, {
+        file_name: nextName,
+        replace: false,
+      });
+      const renamedDocument = generatedFileToDocument(payload.generated_file);
+      setWorkspaceData((current) => ({
+        ...current,
+        generated_documents: (current.generated_documents ?? []).map((currentDocument) => (String(currentDocument.id) === String(renamedDocument.id) ? { ...currentDocument, ...renamedDocument } : currentDocument)),
+      }));
+      if (String(generatedFile?.id) === String(renamedDocument.id)) {
+        setGeneratedFile((current) => ({ ...(current ?? {}), ...renamedDocument }));
+        setFileName(renamedDocument.file_name ?? renamedDocument.name ?? nextName);
+      }
+      setGlobalStatus(`Generated document renamed.`);
+      return true;
+    } catch (error) {
+      setGlobalStatus(error.message);
+      return false;
+    }
+  }
+
+  async function renameUploadedDocument(document, nextName) {
+    if (!document?.id) {
+      setGlobalStatus("Select an uploaded document before renaming it.");
+      return false;
+    }
+
+    const ownerPayload = authSession?.user?.email ? { email: authSession.user.email } : authSession?.session ? { session: authSession.session } : null;
+    if (!ownerPayload) {
+      setGlobalStatus("Log in or continue as guest before renaming uploaded documents.");
+      return false;
+    }
+
+    setGlobalStatus("Renaming uploaded document...");
+    try {
+      const payload = await patchJSON(`/api/uploaded-files/${document.id}`, {
+        ...ownerPayload,
+        file_name: nextName,
+      });
+      const affectedDocuments = Array.isArray(payload.affected_documents) ? payload.affected_documents : [];
+      const affectedById = new Map(affectedDocuments.filter((affectedDocument) => affectedDocument?.generated_file?.id).map((affectedDocument) => [String(affectedDocument.generated_file.id), affectedDocument]));
+      const selectedAffectedDocument = generatedFile?.id ? affectedById.get(String(generatedFile.id)) : null;
+      setWorkspaceData((current) => ({
+        ...current,
+        uploaded_documents: normalizeUploadedDocuments(payload.uploaded_documents ?? []),
+        attached_files: selectedAffectedDocument ? normalizeUploadedDocuments(selectedAffectedDocument.attached_files ?? []) : current.attached_files,
+        generated_documents: (current.generated_documents ?? []).map((currentDocument) => {
+          const affectedDocument = affectedById.get(String(currentDocument.id));
+          if (!affectedDocument) return currentDocument;
+          return {
+            ...currentDocument,
+            attached_documents: normalizeUploadedDocuments(affectedDocument.attached_files ?? []),
+            attached_documents_count: Array.isArray(affectedDocument.attached_files) ? affectedDocument.attached_files.length : currentDocument.attached_documents_count,
+          };
+        }),
+      }));
+      setGlobalStatus(payload.message || "Uploaded document renamed.");
+      return true;
+    } catch (error) {
+      setGlobalStatus(error.message);
+      return false;
+    }
+  }
+
+  async function renameUploadedOutlineTemplate(template, nextName) {
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId || !template?.name) {
+      setGlobalStatus("Start a workspace session before renaming uploaded templates.");
+      return false;
+    }
+
+    setGlobalStatus("Renaming outline template...");
+    try {
+      const payload = await patchJSON(`/api/uploaded-outline-templates/${encodeURIComponent(template.name)}/rename`, {
+        credentials_id: credentialsId,
+        file_name: nextName,
+      });
+      setUploadedOutlineTemplates(payload.templates ?? []);
+      if (selectedUploadedOutlineTemplate === template.name) {
+        setSelectedUploadedOutlineTemplate(payload.template?.name ?? "");
+      }
+      if (editingUploadedOutlineTemplate?.name === template.name && payload.template) {
+        setEditingUploadedOutlineTemplate(payload.template);
+      }
+      setGlobalStatus(payload.message || "Outline template renamed.");
+      return true;
+    } catch (error) {
+      setGlobalStatus(error.message);
+      return false;
+    }
+  }
+
+  async function editUploadedOutlineTemplate(template) {
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId || !template?.name) {
+      setGlobalStatus("Start a workspace session before editing uploaded templates.");
+      return;
+    }
+
+    setGlobalStatus(`Loading ${template.label || template.name} template...`);
+    try {
+      const payload = await getJSON(`/api/uploaded-outline-templates/${encodeURIComponent(template.name)}?credentials_id=${encodeURIComponent(credentialsId)}`);
+      setEditingUploadedOutlineTemplate(template);
+      setEditingUploadedOutlineTemplateContent(payload.content ?? "");
+      setGlobalStatus("");
+    } catch (error) {
+      setGlobalStatus(error.message);
+    }
+  }
+
+  async function saveUploadedOutlineTemplate(nextOutline) {
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId || !editingUploadedOutlineTemplate?.name) {
+      setGlobalStatus("Start a workspace session before saving uploaded templates.");
+      return;
+    }
+
+    setGlobalStatus(`Saving ${editingUploadedOutlineTemplate.label || editingUploadedOutlineTemplate.name} template...`);
+    try {
+      const payload = await patchJSON(`/api/uploaded-outline-templates/${encodeURIComponent(editingUploadedOutlineTemplate.name)}`, {
+        credentials_id: credentialsId,
+        outline: nextOutline,
+      });
+      setUploadedOutlineTemplates(payload.templates ?? []);
+      setEditingUploadedOutlineTemplate(null);
+      setEditingUploadedOutlineTemplateContent("");
+      setGlobalStatus(payload.message || "Outline template saved.");
+    } catch (error) {
+      setGlobalStatus(error.message);
+    }
+  }
+
+  async function deleteUploadedOutlineTemplate(template) {
+    const credentialsId = authSession?.user?.id;
+    if (!credentialsId || !template?.name) {
+      setGlobalStatus("Start a workspace session before removing uploaded templates.");
+      return;
+    }
+
+    setGlobalStatus(`Removing ${template.label || template.name} template...`);
+    try {
+      const payload = await deleteJSON(`/api/uploaded-outline-templates/${encodeURIComponent(template.name)}?credentials_id=${encodeURIComponent(credentialsId)}`);
+      setUploadedOutlineTemplates(payload.templates ?? []);
+      if (selectedUploadedOutlineTemplate === template.name) {
+        setSelectedUploadedOutlineTemplate("");
+        setUseExample(false);
+      }
+      if (editingUploadedOutlineTemplate?.name === template.name) {
+        setEditingUploadedOutlineTemplate(null);
+        setEditingUploadedOutlineTemplateContent("");
+      }
+      setGlobalStatus(payload.message || "Outline template removed.");
+    } catch (error) {
+      setGlobalStatus(error.message);
+    }
+  }
+
   function cancelUploadReplacement() {
     setUploadReplacePrompt(null);
-    setStatus("Upload cancelled. Existing documents were not replaced.");
+    setGlobalStatus("Upload cancelled. Existing documents were not replaced.");
   }
 
   async function attachUploadedDocuments(documents, mode = "ask") {
@@ -1536,7 +1880,7 @@ export function App() {
 
   function deleteUploadedDocument(document) {
     if (!document?.id) {
-      setStatus("Select an uploaded document before deleting it.");
+      setGlobalStatus("Select an uploaded document before deleting it.");
       return;
     }
 
@@ -1545,26 +1889,26 @@ export function App() {
 
   function cancelDeleteUploadedDocument() {
     setDeleteUploadedFilePrompt(null);
-    setStatus("Uploaded document was not deleted.");
+    setGlobalStatus("Uploaded document was not deleted.");
   }
 
   async function confirmDeleteUploadedDocument() {
     const document = deleteUploadedFilePrompt;
     if (!document?.id) {
       setDeleteUploadedFilePrompt(null);
-      setStatus("Select an uploaded document before deleting it.");
+      setGlobalStatus("Select an uploaded document before deleting it.");
       return;
     }
 
     const ownerQuery = authOwnerQuery(authSession);
     if (!ownerQuery) {
       setDeleteUploadedFilePrompt(null);
-      setStatus("Log in or continue as guest before deleting uploaded documents.");
+      setGlobalStatus("Log in or continue as guest before deleting uploaded documents.");
       return;
     }
 
     setDeleteUploadedFilePrompt(null);
-    setStatus("Deleting uploaded document...");
+    setGlobalStatus("Deleting uploaded document...");
     try {
       const payload = await deleteJSON(`/api/uploaded-files/${document.id}?${ownerQuery}`);
       const affectedDocuments = Array.isArray(payload.affected_documents) ? payload.affected_documents : [];
@@ -1605,21 +1949,21 @@ export function App() {
           };
         }),
       }));
-      setStatus(payload.message || "Uploaded document deleted.");
+      setGlobalStatus(payload.message || "Uploaded document deleted.");
     } catch (error) {
-      setStatus(error.message);
+      setGlobalStatus(error.message);
     }
   }
 
   async function downloadGeneratedDocument(document, format = "md") {
     if (!document?.id) {
-      setStatus("Select a generated document before downloading it.");
+      setGlobalStatus("Select a generated document before downloading it.");
       return;
     }
 
     const downloadFormat = ["md", "docx", "latex"].includes(format) ? format : "md";
     const extension = downloadFormat === "latex" ? "zip" : downloadFormat;
-    setStatus("Preparing generated document download...");
+    setGlobalStatus("Preparing generated document download...");
     try {
       const ownerQuery = authOwnerQuery(authSession);
       const params = new URLSearchParams(ownerQuery);
@@ -1627,15 +1971,15 @@ export function App() {
       const fileTitle = document.file_name ?? document.name ?? "generated-document";
       const blob = await getBlob(`/api/generated-files/${document.id}/download?${params.toString()}`);
       downloadBlobFile(`${safeDownloadName(fileTitle)}.${extension}`, blob);
-      setStatus("Generated document downloaded.");
+      setGlobalStatus("Generated document downloaded.");
     } catch (error) {
-      setStatus(error.message);
+      setGlobalStatus(error.message);
     }
   }
 
   function deleteGeneratedDocument(document) {
     if (!document?.id) {
-      setStatus("Select a generated document before removing it.");
+      setGlobalStatus("Select a generated document before removing it.");
       return;
     }
 
@@ -1644,14 +1988,14 @@ export function App() {
 
   function cancelDeleteGeneratedDocument() {
     setDeleteGeneratedFilePrompt(null);
-    setStatus("Generated document was not removed.");
+    setGlobalStatus("Generated document was not removed.");
   }
 
   async function confirmDeleteGeneratedDocument() {
     const document = deleteGeneratedFilePrompt;
     if (!document?.id) {
       setDeleteGeneratedFilePrompt(null);
-      setStatus("Select a generated document before removing it.");
+      setGlobalStatus("Select a generated document before removing it.");
       return;
     }
 
@@ -1659,7 +2003,7 @@ export function App() {
     const queryString = ownerQuery ? `?${ownerQuery}` : "";
 
     setDeleteGeneratedFilePrompt(null);
-    setStatus("Removing generated document...");
+    setGlobalStatus("Removing generated document...");
     try {
       const payload = await deleteJSON(`/api/generated-files/${document.id}${queryString}`);
       const removedSelectedDocument = String(generatedFile?.id) === String(document.id);
@@ -1688,9 +2032,9 @@ export function App() {
         concept_maps: removedSelectedDocument ? [] : current.concept_maps,
         attached_files: removedSelectedDocument ? [] : current.attached_files,
       }));
-      setStatus(payload.message || "Generated document removed.");
+      setGlobalStatus(payload.message || "Generated document removed.");
     } catch (error) {
-      setStatus(error.message);
+      setGlobalStatus(error.message);
     }
   }
 
@@ -1703,11 +2047,14 @@ export function App() {
       <TopBar
         accountLabel={authSession?.user?.email ?? "Anonymous session"}
         isGuest={authSession?.status === "anonymous" || !authSession?.user?.email}
+        isMaintainer={isMaintainerAuthSession(authSession)}
         canChangePassword={authSession?.auth_provider !== "azure"}
         onChangePassword={() => setIsChangePasswordOpen(true)}
         onHelp={() => setIsAboutOpen(true)}
+        onShowLogs={() => setIsMaintainerLogsOpen(true)}
         onLogout={logout}
       />
+      <StatusBar message={globalStatus} variant="global" onDismiss={() => setGlobalStatus("")} />
       <Sidebar
         generatedDocuments={workspaceData.generated_documents}
         selectedGeneratedDocumentId={generatedFile?.id}
@@ -1715,70 +2062,115 @@ export function App() {
         onGeneratedDocumentsExpand={() => setIsGeneratedDocumentsViewOpen(true)}
         onGeneratedDocumentDownload={downloadGeneratedDocument}
         onGeneratedDocumentDelete={deleteGeneratedDocument}
+        onGeneratedDocumentRename={renameGeneratedDocument}
         isLoadingGeneratedDocuments={isLoadingGeneratedDocuments}
         uploadedDocuments={workspaceData.uploaded_documents}
         isLoadingUploadedDocuments={isLoadingUploadedDocuments}
         onUploadedDocumentsUpload={uploadDocuments}
         onUploadedDocumentDelete={deleteUploadedDocument}
+        onUploadedDocumentRename={renameUploadedDocument}
         isUploadingDocuments={isUploadingDocuments}
         onAttachUploadedDocuments={attachUploadedDocuments}
         isAttachingUploadedDocuments={isAttachingUploadedDocuments}
         uploadedTemplates={uploadedOutlineTemplates}
         isLoadingUploadedTemplates={isLoadingUploadedOutlineTemplates}
         onUploadedTemplatesUpload={uploadOutlineTemplates}
+        onUploadedTemplateEdit={editUploadedOutlineTemplate}
+        onUploadedTemplateDelete={deleteUploadedOutlineTemplate}
+        onUploadedTemplateRename={renameUploadedOutlineTemplate}
         isUploadingTemplates={isUploadingOutlineTemplates}
         canUploadTemplates={Boolean(authSession?.user?.id)}
         health={systemHealth}
         isHealthLoading={isHealthLoading}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((current) => !current)}
+        onStatusMessage={setGlobalStatus}
       />
-      <main className={`workspace ${selectedParagraph?.text ? "" : "workspace-compact-action-strip"}`.trim()}>
+      <main className={`workspace ${selectedParagraph?.text ? "" : "workspace-compact-action-strip"} ${workspaceFlowStep === "ready" ? "" : "workspace-draft-flow"}`.trim()}>
         <WorkspaceHeader fileName={fileName} setFileName={setFileName} onSave={saveGeneratedFile} onNewDocument={newDocument} isSaving={isSavingFile} settings={aiSettings} onOpenSettings={() => setIsSettingsPanelOpen(true)} />
-        <OutlinePanel
-          mode={outlineMode}
-          setMode={setOutlineMode}
-          query={query}
-          setQuery={setQuery}
-          referenceDocument={referenceDocument}
-          setReferenceDocument={setReferenceDocument}
-          outline={outline}
-          setOutline={updateOutlineFromEditor}
-          outlineTemplates={outlineTemplates}
-          selectedOutlineTemplate={selectedOutlineTemplate}
-          uploadedOutlineTemplates={uploadedOutlineTemplates}
-          selectedUploadedOutlineTemplate={selectedUploadedOutlineTemplate}
-          onOutlineTemplateChange={selectOutlineTemplate}
-          onUploadedOutlineTemplateChange={selectUploadedOutlineTemplate}
-          onGenerate={generateOutline}
-          onReplaceOutlineConfirm={resetManuscriptForOutlineReplacement}
-          onFormat={formatOutline}
-          onRun={runStructuredOutline}
-          onRegenerate={regenerateStructuredOutline}
-          onPause={pauseStructuredOutline}
-          onDownload={(format) => downloadGeneratedDocument(generatedFile, format)}
-          isRunning={isSavingOutline}
-          status={status}
-          hasSelectedFile={Boolean(generatedFile?.id)}
-          hasGeneratedContent={hasManuscriptContent(workspaceData.manuscript, generatedContent)}
-          resetSignal={workspaceResetVersion}
-        />
-        <ActionStrip
-          action={action}
-          setAction={setAction}
-          onWrite={writeContent}
-          isWriting={isWriting}
-          onOpenConceptMap={openConceptMap}
-          hasSelectedFile={Boolean(generatedFile?.id)}
-          isLiteratureSearchEnabled={isLiteratureSearchEnabled}
-          isConfiguringLiteratureSearch={isConfiguringLiteratureSearch}
-          onLiteratureSearchChange={configureLiteratureSearch}
-          attachedFiles={workspaceData.attached_files}
-          onRemoveAttachedFile={removeAttachedFile}
-          hasSelectedParagraphText={Boolean(selectedParagraph?.text)}
-        />
-        <Manuscript manuscript={workspaceData.manuscript} refList={workspaceData.ref_list} generatedContent={generatedContent} isGenerating={isSavingOutline} currentWritingSection={currentWritingSection} selectedParagraphId={selectedParagraph?.id ?? ""} syncVersion={manuscriptSyncVersion} updatingParagraphId={updatingParagraphId} onParagraphSelectionChange={setSelectedParagraph} />
+        <section className={`workspace-file-status-section ${String(status ?? "").trim() ? "has-status" : ""}`} aria-label="Document status">
+          <StatusBar message={status} variant="file" onDismiss={() => setStatus("")} />
+        </section>
+        {workspaceFlowStep === "ready" ? (
+          <>
+            <OutlinePanel
+              outline={outline}
+              setOutline={updateOutlineFromEditor}
+              onRun={runStructuredOutline}
+              onRegenerate={regenerateStructuredOutline}
+              onPause={pauseStructuredOutline}
+              onDownload={(format) => downloadGeneratedDocument(generatedFile, format)}
+              onBack={returnToOutlinePreferenceStep}
+              onStartOver={startOutlineFlowOver}
+              isRunning={isSavingOutline}
+              hasSelectedFile={Boolean(generatedFile?.id)}
+              hasGeneratedContent={hasManuscriptContent(workspaceData.manuscript, generatedContent)}
+              resetSignal={workspaceResetVersion}
+            />
+            <ActionStrip
+              action={action}
+              setAction={setAction}
+              onWrite={writeContent}
+              isWriting={isWriting}
+              onOpenConceptMap={openConceptMap}
+              hasSelectedFile={Boolean(generatedFile?.id)}
+              isLiteratureSearchEnabled={isLiteratureSearchEnabled}
+              isConfiguringLiteratureSearch={isConfiguringLiteratureSearch}
+              onLiteratureSearchChange={configureLiteratureSearch}
+              attachedFiles={workspaceData.attached_files}
+              onRemoveAttachedFile={removeAttachedFile}
+              hasSelectedParagraphText={Boolean(selectedParagraph?.text)}
+            />
+            <Manuscript
+              manuscript={workspaceData.manuscript}
+              refList={workspaceData.ref_list}
+              generatedContent={generatedContent}
+              isGenerating={isSavingOutline}
+              currentWritingSection={currentWritingSection}
+              selectedParagraphId={selectedParagraph?.id ?? ""}
+              syncVersion={manuscriptSyncVersion}
+              updatingParagraphId={updatingParagraphId}
+              onParagraphSelectionChange={setSelectedParagraph}
+            />
+          </>
+        ) : (
+          <DraftFlowPanel
+            step={workspaceFlowStep}
+            query={query}
+            setQuery={setQuery}
+            referenceDocument={referenceDocument}
+            setReferenceDocument={setReferenceDocument}
+            outline={outline}
+            setOutline={updateOutlineFromEditor}
+            outlineTemplates={outlineTemplates}
+            uploadedOutlineTemplates={uploadedOutlineTemplates}
+            selectedOutlineTemplate={selectedOutlineTemplate}
+            selectedUploadedOutlineTemplate={selectedUploadedOutlineTemplate}
+            onOutlineTemplateChange={selectOutlineTemplate}
+            onUploadedOutlineTemplateChange={selectUploadedOutlineTemplate}
+            onGenerateOutline={generateOutlineForFlow}
+            onUploadOutline={uploadOutlineForFlow}
+            onReplaceOutlineConfirm={resetManuscriptForOutlineReplacement}
+            onNextFromQuery={advanceFromQueryStep}
+            onBack={returnToTopicStep}
+            onComplete={completeOutlineFlow}
+            isCreatingOutline={isCreatingOutline}
+            isImportingOutline={isImportingOutline}
+            resetSignal={workspaceResetVersion}
+          />
+        )}
       </main>
+      <OutlineEditor
+        outline={editingUploadedOutlineTemplateContent}
+        isOpen={Boolean(editingUploadedOutlineTemplate)}
+        fileName={editingUploadedOutlineTemplate?.file_name ?? editingUploadedOutlineTemplate?.name ?? ""}
+        onFileNameRename={(nextName) => renameUploadedOutlineTemplate(editingUploadedOutlineTemplate, nextName)}
+        onClose={() => {
+          setEditingUploadedOutlineTemplate(null);
+          setEditingUploadedOutlineTemplateContent("");
+        }}
+        onSave={saveUploadedOutlineTemplate}
+      />
       <SettingsPanel settings={aiSettings} modelOptions={llmOptions} isOpen={isSettingsPanelOpen} isSaving={isSavingSettings} onClose={() => setIsSettingsPanelOpen(false)} onSave={saveSettings} />
       {isChangePasswordOpen && authSession?.user?.email ? (
         <ChangePasswordDialog
@@ -1786,7 +2178,7 @@ export function App() {
           onClose={() => setIsChangePasswordOpen(false)}
           onChanged={(payload) => {
             setIsChangePasswordOpen(false);
-            setStatus(payload.message ?? "Password changed successfully.");
+            setGlobalStatus(payload.message ?? "Password changed successfully.");
           }}
         />
       ) : null}
@@ -1804,6 +2196,7 @@ export function App() {
           onRemove={deleteGeneratedDocument}
         />
       ) : null}
+      {isMaintainerLogsOpen && isMaintainerAuthSession(authSession) ? <MaintainerLogsPage authSession={authSession} onClose={() => setIsMaintainerLogsOpen(false)} /> : null}
       <ConfirmDialog
         isOpen={isRegenerateConfirmOpen}
         title="Regenerate manuscript?"
@@ -1816,6 +2209,36 @@ export function App() {
         ]}
       >
         <p>This will start from the beginning of the outline and replace any manuscript content already generated for this file.</p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        isOpen={saveBeforeNextPrompt}
+        title="Save file name?"
+        dialogId="save-before-next-confirm"
+        icon={<Save size={19} />}
+        onClose={cancelSaveBeforeNext}
+        actions={[
+          { label: "Cancel", onClick: cancelSaveBeforeNext, autoFocus: true },
+          { label: "Save and continue", onClick: confirmSaveBeforeNext, variant: "primary", icon: <Save size={15} /> },
+        ]}
+      >
+        <p>
+          Save <strong>{fileName.trim() || "this document"}</strong> before continuing to the outline step.
+        </p>
+      </ConfirmDialog>
+      <ConfirmDialog
+        isOpen={Boolean(replaceGeneratedFilePrompt)}
+        title="Replace generated document?"
+        dialogId="replace-generated-file-confirm"
+        icon={<AlertTriangle size={19} />}
+        onClose={cancelReplaceGeneratedFile}
+        actions={[
+          { label: "Cancel", onClick: cancelReplaceGeneratedFile, autoFocus: true },
+          { label: "Replace", onClick: confirmReplaceGeneratedFile, variant: "danger", icon: <Save size={15} /> },
+        ]}
+      >
+        <p>
+          A generated document named <strong>{replaceGeneratedFilePrompt?.fileName || "this file"}</strong> already exists. Do you want to replace it?
+        </p>
       </ConfirmDialog>
       <ConfirmDialog
         isOpen={Boolean(disableLiteratureSearchPrompt)}
@@ -1877,12 +2300,8 @@ export function App() {
               ]
         }
       >
-        <p>
-          Attaching uploaded files will reset the manuscript content for this generated document because the reference context is changing. Your saved outline will stay in place.
-        </p>
-        {attachFilesPrompt?.hasExistingAttachments ? (
-          <p>This generated document already has attached files. Add the selected files to that set, or replace the current set?</p>
-        ) : null}
+        <p>Attaching uploaded files will reset the manuscript content for this generated document because the reference context is changing. Your saved outline will stay in place.</p>
+        {attachFilesPrompt?.hasExistingAttachments ? <p>This generated document already has attached files. Add the selected files to that set, or replace the current set?</p> : null}
         <dl>
           <div>
             <dt>Already attached</dt>

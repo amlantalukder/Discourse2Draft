@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { File, FileCode, FileCsv, FileLines, FilePdf, FileWord, FileZipper } from "./FontAwesomeIcons";
+import { File, FileCode, FileCsv, FileLines, FilePdf, FileWord, FileZipper, X } from "./FontAwesomeIcons";
 
 function selectedFileLabel(files) {
   if (!files.length) return "No file selected";
@@ -40,7 +40,7 @@ function fileIconFor(fileName = "") {
   return { Icon: File, kind: "default", label: "File" };
 }
 
-export function FileUploadControl({ label, accept, multiple = true, files = [], onFilesChange, disabled = false }) {
+export function FileUploadControl({ label, accept, multiple = true, files = [], onFilesChange, disabled = false, showRemoveControls = false }) {
   const inputRef = useRef(null);
   const [isFileListOpen, setIsFileListOpen] = useState(false);
   const selectedFiles = Array.isArray(files) ? files : files ? [files] : [];
@@ -53,6 +53,15 @@ export function FileUploadControl({ label, accept, multiple = true, files = [], 
     const nextFiles = Array.from(event.target.files ?? []);
     onFilesChange?.(multiple ? nextFiles : (nextFiles[0] ?? null));
     event.target.value = "";
+  }
+
+  function removeSelectedFile(index) {
+    if (disabled) return;
+    const nextFiles = selectedFiles.filter((_, fileIndex) => fileIndex !== index);
+    onFilesChange?.(multiple ? nextFiles : (nextFiles[0] ?? null));
+    if (nextFiles.length === 0) {
+      setIsFileListOpen(false);
+    }
   }
 
   return (
@@ -68,7 +77,7 @@ export function FileUploadControl({ label, accept, multiple = true, files = [], 
       {selectedFiles.length ? (
         <div className="selected-file-list" aria-label="Selected files">
           {visibleFiles.map((file, index) => (
-            <SelectedFileName file={file} key={`${file.name ?? "file"}-${index}`} />
+            <SelectedFileName file={file} key={`${file.name ?? "file"}-${index}`} onRemove={showRemoveControls ? () => removeSelectedFile(index) : null} disabled={disabled} />
           ))}
           {hiddenFileCount ? (
             <button className="selected-file-more" type="button" onClick={() => setIsFileListOpen(true)}>
@@ -92,7 +101,14 @@ export function FileUploadControl({ label, accept, multiple = true, files = [], 
       >
         <ul className="selected-file-dialog-list">
           {selectedFiles.map((file, index) => (
-            <li key={`${file.name ?? "file"}-${index}`}>{file.name ?? "Untitled file"}</li>
+            <li key={`${file.name ?? "file"}-${index}`}>
+              <span>{file.name ?? "Untitled file"}</span>
+              {showRemoveControls ? (
+                <button type="button" onClick={() => removeSelectedFile(index)} disabled={disabled} aria-label={`Remove ${file.name ?? "selected file"}`}>
+                  <X size={12} />
+                </button>
+              ) : null}
+            </li>
           ))}
         </ul>
       </ConfirmDialog>
@@ -100,14 +116,19 @@ export function FileUploadControl({ label, accept, multiple = true, files = [], 
   );
 }
 
-function SelectedFileName({ file }) {
+function SelectedFileName({ file, onRemove, disabled = false }) {
   const fileName = file.name ?? "Untitled file";
   const { Icon, kind, label } = fileIconFor(fileName);
 
   return (
-    <span className="selected-file-name" title={fileName}>
+    <span className={`selected-file-name ${onRemove ? "selected-file-name-removable" : ""}`} title={fileName}>
       <Icon className={`selected-file-icon selected-file-icon-${kind}`} size={12} aria-label={label} />
       <span className="selected-file-short-name">{shortFileName(fileName)}</span>
+      {onRemove ? (
+        <button type="button" className="selected-file-remove" onClick={onRemove} disabled={disabled} aria-label={`Remove ${fileName}`}>
+          <X size={9} />
+        </button>
+      ) : null}
     </span>
   );
 }

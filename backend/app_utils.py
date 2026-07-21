@@ -82,6 +82,12 @@ class GeneratedFileUpdateRequest(BaseModel):
     replace: bool = False
 
 
+class UploadedFileUpdateRequest(BaseModel):
+    email: str | None = None
+    session: str | None = None
+    file_name: str
+
+
 class GeneratedFileLiteratureSearchRequest(BaseModel):
     email: str | None = None
     session: str | None = None
@@ -130,6 +136,16 @@ class MaintainerLogClearRequest(BaseModel):
     email: str
     session: str
     entry_ids: list[int] = Field(default_factory=list)
+
+
+class UploadedOutlineTemplateUpdateRequest(BaseModel):
+    credentials_id: int
+    outline: str
+
+
+class UploadedOutlineTemplateRenameRequest(BaseModel):
+    credentials_id: int
+    file_name: str
 
 
 def _required_default_model() -> str:
@@ -566,6 +582,13 @@ def _uploaded_file_type(file_name: str | None) -> str:
 
 OUTLINE_REFERENCE_ALLOWED_SUFFIXES = {".txt", ".md", ".markdown", ".csv", ".tsv", ".docx", ".pdf"}
 OUTLINE_REFERENCE_MAX_BYTES = 10 * 1024 * 1024
+OUTLINE_IMPORT_ALLOWED_SUFFIXES = {".md", ".docx"}
+OUTLINE_IMPORT_MAX_BYTES = 10 * 1024 * 1024
+MARKDOWN_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+NUMBERED_OUTLINE_RE = re.compile(r"^(\d+(?:\.\d+)*)(?:[.)])?\s+(.+?)\s*$")
+ROMAN_OUTLINE_RE = re.compile(r"^([IVXLCDM]+)[.)]\s+(.+?)\s*$", re.IGNORECASE)
+ALPHA_OUTLINE_RE = re.compile(r"^([A-Z])[.)]\s+(.+?)\s*$")
+BULLET_OUTLINE_RE = re.compile(r"^[-*+]\s+(.+?)\s*$")
 
 
 def _decode_text_document(content: bytes) -> str:
@@ -588,6 +611,193 @@ def _extract_docx_text(content: bytes) -> str:
             if row_text:
                 parts.append(row_text)
     return "\n\n".join(parts).strip()
+
+
+def _clean_outline_heading(text: str) -> str:
+    heading = re.sub(r"\s+#+\s*$", "", text).strip()
+    heading = re.sub(r"^[*_`]+|[*_`]+$", "", heading).strip()
+    return heading
+
+
+def _line_heading_level(line: str) -> int | None:
+    match = MARKDOWN_HEADING_RE.match(line.strip())
+    return len(match.group(1)) if match else None
+
+
+def _ensure_outline_content_tags(lines: list[str]) -> list[str]:
+    from src.common import OutlineTAGs
+
+    content_tag = OutlineTAGs.CONTENT.value
+    heading_positions = [(index, _line_heading_level(line)) for index, line in enumerate(lines)]
+    heading_positions = [(index, level) for index, level in heading_positions if level is not None]
+    if not heading_positions:
+        return lines
+
+    insert_positions = set()
+    for position_index, (line_index, level) in enumerate(heading_positions):
+        next_heading = heading_positions[position_index + 1] if position_index + 1 < len(heading_positions) else None
+        next_heading_index = next_heading[0] if next_heading else len(lines)
+        next_heading_level = next_heading[1] if next_heading else None
+        is_leaf = next_heading_level is None or next_heading_level <= level
+        if not is_leaf:
+            continue
+
+        section_lines = lines[line_index + 1 : next_heading_index]
+        if any(line.strip() == content_tag for line in section_lines):
+            continue
+        insert_positions.add(next_heading_index)
+
+    normalized_lines = []
+    for index, line in enumerate(lines):
+        if index in insert_positions:
+            normalized_lines.extend(["", content_tag, ""])
+        normalized_lines.append(line)
+    if len(lines) in insert_positions:
+        normalized_lines.extend(["", content_tag])
+
+    return normalized_lines
+
+
+def _normalize_outline_lines(lines: list[str]) -> str:
+    from src.manage_outline import getRawOutline, processOutline
+
+    outline_text = "\n".join(_ensure_outline_content_tags(lines)).strip()
+    if not outline_text:
+        raise HTTPException(status_code=400, detail="No outline headings were found in that file.")
+
+    try:
+        processed_outline = processOutline(outline_text)
+        return "\n".join(getRawOutline(processed_outline, raw_outline=[])).strip()
+    except Exception:
+        logger.exception("Unable to convert uploaded outline into app outline format.")
+        raise HTTPException(
+            status_code=400,
+            detail="We found outline text, but could not convert it into the app outline format. Check the heading levels and try again.",
+        )
+
+
+def _markdown_outline_lines(text: str) -> list[str]:
+    from src.common import OutlineTAGs
+
+    lines = []
+    inside_instructions = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if line == OutlineTAGs.INSTRUCTIONS_START.value:
+            inside_instructions = True
+            lines.append(line)
+            continue
+        if line == OutlineTAGs.INSTRUCTIONS_END.value:
+            inside_instructions = False
+            lines.append(line)
+            continue
+        if inside_instructions or line == OutlineTAGs.CONTENT.value:
+            lines.append(line)
+            continue
+
+        heading_match = MARKDOWN_HEADING_RE.match(line)
+        if heading_match:
+            heading = _clean_outline_heading(heading_match.group(2))
+            if heading:
+                lines.append(f"{heading_match.group(1)} {heading}")
+
+    return lines
+
+
+def _inferred_outline_lines(text: str, file_name: str | None = None) -> list[str]:
+    meaningful_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    inferred_lines = []
+    has_top_level = False
+    fallback_title = _clean_outline_heading(Path(file_name or "Uploaded outline").stem.replace("_", " ").replace("-", " "))
+
+    for line in meaningful_lines:
+        line = re.sub(r"\s+", " ", line).strip()
+        if not line or len(line) > 220:
+            continue
+
+        numbered_match = NUMBERED_OUTLINE_RE.match(line)
+        roman_match = ROMAN_OUTLINE_RE.match(line)
+        alpha_match = ALPHA_OUTLINE_RE.match(line)
+        bullet_match = BULLET_OUTLINE_RE.match(line)
+
+        if numbered_match:
+            level = min(6, max(2, numbered_match.group(1).count(".") + 2))
+            heading = numbered_match.group(2)
+        elif roman_match:
+            level = 2
+            heading = roman_match.group(2)
+        elif alpha_match:
+            level = 3
+            heading = alpha_match.group(2)
+        elif bullet_match:
+            level = 2
+            heading = bullet_match.group(1)
+        elif not has_top_level:
+            level = 1
+            heading = line
+        else:
+            continue
+
+        heading = _clean_outline_heading(heading)
+        if not heading:
+            continue
+        if level == 1:
+            has_top_level = True
+        inferred_lines.append(f"{'#' * level} {heading}")
+
+    if inferred_lines and _line_heading_level(inferred_lines[0]) != 1:
+        inferred_lines.insert(0, f"# Title: {fallback_title}")
+
+    return inferred_lines
+
+
+def _docx_outline_lines(content: bytes, file_name: str | None = None) -> list[str]:
+    from docx import Document
+
+    document = Document(BytesIO(content))
+    lines = []
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        style_name = (paragraph.style.name or "").strip().lower() if paragraph.style else ""
+        heading_match = re.search(r"heading\s*([1-6])", style_name)
+        if heading_match:
+            level = int(heading_match.group(1))
+            lines.append(f"{'#' * level} {_clean_outline_heading(text)}")
+
+    if lines:
+        if _line_heading_level(lines[0]) != 1:
+            fallback_title = _clean_outline_heading(Path(file_name or "Uploaded outline").stem.replace("_", " ").replace("-", " "))
+            lines.insert(0, f"# Title: {fallback_title}")
+        return lines
+
+    return _inferred_outline_lines(_extract_docx_text(content), file_name=file_name)
+
+
+def _outline_from_uploaded_file(file_name: str | None, content: bytes) -> str:
+    suffix = Path(file_name or "").suffix.lower()
+    if suffix not in OUTLINE_IMPORT_ALLOWED_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Upload a Markdown (.md) or Word (.docx) outline file.")
+    if len(content) > OUTLINE_IMPORT_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Outline file must be 10 MB or smaller.")
+
+    try:
+        if suffix in {".md", ".markdown"}:
+            text = _decode_text_document(content)
+            lines = _markdown_outline_lines(text) or _inferred_outline_lines(text, file_name=file_name)
+        else:
+            lines = _docx_outline_lines(content, file_name=file_name)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unable to read uploaded outline file %s", file_name)
+        raise HTTPException(status_code=400, detail="We could not read that outline file. Try a Markdown or DOCX file.")
+
+    return _normalize_outline_lines(lines)
 
 
 def _extract_pdf_text(content: bytes) -> str:
@@ -807,6 +1017,18 @@ def _safe_uploaded_file_name(file_name: str | None) -> str:
 def _uploaded_doc_path(uploaded_file_id: int, file_name: str) -> Path:
     suffix = Path(file_name).suffix
     return Config.DIR_CONTENTS / "uploaded_docs" / f"{uploaded_file_id}{suffix}"
+
+
+def _uploaded_doc_path_by_id(uploaded_file_id: int, file_name: str | None = None) -> Path:
+    expected_path = _uploaded_doc_path(uploaded_file_id, file_name or "")
+    if expected_path.exists():
+        return expected_path
+
+    upload_dir = Config.DIR_CONTENTS / "uploaded_docs"
+    matches = sorted(upload_dir.glob(f"{uploaded_file_id}.*"))
+    if matches:
+        return matches[0]
+    return expected_path
 
 
 def _uploaded_records_for_owner(
@@ -1127,7 +1349,7 @@ def _load_uploaded_files_to_vector_collection(collection_name: str, file_paths: 
     docs = []
     for file_name, file_path in file_paths:
         for doc in list(getLoader(file_path)):
-            doc.metadata = {**{'app_file_id': Path(file_path).stem, 'app_file_name': file_name}, **{k: str(v) for k, v in doc.metadata.items()}}
+            doc.metadata = {**{'app_file_id': Path(file_path).stem, 'app_file_type': 'uploaded_document'}, **{k: str(v) for k, v in doc.metadata.items()}}
             docs.append(doc)
     if docs:
         db_vector.add(docs=docs)
@@ -1199,7 +1421,7 @@ def _uploaded_file_paths(records: list[dict[str, Any]]) -> list[tuple[str, Path]
     paths = []
     for record in records:
         file_name = str(record.get("file_name") or "")
-        file_path = _uploaded_doc_path(int(record["id"]), file_name)
+        file_path = _uploaded_doc_path_by_id(int(record["id"]), file_name)
         if not file_path.exists():
             raise HTTPException(status_code=404, detail=f"{record.get('file_name') or 'An uploaded file'} was not found on disk.")
         paths.append((file_name, file_path))
@@ -1432,8 +1654,8 @@ def _user_outline_templates_dir(credentials_id: int) -> Path:
 def _uploaded_outline_template_file_name(file_name: str | None) -> str:
     safe_name = _safe_uploaded_file_name(file_name)
     template_path = Path(safe_name)
-    if template_path.suffix.lower() != ".md":
-        raise HTTPException(status_code=400, detail="Outline templates must be Markdown files with a .md extension.")
+    if template_path.suffix.lower() not in OUTLINE_IMPORT_ALLOWED_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Outline templates must be Markdown (.md) or Word (.docx) files.")
 
     stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", template_path.stem).strip("_")
     if not stem:
@@ -1475,15 +1697,84 @@ async def _save_uploaded_outline_template(credentials_id: int, upload: UploadFil
     if not content:
         raise HTTPException(status_code=400, detail=f"{file_name} is empty.")
 
+    outline = _outline_from_uploaded_file(upload.filename, content)
     template_dir = _user_outline_templates_dir(credentials_id)
     template_dir.mkdir(parents=True, exist_ok=True)
     template_path = template_dir / file_name
-    template_path.write_bytes(content)
+    template_path.write_text(outline, encoding="utf-8")
+    return {
+        "name": template_path.stem,
+        "label": template_path.stem.replace("_", " ").replace("-", " ").title(),
+        "file_name": template_path.name,
+        "source_file_name": upload.filename,
+        "content": outline,
+        "last_modified": datetime.fromtimestamp(template_path.stat().st_mtime).isoformat(),
+    }
+
+
+def _uploaded_outline_template_path(credentials_id: int, template_name: str) -> Path:
+    if not re.match(r"^[a-zA-Z0-9_-]+$", template_name):
+        raise HTTPException(status_code=400, detail="Invalid uploaded outline template name.")
+    return _user_outline_templates_dir(credentials_id) / f"{template_name}.md"
+
+
+def _write_uploaded_outline_template_content(credentials_id: int, template_name: str, outline: str) -> dict[str, Any]:
+    outline_text = str(outline or "").strip()
+    if not outline_text:
+        raise HTTPException(status_code=400, detail="Outline template content cannot be empty.")
+
+    from src.manage_outline import getRawOutline, processOutline
+
+    try:
+        normalized_outline = "\n".join(getRawOutline(processOutline(outline_text), raw_outline=[])).strip()
+    except Exception:
+        logger.exception("Unable to validate uploaded outline template %s", template_name)
+        raise HTTPException(
+            status_code=400,
+            detail="We could not save that outline. Check the heading levels and try again.",
+        )
+
+    template_path = _uploaded_outline_template_path(credentials_id, template_name)
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Uploaded outline template was not found.")
+    template_path.write_text(normalized_outline, encoding="utf-8")
     return {
         "name": template_path.stem,
         "label": template_path.stem.replace("_", " ").replace("-", " ").title(),
         "file_name": template_path.name,
         "last_modified": datetime.fromtimestamp(template_path.stat().st_mtime).isoformat(),
+    }
+
+
+def _delete_uploaded_outline_template(credentials_id: int, template_name: str) -> dict[str, Any]:
+    template_path = _uploaded_outline_template_path(credentials_id, template_name)
+    if not template_path.exists():
+        raise HTTPException(status_code=404, detail="Uploaded outline template was not found.")
+    template = {
+        "name": template_path.stem,
+        "label": template_path.stem.replace("_", " ").replace("-", " ").title(),
+        "file_name": template_path.name,
+    }
+    template_path.unlink()
+    return template
+
+
+def _rename_uploaded_outline_template(credentials_id: int, template_name: str, file_name: str) -> dict[str, Any]:
+    current_path = _uploaded_outline_template_path(credentials_id, template_name)
+    if not current_path.exists():
+        raise HTTPException(status_code=404, detail="Uploaded outline template was not found.")
+
+    next_file_name = _uploaded_outline_template_file_name(file_name)
+    next_path = _user_outline_templates_dir(credentials_id) / next_file_name
+    if current_path.resolve() != next_path.resolve() and next_path.exists():
+        raise HTTPException(status_code=409, detail=f"An uploaded outline template named {next_file_name} already exists.")
+
+    current_path.rename(next_path)
+    return {
+        "name": next_path.stem,
+        "label": next_path.stem.replace("_", " ").replace("-", " ").title(),
+        "file_name": next_path.name,
+        "last_modified": datetime.fromtimestamp(next_path.stat().st_mtime).isoformat(),
     }
 
 
@@ -2523,10 +2814,10 @@ async def _handle_upload_outline_templates(files, credentials_id):
             saved_templates.append(await _save_uploaded_outline_template(validated_credentials_id, upload))
 
         if not saved_templates:
-            raise HTTPException(status_code=400, detail="Choose at least one Markdown template to upload.")
+            raise HTTPException(status_code=400, detail="Choose at least one Markdown or Word outline file to upload.")
 
         return {
-            "message": "Templates uploaded successfully.",
+            "message": "Outline templates uploaded successfully.",
             "templates": _uploaded_outline_templates(validated_credentials_id),
             "saved_templates": saved_templates,
         }
@@ -2547,6 +2838,59 @@ async def _handle_uploaded_outline_template(template_name, credentials_id):
         raise
     except Exception as exp:
         raise _api_error("load uploaded outline template", exp)
+
+
+async def _handle_update_uploaded_outline_template(template_name, request):
+    try:
+        validated_credentials_id = _validated_credentials_id(request.credentials_id)
+        updated_template = _write_uploaded_outline_template_content(
+            validated_credentials_id,
+            template_name,
+            request.outline,
+        )
+        return {
+            "message": f"Outline template {updated_template['file_name']} saved.",
+            "template": updated_template,
+            "templates": _uploaded_outline_templates(validated_credentials_id),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("update uploaded outline template", exp)
+
+
+async def _handle_rename_uploaded_outline_template(template_name, request):
+    try:
+        validated_credentials_id = _validated_credentials_id(request.credentials_id)
+        renamed_template = _rename_uploaded_outline_template(
+            validated_credentials_id,
+            template_name,
+            request.file_name,
+        )
+        return {
+            "message": f"Outline template renamed.",
+            "template": renamed_template,
+            "templates": _uploaded_outline_templates(validated_credentials_id),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("rename uploaded outline template", exp)
+
+
+async def _handle_delete_uploaded_outline_template(template_name, credentials_id):
+    try:
+        validated_credentials_id = _validated_credentials_id(credentials_id)
+        deleted_template = _delete_uploaded_outline_template(validated_credentials_id, template_name)
+        return {
+            "message": f"Outline template {deleted_template['file_name']} removed.",
+            "template": deleted_template,
+            "templates": _uploaded_outline_templates(validated_credentials_id),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("delete uploaded outline template", exp)
 
 
 async def _handle_workspace_data():
@@ -3021,7 +3365,7 @@ async def _handle_delete_generated_file(generated_file_id, email, session):
                 }
             ),
             "generated_documents": [_generated_document_detail(record) for record in records],
-            "message": f'Generated document "{deleted_file_name}" removed.',
+            "message": f'Generated document removed.',
         }
     except HTTPException:
         raise
@@ -3779,6 +4123,58 @@ async def _handle_upload_uploaded_files(files, email, session, replace):
         raise _api_error("upload documents", exp)
 
 
+async def _handle_update_uploaded_file(uploaded_file_id, request):
+    try:
+        from src import db
+
+        normalized_email, normalized_session, _, _ = _owner_identity(email=request.email, session=request.session)
+        file_name = _safe_uploaded_file_name(request.file_name)
+        uploaded_records = _uploaded_file_records_by_ids(
+            [uploaded_file_id],
+            email=normalized_email,
+            session=normalized_session,
+        )
+        if not uploaded_records:
+            raise HTTPException(status_code=404, detail="Uploaded document was not found.")
+
+        uploaded_record = uploaded_records[0]
+        duplicate = _uploaded_file_by_owner_and_name(
+            file_name,
+            email=normalized_email,
+            session=normalized_session,
+        )
+        if duplicate and int(duplicate["id"]) != int(uploaded_file_id):
+            raise HTTPException(status_code=409, detail=f"An uploaded document named {file_name} already exists.")
+
+        now = datetime.now()
+        db.updateDB(
+            table_name="uploaded_files",
+            update_fields=["file_name", "update_date"],
+            update_values=[file_name, now],
+            select_fields=["id"],
+            select_values=[[uploaded_file_id]],
+        )
+
+        records = _uploaded_records_for_owner(email=normalized_email, session=normalized_session, limit=200)
+        updated_record = {
+            **uploaded_record,
+            "file_name": file_name,
+            "update_date": now,
+        }
+        return {
+            "status": "saved",
+            "uploaded_file": _uploaded_file_record(updated_record),
+            "uploaded_document": _uploaded_document(updated_record),
+            "uploaded_documents": [_uploaded_document(record) for record in records],
+            "affected_documents": [],
+            "message": f"Uploaded document renamed.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("rename uploaded document", exp)
+
+
 async def _handle_delete_uploaded_file(uploaded_file_id, email, session):
     try:
         from src import db
@@ -3859,7 +4255,7 @@ async def _handle_delete_uploaded_file(uploaded_file_id, email, session):
             select_values=[[uploaded_file_id]],
         )
 
-        uploaded_path = _uploaded_doc_path(int(uploaded_file_id), str(uploaded_record.get("file_name") or ""))
+        uploaded_path = _uploaded_doc_path_by_id(int(uploaded_file_id), str(uploaded_record.get("file_name") or ""))
         try:
             uploaded_path.unlink(missing_ok=True)
         except Exception:
@@ -3913,6 +4309,28 @@ async def _handle_create_outline(request):
         raise
     except Exception as exp:
         raise _api_error("create outline", exp)
+
+
+async def _handle_import_outline(file, credentials_id):
+    try:
+        validated_credentials_id = _validated_credentials_id(credentials_id)
+        if file is None or not file.filename:
+            raise HTTPException(status_code=400, detail="Choose a Markdown or Word outline file to upload.")
+
+        saved_template = await _save_uploaded_outline_template(validated_credentials_id, file)
+        return {
+            "message": f"Outline imported from {file.filename} and saved as {saved_template['file_name']}.",
+            "result": {
+                "content": saved_template["content"],
+                "file_name": saved_template["file_name"],
+                "template": saved_template,
+            },
+            "templates": _uploaded_outline_templates(validated_credentials_id),
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("import outline", exp)
 
 
 async def _handle_format_outline(request):

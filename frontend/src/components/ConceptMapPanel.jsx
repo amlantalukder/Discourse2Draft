@@ -1,4 +1,4 @@
-import { Download, GitBranch, Maximize2, RotateCcw, X } from "./FontAwesomeIcons";
+import { Download, GitBranch, Maximize2, RefreshCw, X } from "./FontAwesomeIcons";
 import { useEffect, useMemo, useRef } from "react";
 import { IconButton } from "./IconButton";
 
@@ -194,7 +194,7 @@ export function ConceptMapPanel({ conceptMaps = [], fileName = "", onClose }) {
             <>
               <div className="concept-map-controls" aria-label="Concept map controls">
                 <button type="button" onClick={resetView}>
-                  <RotateCcw size={14} />
+                  <RefreshCw size={14} />
                   <span>Reset View</span>
                 </button>
                 <button type="button" onClick={expandAll}>

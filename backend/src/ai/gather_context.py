@@ -17,7 +17,7 @@ class GatherContext:
             
                 for kw, doc_list in docs.items():
                     est += [[len(d.metadata['app_file_id'].strip().split()) + 
-                             len(d.metadata['app_file_name'].strip().split()) + 
+                             len(d.metadata['app_file_type'].strip().split()) + 
                              len(d.page_content.strip().split()), kw, i] for i, d in enumerate(doc_list)]
 
                 est = sorted(est)
@@ -41,15 +41,15 @@ class GatherContext:
                     try:
                         content = ' '.join(d.page_content.strip().split()[:d_tok_est[kw][i]])
                         file_id = d.metadata['app_file_id']
-                        file_name = d.metadata['app_file_name']
-                        d_docs[(file_id, file_name)] = d_docs.get((file_id, file_name), '') + content + '\n\n'
+                        file_type = d.metadata['app_file_type']
+                        d_docs[(file_id, file_type)] = d_docs.get((file_id, file_type), '') + content + '\n\n'
                     except Warning as w:
                         logging.info(f'Resource retriever formatting: {str(w)}')
 
-                for (file_id, file_name), content in d_docs.items():
+                for (file_id, file_type), content in d_docs.items():
                     docs_str += '\n\n' + f'''\
                     <{file_id}>
-                        <Reference>{file_name}</Reference>
+                        <Reference>{file_id}</Reference>
                         <Content>{content}</Content>
                     </{file_id}>
                     '''

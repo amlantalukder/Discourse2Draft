@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "./FontAwesomeIcons";
 import { getJSON, postJSON } from "../api/client";
 import { azureSignInUrl, clearAzureAuthCallback, completeAzureSignIn, getAzureAuthStatus, readAzureAuthCallback } from "../auth/azureAuth";
 import { AboutPage } from "./AboutPage";
+import { StatusBar } from "./StatusBar";
 import { TopBar } from "./TopBar";
 import azureSymbol from "../../docs/figures/azure_login_logo.png";
 
@@ -274,7 +275,7 @@ export function LoginPage({ onContinue }) {
   function renderFeedback() {
     if (!authMessage && !authError) return null;
 
-    return <p className={`auth-feedback ${authError ? "auth-feedback-error" : ""}`}>{authError || authMessage}</p>;
+    return <StatusBar message={authError || authMessage} tone={authError ? "error" : "info"} variant="auth" />;
   }
 
   function handleAzureLoginClick(event) {

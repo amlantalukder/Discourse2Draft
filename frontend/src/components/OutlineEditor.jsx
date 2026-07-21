@@ -487,9 +487,12 @@ function AddMenu({ section, canAddBefore = false, canAddAfter = false, canAddChi
   );
 }
 
-export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
+export function OutlineEditor({ outline, isOpen, onClose, onSave, variant = "modal", fileName = "", onFileNameRename }) {
   const [sections, setSections] = useState([]);
   const [editingTarget, setEditingTarget] = useState(null);
+  const [isRenamingFileName, setIsRenamingFileName] = useState(false);
+  const [draftFileName, setDraftFileName] = useState("");
+  const isInline = variant === "inline";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -498,6 +501,12 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
     setSections(parsedSections);
     setEditingTarget(null);
   }, [isOpen, outline]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDraftFileName(fileName || "");
+    setIsRenamingFileName(false);
+  }, [fileName, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -524,7 +533,9 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
           event.stopPropagation();
           return;
         }
-        onClose();
+        if (!isInline) {
+          onClose();
+        }
       }
     }
 
@@ -534,7 +545,7 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isInline, isOpen, onClose]);
 
   const hasSections = sections.length > 0;
 
@@ -655,6 +666,25 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
     onSave(serializeOutline(normalizedSections));
   }
 
+  async function commitFileNameRename() {
+    const nextName = draftFileName.trim();
+    if (!nextName) {
+      setDraftFileName(fileName || "");
+      setIsRenamingFileName(false);
+      return;
+    }
+
+    if (!onFileNameRename || nextName === fileName) {
+      setIsRenamingFileName(false);
+      return;
+    }
+
+    const didRename = await onFileNameRename(nextName);
+    if (didRename !== false) {
+      setIsRenamingFileName(false);
+    }
+  }
+
   function renderContentRow(section, type) {
     const isEditing = editingTarget?.id === section.id && editingTarget?.type === type;
     const canEditText = type !== "contentAi";
@@ -734,12 +764,71 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
   }
 
   return (
-    <div className="outline-editor-shell" role="dialog" aria-modal="true" aria-labelledby="outline-editor-title">
+    <div className={`outline-editor-shell ${isInline ? "outline-editor-shell-inline" : ""}`} role={isInline ? "region" : "dialog"} aria-modal={isInline ? undefined : "true"} aria-labelledby="outline-editor-title">
       <section className="outline-editor-window">
         <header>
-          <div>
-            <span>Structured outline</span>
+          <div className="outline-editor-heading">
             <h2 id="outline-editor-title">Outline editor</h2>
+            {fileName ? (
+              <div className="outline-editor-file-control">
+                {isRenamingFileName ? (
+                  <>
+                    <input
+                      type="text"
+                      value={draftFileName}
+                      aria-label="Outline template file name"
+                      onChange={(event) => setDraftFileName(event.target.value)}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitFileNameRename();
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setDraftFileName(fileName || "");
+                          setIsRenamingFileName(false);
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <button type="button" className="outline-editor-file-action" onClick={commitFileNameRename} aria-label="Save outline template name" title="Save outline template name">
+                      <Save size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="outline-editor-file-action"
+                      onClick={() => {
+                        setDraftFileName(fileName || "");
+                        setIsRenamingFileName(false);
+                      }}
+                      aria-label="Cancel outline template rename"
+                      title="Cancel outline template rename"
+                    >
+                      <X size={13} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <strong title={fileName}>{fileName}</strong>
+                    {onFileNameRename ? (
+                      <button
+                        type="button"
+                        className="outline-editor-file-action"
+                        onClick={() => {
+                          setDraftFileName(fileName || "");
+                          setIsRenamingFileName(true);
+                        }}
+                        aria-label="Rename outline template"
+                        title="Rename outline template"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
           <IconButton label="Close outline editor" type="button" onClick={onClose}>
             <X size={18} />
@@ -747,10 +836,6 @@ export function OutlineEditor({ outline, isOpen, onClose, onSave }) {
         </header>
 
         <div className="outline-editor-canvas">
-          <div className="outline-editor-canvas-toolbar">
-            <span>Outline hierarchy</span>
-          </div>
-
           <div className="outline-editor-list">{hasSections ? sections.map(renderSection) : <p className="outline-editor-empty">Add a section to start building the outline.</p>}</div>
         </div>
 

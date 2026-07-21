@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight, FilePlus2, Maximize2, Search, Trash2 } from "./FontAwesomeIcons";
-import { useEffect, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, FileLines, FilePlus2, Maximize2, Search, Trash2 } from "./FontAwesomeIcons";
+import { useEffect, useRef, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { FileUploadControl } from "./FileUploadControl";
 import { IconButton } from "./IconButton";
@@ -12,6 +12,8 @@ const healthItems = [
 ];
 
 const SEARCH_MIN_ITEMS = 6;
+const SLOW_RENAME_MIN_MS = 450;
+const SLOW_RENAME_MAX_MS = 1800;
 
 function itemMatchesSearch(item, query, fields) {
   const normalizedQuery = query.trim().toLowerCase();
@@ -22,6 +24,25 @@ function itemMatchesSearch(item, query, fields) {
       .toLowerCase()
       .includes(normalizedQuery),
   );
+}
+
+function renameItemKey(type, item, currentName) {
+  return `${type}:${item?.id ?? item?.name ?? currentName}`;
+}
+
+function normalizedFileName(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizedTemplateFileName(value) {
+  const rawName = String(value ?? "").trim();
+  if (!rawName) return "";
+
+  const hasAllowedSuffix = /\.(md|docx)$/i.test(rawName);
+  const nameWithSuffix = hasAllowedSuffix ? rawName : `${rawName}.md`;
+  const suffix = nameWithSuffix.match(/\.(md|docx)$/i)?.[0] ?? ".md";
+  const stem = nameWithSuffix.slice(0, -suffix.length).replace(/[^a-zA-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "");
+  return stem ? `${stem}.md`.toLowerCase() : "";
 }
 
 function healthStatus(check, isLoading) {
@@ -56,23 +77,29 @@ export function Sidebar({
   onGeneratedDocumentsExpand,
   onGeneratedDocumentDownload,
   onGeneratedDocumentDelete,
+  onGeneratedDocumentRename,
   isLoadingGeneratedDocuments = false,
   uploadedDocuments = [],
   isLoadingUploadedDocuments = false,
   onUploadedDocumentsUpload,
   onUploadedDocumentDelete,
+  onUploadedDocumentRename,
   isUploadingDocuments = false,
   onAttachUploadedDocuments,
   isAttachingUploadedDocuments = false,
   uploadedTemplates = [],
   isLoadingUploadedTemplates = false,
   onUploadedTemplatesUpload,
+  onUploadedTemplateEdit,
+  onUploadedTemplateDelete,
+  onUploadedTemplateRename,
   isUploadingTemplates = false,
   canUploadTemplates = false,
   health,
   isHealthLoading = false,
   isCollapsed = false,
   onToggleCollapse,
+  onStatusMessage,
 }) {
   const [uploadFiles, setUploadFiles] = useState([]);
   const [uploadTemplateFiles, setUploadTemplateFiles] = useState([]);
@@ -83,6 +110,10 @@ export function Sidebar({
   const [isGeneratedDocumentsExpanded, setIsGeneratedDocumentsExpanded] = useState(true);
   const [isUploadedDocumentsExpanded, setIsUploadedDocumentsExpanded] = useState(true);
   const [isUploadedTemplatesExpanded, setIsUploadedTemplatesExpanded] = useState(true);
+  const [editingName, setEditingName] = useState(null);
+  const [editingNameValue, setEditingNameValue] = useState("");
+  const lastNameClickRef = useRef({ key: "", time: 0 });
+  const renameCommitInFlightRef = useRef(false);
   const selectedUploadedDocuments = uploadedDocuments.filter((document) => selectedUploadedDocumentIds.includes(String(document.id)));
 
   useEffect(() => {
@@ -128,6 +159,131 @@ export function Sidebar({
     }
   }
 
+  function startInlineRename(type, item, currentName) {
+    lastNameClickRef.current = { key: "", time: 0 };
+    setEditingName({ type, item, key: renameItemKey(type, item, currentName), currentName: currentName ?? "" });
+    setEditingNameValue(currentName ?? "");
+  }
+
+  function handleSlowRenameClick(event, type, item, currentName) {
+    const now = Date.now();
+    const key = `${type}:${item?.id ?? item?.name ?? currentName}`;
+    const previousClick = lastNameClickRef.current;
+    const elapsedMs = previousClick.key === key ? now - previousClick.time : Number.POSITIVE_INFINITY;
+
+    lastNameClickRef.current = { key, time: now };
+
+    if (elapsedMs >= SLOW_RENAME_MIN_MS && elapsedMs <= SLOW_RENAME_MAX_MS) {
+      event.stopPropagation();
+      startInlineRename(type, item, currentName);
+    }
+  }
+
+  function closeInlineRename() {
+    setEditingName(null);
+    setEditingNameValue("");
+  }
+
+  function duplicateNameMessage(type, item, nextName) {
+    const currentKey = renameItemKey(type, item, editingName?.currentName);
+
+    if (type === "generated") {
+      const candidate = normalizedFileName(nextName);
+      const hasDuplicate = generatedDocuments.some((document) => renameItemKey(type, document, document.name ?? document.file_name) !== currentKey && normalizedFileName(document.name ?? document.file_name) === candidate);
+      return hasDuplicate ? "A generated document with that name already exists." : "";
+    }
+
+    if (type === "uploaded") {
+      const candidate = normalizedFileName(nextName);
+      const hasDuplicate = uploadedDocuments.some((document) => renameItemKey(type, document, document.name ?? document.file_name) !== currentKey && normalizedFileName(document.name ?? document.file_name) === candidate);
+      return hasDuplicate ? "An uploaded document with that name already exists." : "";
+    }
+
+    const candidate = normalizedTemplateFileName(nextName);
+    const hasDuplicate = uploadedTemplates.some((template) => renameItemKey(type, template, template.file_name ?? template.name) !== currentKey && normalizedTemplateFileName(template.file_name ?? `${template.name}.md`) === candidate);
+    return hasDuplicate ? "An uploaded template with that name already exists." : "";
+  }
+
+  async function commitInlineRename() {
+    if (!editingName || renameCommitInFlightRef.current) return;
+
+    const nextName = editingNameValue.trim();
+    if (!nextName) {
+      onStatusMessage?.("File name cannot be empty.");
+      return;
+    }
+
+    const duplicateMessage = duplicateNameMessage(editingName.type, editingName.item, nextName);
+    if (duplicateMessage) {
+      onStatusMessage?.(duplicateMessage);
+      return;
+    }
+
+    const currentComparable = editingName.type === "template" ? normalizedTemplateFileName(editingName.currentName) : normalizedFileName(editingName.currentName);
+    const nextComparable = editingName.type === "template" ? normalizedTemplateFileName(nextName) : normalizedFileName(nextName);
+    if (currentComparable === nextComparable) {
+      closeInlineRename();
+      return;
+    }
+
+    renameCommitInFlightRef.current = true;
+    let shouldClose = true;
+    try {
+      if (editingName.type === "generated") {
+        shouldClose = await onGeneratedDocumentRename?.(editingName.item, nextName);
+      } else if (editingName.type === "uploaded") {
+        shouldClose = await onUploadedDocumentRename?.(editingName.item, nextName);
+      } else if (editingName.type === "template") {
+        shouldClose = await onUploadedTemplateRename?.(editingName.item, nextName);
+      }
+    } catch {
+      shouldClose = false;
+    } finally {
+      renameCommitInFlightRef.current = false;
+    }
+
+    if (shouldClose !== false) {
+      closeInlineRename();
+    } else {
+      onStatusMessage?.("Could not rename this file. Please try another name.");
+    }
+  }
+
+  function renderInlineName({ type, item, displayName, editName, className }) {
+    const currentName = editName ?? displayName;
+    const key = renameItemKey(type, item, currentName);
+    if (editingName?.key === key) {
+      return (
+        <span className="sidebar-inline-rename" onClick={(event) => event.stopPropagation()}>
+          <input
+            autoFocus
+            value={editingNameValue}
+            onBlur={commitInlineRename}
+            onChange={(event) => setEditingNameValue(event.target.value)}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                closeInlineRename();
+              }
+            }}
+            aria-label={`Rename ${displayName}`}
+          />
+        </span>
+      );
+    }
+
+    return (
+      <button type="button" className={className} title={`Slow double-click to rename ${displayName}`} onClick={(event) => handleSlowRenameClick(event, type, item, currentName)}>
+        {displayName}
+      </button>
+    );
+  }
+
   const hasUploadedDocuments = uploadedDocuments.length > 0;
   const isAllUploadedSelected = hasUploadedDocuments && selectedUploadedDocumentIds.length === uploadedDocuments.length;
   const showGeneratedSearch = generatedDocuments.length >= SEARCH_MIN_ITEMS;
@@ -171,15 +327,22 @@ export function Sidebar({
                   const documentName = document.name ?? document.file_name ?? "Untitled";
 
                   return (
-                    <div className={`document-row ${String(document.id) === String(selectedGeneratedDocumentId) ? "active" : ""}`} key={document.id ?? documentName + document.date} title={documentName}>
+                    <div className={`document-row ${String(document.id) === String(selectedGeneratedDocumentId) ? "active" : ""}`} key={document.id ?? documentName + document.date} title={documentName} onClick={() => onGeneratedDocumentSelect?.(document)}>
                       <div>
-                        <button type="button" className="document-link" title={documentName} onClick={() => onGeneratedDocumentSelect?.(document)}>
-                          {documentName}
-                        </button>
+                        {renderInlineName({ type: "generated", item: document, displayName: documentName, editName: documentName, className: "document-link" })}
                         <time>{document.date}</time>
                       </div>
-                      <DownloadMenu label={`Download ${documentName}`} menuAlign="right" onDownload={(format) => onGeneratedDocumentDownload?.(document, format)} />
-                      <IconButton label={`Delete ${documentName}`} type="button" onClick={() => onGeneratedDocumentDelete?.(document)}>
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <DownloadMenu label={`Download ${documentName}`} menuAlign="right" onDownload={(format) => onGeneratedDocumentDownload?.(document, format)} />
+                      </div>
+                      <IconButton
+                        label={`Delete ${documentName}`}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onGeneratedDocumentDelete?.(document);
+                        }}
+                      >
                         <Trash2 size={18} />
                       </IconButton>
                     </div>
@@ -234,7 +397,7 @@ export function Sidebar({
                       <input type="checkbox" checked={selectedUploadedDocumentIds.includes(String(id))} onChange={(event) => toggleUploadedDocument(id, event.target.checked)} />
                       <span className={`file-chip ${type}`}>{type}</span>
                       <div>
-                        <span title={name}>{name}</span>
+                        {renderInlineName({ type: "uploaded", item: { id, name, date, type }, displayName: name, editName: name, className: "sidebar-name-button" })}
                         <time>{date}</time>
                       </div>
                       <IconButton label={`Delete ${name}`} type="button" onClick={() => onUploadedDocumentDelete?.({ id, name, date, type })}>
@@ -256,11 +419,13 @@ export function Sidebar({
                 ) : null}
               </div>
               {selectedUploadedDocuments.length ? (
-                <div className="attach-files-row">
-                  <button className="tool-button primary" type="button" onClick={handleAttachUploadedDocuments} disabled={isAttachingUploadedDocuments}>
-                    <FilePlus2 size={14} />
-                    <span>{isAttachingUploadedDocuments ? "Attaching" : "Attach files"}</span>
-                  </button>
+                <div className="uploaded-documents-action-control">
+                  <div className="attach-files-row">
+                    <button className="tool-button primary" type="button" onClick={handleAttachUploadedDocuments} disabled={isAttachingUploadedDocuments}>
+                      <FilePlus2 size={14} />
+                      <span>{isAttachingUploadedDocuments ? "Attaching" : "Attach files"}</span>
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -279,7 +444,7 @@ export function Sidebar({
           {isUploadedTemplatesExpanded ? (
             <div className="side-section-body uploaded-templates-body">
               <div className="upload-controls">
-                <FileUploadControl label="Choose templates" accept=".md" multiple files={uploadTemplateFiles} onFilesChange={handleUploadTemplates} disabled={!canUploadTemplates || isUploadingTemplates} />
+                <FileUploadControl label="Choose templates" accept=".md,.docx" multiple files={uploadTemplateFiles} onFilesChange={handleUploadTemplates} disabled={!canUploadTemplates || isUploadingTemplates} />
               </div>
               {showUploadedTemplateSearch ? (
                 <label className="search-field">
@@ -294,9 +459,15 @@ export function Sidebar({
                       <div className="uploaded-template-row" key={template.name} title={template.file_name ?? template.label ?? template.name}>
                         <span className="file-chip md">md</span>
                         <div>
-                          <span>{template.label || template.name}</span>
+                          {renderInlineName({ type: "template", item: template, displayName: template.label || template.name, editName: template.file_name ?? `${template.name}.md`, className: "sidebar-name-button" })}
                           {template.file_name ? <time>{template.file_name}</time> : null}
                         </div>
+                        <IconButton label={`Edit ${template.label || template.name}`} type="button" onClick={() => onUploadedTemplateEdit?.(template)}>
+                          <FileLines size={16} />
+                        </IconButton>
+                        <IconButton label={`Remove ${template.label || template.name}`} type="button" onClick={() => onUploadedTemplateDelete?.(template)}>
+                          <Trash2 size={16} />
+                        </IconButton>
                       </div>
                     ))
                   : null}

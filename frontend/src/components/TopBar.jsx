@@ -1,10 +1,10 @@
-import { Github, HelpCircle, KeyRound, LogIn, LogOut, Pencil, User } from "./FontAwesomeIcons";
+import { FileLines, Github, HelpCircle, KeyRound, LogIn, LogOut, Pencil, User } from "./FontAwesomeIcons";
 import { useState } from "react";
 import { IconButton } from "./IconButton";
 
 const GITHUB_URL = "https://github.com/amlantalukder/Discourse2Draft";
 
-export function TopBar({ accountLabel = "Anonymous", isGuest = false, canChangePassword = true, isLoginPage = false, onChangePassword, onHelp, onLogout }) {
+export function TopBar({ accountLabel = "Anonymous", isGuest = false, isMaintainer = false, canChangePassword = true, isLoginPage = false, onChangePassword, onHelp, onLogout, onShowLogs }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const AccountActionIcon = isGuest ? LogIn : LogOut;
   const accountActionLabel = isGuest ? "Login" : "Logout";
@@ -49,6 +49,11 @@ export function TopBar({ accountLabel = "Anonymous", isGuest = false, canChangeP
               </div>
             ) : null}
           </div>
+        ) : null}
+        {!isLoginPage && isMaintainer ? (
+          <IconButton label="Show logs" onClick={onShowLogs}>
+            <FileLines size={18} />
+          </IconButton>
         ) : null}
         <IconButton label="Help" onClick={onHelp}>
           <HelpCircle size={18} />
