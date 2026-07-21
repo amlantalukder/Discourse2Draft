@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { FileUploadControl } from "./FileUploadControl";
 import { OutlineEditor } from "./OutlineEditor";
+import { OutlineRulesTooltip } from "./OutlineRulesTooltip";
 
 export function DraftFlowPanel({
   step,
@@ -103,7 +104,13 @@ export function DraftFlowPanel({
               </div>
             </div>
           ) : null}
-          <textarea value={outline} onChange={(event) => setOutline(event.target.value)} rows={20} placeholder="Do you have a preferred outline in mind?" spellCheck="false" disabled={isLocked || isCreatingOutline || isImportingOutline} />
+          <div className="outline-field draft-flow-outline-field">
+            <span className="outline-field-heading">
+              <span>Do you have a preferred outline in mind?</span>
+              <OutlineRulesTooltip id="draft-flow-outline-rules" />
+            </span>
+            <textarea value={outline} onChange={(event) => setOutline(event.target.value)} rows={20} placeholder="Do you have a preferred outline in mind?" spellCheck="false" disabled={isLocked || isCreatingOutline || isImportingOutline} aria-label="Preferred structured outline" />
+          </div>
           <div className="draft-flow-actions">
             <button type="button" onClick={onBack} disabled={isLocked || isCreatingOutline || isImportingOutline}>
               <ChevronLeft size={15} />

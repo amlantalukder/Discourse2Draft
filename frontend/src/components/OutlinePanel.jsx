@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DownloadMenu } from "./DownloadMenu";
 import { IconButton } from "./IconButton";
 import { OutlineEditor } from "./OutlineEditor";
+import { OutlineRulesTooltip } from "./OutlineRulesTooltip";
 
 export function OutlinePanel({ outline, setOutline, onRun, onRegenerate, onPause, onDownload, onBack, onStartOver, isRunning, hasSelectedFile = false, hasGeneratedContent = false, resetSignal = 0 }) {
   const isLocked = !hasSelectedFile;
@@ -30,10 +31,13 @@ export function OutlinePanel({ outline, setOutline, onRun, onRegenerate, onPause
       <div className="outline-editor-row">
         {!isCollapsed ? (
           <div className="outline-content-stack">
-            <label className="outline-field">
-              <span>Structured outline</span>
-              <textarea value={outline} onChange={(event) => setOutline(event.target.value)} spellCheck="false" />
-            </label>
+            <div className="outline-field">
+              <span className="outline-field-heading">
+                <span>Structured outline</span>
+                <OutlineRulesTooltip id="structured-outline-rules" />
+              </span>
+              <textarea value={outline} onChange={(event) => setOutline(event.target.value)} spellCheck="false" aria-label="Structured outline" />
+            </div>
           </div>
         ) : null}
 

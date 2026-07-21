@@ -7,5 +7,4 @@ __pycache__/
 .venv
 dist/
 data/*
-docs/*
 logs
