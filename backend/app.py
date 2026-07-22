@@ -292,6 +292,14 @@ async def update_generated_file_paragraph(
     return await app_utils._handle_update_generated_file_paragraph(generated_file_id, request)
 
 
+@app.patch("/api/generated-files/{generated_file_id}/section-content")
+async def update_generated_file_section_content(
+    generated_file_id: int,
+    request: app_utils.GeneratedFileSectionContentUpdateRequest,
+) -> dict[str, Any]:
+    return await app_utils._handle_update_generated_file_section_content(generated_file_id, request)
+
+
 @app.get("/api/generated-files/{generated_file_id}/download")
 async def download_generated_file(
     generated_file_id: int,

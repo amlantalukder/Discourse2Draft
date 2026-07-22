@@ -121,6 +121,15 @@ class GeneratedFileParagraphUpdateRequest(AIRequestBase):
     session: str | None = None
 
 
+class GeneratedFileSectionContentUpdateRequest(BaseModel):
+    section_path: list[str] = Field(default_factory=list)
+    section_heading: str = ""
+    section_content: str
+    attached_reference_list_from_content: list[str] = Field(default_factory=list)
+    email: str | None = None
+    session: str | None = None
+
+
 DownloadFormat = Literal["md", "docx", "latex"]
 LogSortField = Literal["date", "status", "message"]
 SortDirection = Literal["asc", "desc"]
@@ -3495,6 +3504,81 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
         raise
     except Exception as exp:
         raise _api_error("update manuscript paragraph", exp)
+
+
+async def _handle_update_generated_file_section_content(generated_file_id, request):
+    try:
+        from src import db
+        from src.common import rawCiteContent
+
+        generated_file = _generated_file_by_id(generated_file_id, email=request.email, session=request.session)
+        outline_data = _read_outline_file(generated_file_id)
+        node = _outline_node_for_path(outline_data, request.section_path) if request.section_path else None
+        if node is None:
+            node = _outline_node_for_heading_and_paragraph(outline_data, request.section_heading, "")
+        if node is None:
+            raise HTTPException(status_code=404, detail="The selected section could not be found. Reload the manuscript and try again.")
+
+        edited_section_content = str(request.section_content or "").strip()
+        if not edited_section_content:
+            raise HTTPException(status_code=400, detail="Section content cannot be empty.")
+
+        items = _content_items(node)
+        if not items:
+            node[OUTLINE_CONTENT_KEY] = []
+            items = node[OUTLINE_CONTENT_KEY]
+
+        attached_references_db = _attached_reference_map_for_generated_file(generated_file_id)
+        attached_reference_list_from_content = _normalize_attached_references_content(
+            request.attached_reference_list_from_content
+        )
+        if not attached_reference_list_from_content:
+            _current_manuscript, attached_reference_list_from_content = _display_manuscript_from_outline_tree(
+                outline_data,
+                attached_references_db,
+            )
+
+        try:
+            raw_section_content = rawCiteContent(
+                edited_section_content,
+                attached_reference_list_from_content,
+                attached_references_db,
+            )
+        except Exception as exp:
+            logger.exception("Unable to convert formatted citations while saving edited section.")
+            raise HTTPException(
+                status_code=400,
+                detail="The edited section contains a citation that could not be matched to the current references. Check the citation numbers and try again.",
+            ) from exp
+
+        content_type = OUTLINE_CONTENT_AI
+        if not _has_content_value(items, OUTLINE_CONTENT_AI) and _has_content_value(items, OUTLINE_CONTENT_USER):
+            content_type = OUTLINE_CONTENT_USER
+        _set_content_value(items, content_type, raw_section_content)
+        _write_outline_file(generated_file_id, outline_data)
+
+        now = datetime.now()
+        db.updateDB(
+            table_name="generated_files",
+            update_fields=["update_date"],
+            update_values=[now],
+            select_fields=["id"],
+            select_values=[[generated_file_id]],
+        )
+
+        manuscript, attached_reference_list_from_content = _display_manuscript_from_outline_tree(outline_data, attached_references_db)
+        raw_outline, _ = _raw_outline_from_outline_file(generated_file_id)
+        return {
+            "generated_file": _generated_file_record({**generated_file, "update_date": now}),
+            "manuscript": manuscript,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
+            "outline": raw_outline,
+            "message": "Section changes saved.",
+        }
+    except HTTPException:
+        raise
+    except Exception as exp:
+        raise _api_error("save manuscript section", exp)
 
 
 async def _handle_download_generated_file(generated_file_id, download_format, email, session):

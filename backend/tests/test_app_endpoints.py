@@ -365,6 +365,33 @@ ENDPOINT_CASES = [
         ],
     },
     {
+        "name": "update_generated_file_section_content",
+        "method": "PATCH",
+        "path": "/api/generated-files/7/section-content",
+        "json": {
+            "section_path": ["Title", "Introduction"],
+            "section_heading": "Introduction",
+            "section_content": "Edited paragraph [1].",
+            "attached_reference_list_from_content": ["Reference one."],
+            "email": "ada@example.com",
+            "session": "session-1",
+        },
+        "handler": "_handle_update_generated_file_section_content",
+        "expected_args": [
+            7,
+            _model(
+                {
+                    "section_path": ["Title", "Introduction"],
+                    "section_heading": "Introduction",
+                    "section_content": "Edited paragraph [1].",
+                    "attached_reference_list_from_content": ["Reference one."],
+                    "email": "ada@example.com",
+                    "session": "session-1",
+                }
+            ),
+        ],
+    },
+    {
         "name": "download_generated_file",
         "method": "GET",
         "path": "/api/generated-files/7/download",
