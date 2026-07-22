@@ -246,7 +246,7 @@ export function App() {
   const [isWriting, setIsWriting] = useState(false);
   const [workspaceData, setWorkspaceData] = useState({
     manuscript: [],
-    ref_list: [],
+    attached_reference_list_from_content: [],
     concept_maps: [],
     generated_documents: [],
     uploaded_documents: [],
@@ -291,7 +291,7 @@ export function App() {
         setWorkspaceData((current) => ({
           ...current,
           manuscript: current.manuscript?.length ? current.manuscript : (payload.manuscript ?? []),
-          ref_list: current.ref_list?.length ? current.ref_list : normalizeReferenceList(payload.ref_list),
+          attached_reference_list_from_content: current.attached_reference_list_from_content?.length ? current.attached_reference_list_from_content : normalizeReferenceList(payload.attached_reference_list_from_content),
           generated_documents: current.generated_documents?.length ? current.generated_documents : (payload.generated_documents ?? []),
           uploaded_documents: current.uploaded_documents?.length ? current.uploaded_documents : (payload.uploaded_documents ?? []),
         }));
@@ -737,7 +737,7 @@ export function App() {
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? current.manuscript,
-        ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+        attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
       }));
       if (payload.outline !== undefined) {
         setOutline(payload.outline ?? "");
@@ -775,7 +775,7 @@ export function App() {
       return {
         ...current,
         manuscript: job.manuscript ?? current.manuscript,
-        ref_list: normalizeReferenceList(job.ref_list ?? current.ref_list),
+        attached_reference_list_from_content: normalizeReferenceList(job.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
         generated_documents: generatedDocuments.map((document) =>
           String(document.id) === String(jobFile?.id ?? savedFile?.id ?? generatedFile?.id)
             ? {
@@ -932,7 +932,7 @@ export function App() {
         setWorkspaceData((current) => ({
           ...current,
           manuscript: payload.job.manuscript ?? current.manuscript,
-          ref_list: normalizeReferenceList(payload.job.ref_list ?? current.ref_list),
+          attached_reference_list_from_content: normalizeReferenceList(payload.job.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
         }));
       }
       setStatus(payload.job?.message || generationStatusMessage(payload.job));
@@ -955,7 +955,7 @@ export function App() {
     setWorkspaceData((current) => ({
       ...current,
       manuscript: [],
-      ref_list: [],
+      attached_reference_list_from_content: [],
       concept_maps: [],
     }));
     setStatus("Manuscript reset because the outline is being replaced.");
@@ -999,7 +999,7 @@ export function App() {
     setWorkspaceData((current) => ({
       ...current,
       manuscript: [],
-      ref_list: [],
+      attached_reference_list_from_content: [],
       concept_maps: [],
       attached_files: [],
     }));
@@ -1093,7 +1093,7 @@ export function App() {
       generated_documents: [],
       uploaded_documents: [],
       manuscript: [],
-      ref_list: [],
+      attached_reference_list_from_content: [],
       concept_maps: [],
       attached_files: [],
     }));
@@ -1114,7 +1114,7 @@ export function App() {
     setSelectedParagraph(null);
 
     if (!document.id) {
-      setWorkspaceData((current) => ({ ...current, manuscript: [], ref_list: [], concept_maps: [], attached_files: [] }));
+      setWorkspaceData((current) => ({ ...current, manuscript: [], attached_reference_list_from_content: [], concept_maps: [], attached_files: [] }));
       setIsLiteratureSearchEnabled(false);
       setLiteratureCollectionName("");
       return;
@@ -1147,7 +1147,7 @@ export function App() {
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? [],
-        ref_list: normalizeReferenceList(payload.ref_list),
+        attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content),
         concept_maps: [],
         attached_files: attachedDocuments,
         generated_documents: (current.generated_documents ?? []).map((document) =>
@@ -1169,7 +1169,7 @@ export function App() {
       outlineBeforeExample.current = "";
       setStatus(payload.message || "Manuscript loaded");
     } catch (error) {
-      setWorkspaceData((current) => ({ ...current, manuscript: [], ref_list: [], concept_maps: [], attached_files: [] }));
+      setWorkspaceData((current) => ({ ...current, manuscript: [], attached_reference_list_from_content: [], concept_maps: [], attached_files: [] }));
       setStatus(error.message);
     }
   }
@@ -1259,7 +1259,7 @@ export function App() {
         return {
           ...current,
           manuscript: payload.manuscript ?? current.manuscript,
-          ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+          attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
           concept_maps: [],
           generated_documents: generatedDocuments.map((document) =>
             String(document.id) === String(updatedFile.id)
@@ -1315,7 +1315,7 @@ export function App() {
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? current.manuscript,
-        ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+        attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
         concept_maps: [],
         attached_files: normalizeUploadedDocuments(payload.attached_files ?? current.attached_files),
         generated_documents: (current.generated_documents ?? []).map((document) =>
@@ -1752,7 +1752,7 @@ export function App() {
         return {
           ...current,
           manuscript: payload.manuscript ?? current.manuscript,
-          ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+          attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
           concept_maps: payload.concept_maps ?? current.concept_maps,
           attached_files: attachedDocuments,
           generated_documents: (current.generated_documents ?? []).map((document) =>
@@ -1855,7 +1855,7 @@ export function App() {
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? current.manuscript,
-        ref_list: normalizeReferenceList(payload.ref_list ?? current.ref_list),
+        attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
         concept_maps: [],
         attached_files: attachedDocuments,
         generated_documents: (current.generated_documents ?? []).map((document) =>
@@ -1928,7 +1928,7 @@ export function App() {
         ...current,
         uploaded_documents: normalizeUploadedDocuments(payload.uploaded_documents ?? []),
         manuscript: selectedAffectedDocument?.manuscript ?? current.manuscript,
-        ref_list: selectedAffectedDocument ? normalizeReferenceList(selectedAffectedDocument.ref_list) : current.ref_list,
+        attached_reference_list_from_content: selectedAffectedDocument ? normalizeReferenceList(selectedAffectedDocument.attached_reference_list_from_content) : current.attached_reference_list_from_content,
         concept_maps: selectedAffectedDocument ? [] : current.concept_maps,
         attached_files: selectedAffectedDocument ? normalizeUploadedDocuments(selectedAffectedDocument.attached_files ?? []) : current.attached_files,
         generated_documents: (current.generated_documents ?? []).map((currentDocument) => {
@@ -2028,7 +2028,7 @@ export function App() {
         ...current,
         generated_documents: normalizeGeneratedDocuments(payload.generated_documents ?? []),
         manuscript: removedSelectedDocument ? [] : current.manuscript,
-        ref_list: removedSelectedDocument ? [] : current.ref_list,
+        attached_reference_list_from_content: removedSelectedDocument ? [] : current.attached_reference_list_from_content,
         concept_maps: removedSelectedDocument ? [] : current.concept_maps,
         attached_files: removedSelectedDocument ? [] : current.attached_files,
       }));
@@ -2123,7 +2123,7 @@ export function App() {
             />
             <Manuscript
               manuscript={workspaceData.manuscript}
-              refList={workspaceData.ref_list}
+              refList={workspaceData.attached_reference_list_from_content}
               generatedContent={generatedContent}
               isGenerating={isSavingOutline}
               currentWritingSection={currentWritingSection}

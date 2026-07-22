@@ -42,8 +42,8 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
                           content_pre_summary: str, 
                           current_section: str, 
                           instructions: str,
-                          ref_list: list[str], 
-                          attached_references: dict[str, str]):
+                          attached_reference_list_from_content: list[str], 
+                          attached_references_db: dict[str, str]):
     
     '''
     Generates content for a section using the provided agent, and processes the citations in the generated content.
@@ -53,26 +53,26 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
         content_pre_summary: A summary of the content to be generated, which may be used by the agent to generate the content.
         current_section: The header of the section for which content is being generated.
         instructions: Any specific instructions to be followed for content generation.
-        ref_list: A list of references that have been attached to the outline so far. This list may be updated if the generated content contains citations that are not in the attached_references.
-        attached_references: A dictionary mapping reference IDs to their formatted reference strings collected from the database that have been attached to the generated file, but may not have been included in ref_list yet.
+        attached_reference_list_from_content: A list of references that have been attached to the outline so far. This list may be updated if the generated content contains citations that are not in the attached_references_db.
+        attached_references_db: A dictionary mapping reference IDs to their formatted reference strings collected from the database that have been attached to the generated file, but may not have been included in attached_reference_list_from_content yet.
     '''
 
     @print_func_name
-    def getSanitizedReferences(references_ai, attached_references):
+    def getSanitizedReferences(references_ai, attached_references_db):
 
         lit_ids = []
         for ref_id, _ in references_ai.items():
-            if ref_id not in attached_references:
+            if ref_id not in attached_references_db:
                 lit_ids.append(ref_id)
 
         if lit_ids:
             try: 
                 refs, _ = getLiteraturesFromDB(lit_ids)
-                attached_references |= {str(k): v for k, v, _ in refs}
+                attached_references_db |= {str(k): v for k, v, _ in refs}
             except Exception as exp:
                 logging.error(exp)
 
-        return attached_references
+        return attached_references_db
     
     response = await agent.ainvoke({'content_pre_summary': content_pre_summary, 
                                     'current_section': current_section,
@@ -80,15 +80,15 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
     
     content, content_summary, concept_map = response['content'], response.get('content_summary'), response.get('concept_map', {})
         
-    attached_references_ai = response.get('references', {})
-    attached_references = getSanitizedReferences(attached_references_ai, attached_references)
+    attached_references_db_ai = response.get('references', {})
+    attached_references_db = getSanitizedReferences(attached_references_db_ai, attached_references_db)
 
-    if attached_references:
-        content_for_frontend, ref_list = processCitation(content, attached_references, ref_list, enable_html_link_format=True)
+    if attached_references_db:
+        content_for_frontend, attached_reference_list_from_content = processCitation(content, attached_references_db, attached_reference_list_from_content, enable_html_link_format=True)
     else:
         content_for_frontend = content
 
-    return content, content_summary, concept_map, ref_list, sanitizeContent(content_for_frontend)
+    return content, content_summary, concept_map, attached_reference_list_from_content, sanitizeContent(content_for_frontend)
 
 # ---------------------------------------------------------------------------
 @print_func_name

@@ -443,7 +443,7 @@ ENDPOINT_CASES = [
             "architecture_type": "base",
             "collection_name": "",
             "collection_name_lit_search": "",
-            "attached_references": {"1": "Reference"},
+            "attached_references_db": {"1": "Reference"},
         },
         "handler": "_handle_generate_generated_file",
         "expected_args": [
@@ -460,7 +460,7 @@ ENDPOINT_CASES = [
                     "architecture_type": "base",
                     "collection_name": "",
                     "collection_name_lit_search": "",
-                    "attached_references": {"1": "Reference"},
+                    "attached_references_db": {"1": "Reference"},
                 }
             ),
         ],

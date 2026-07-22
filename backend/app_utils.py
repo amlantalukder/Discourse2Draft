@@ -108,7 +108,7 @@ class GeneratedFileGenerateRequest(AIRequestBase):
     architecture_type: Literal["base", "rag", "graphrag"] | None = None
     collection_name: str = ""
     collection_name_lit_search: str = ""
-    attached_references: dict[str, str] = Field(default_factory=dict)
+    attached_references_db: dict[str, str] = Field(default_factory=dict)
 
 
 class GeneratedFileParagraphUpdateRequest(AIRequestBase):
@@ -1948,7 +1948,7 @@ def _job_snapshot(job: dict[str, Any]) -> dict[str, Any]:
         "total_sections",
         "manuscript",
         "concept_maps",
-        "ref_list",
+        "attached_reference_list_from_content",
         "generated_file",
         "created_at",
         "updated_at",
@@ -2050,7 +2050,7 @@ def _concept_maps_from_outline_file(file_id: int) -> tuple[list[dict[str, Any]],
     return _concept_maps_from_outline_tree(outline_data), True
 
 
-def _normalize_ref_list(value: Any) -> list[str]:
+def _normalize_attached_references_content(value: Any) -> list[str]:
     if value in (None, "", {}):
         return []
     if isinstance(value, str):
@@ -2076,26 +2076,26 @@ def _attached_reference_map_for_generated_file(generated_file_id: int) -> dict[s
     literature_collection = _active_literature_collection_record(generated_file_id)
     uploaded_collection_id = int(uploaded_collection["id"]) if uploaded_collection else None
     literature_collection_id = int(literature_collection["id"]) if literature_collection else None
-    attached_references, _ = getAttachedRefs(uploaded_collection_id, literature_collection_id)
-    return {str(reference_id): reference_text for reference_id, reference_text, _reference_type in attached_references}
+    attached_references_db, _ = getAttachedRefs(uploaded_collection_id, literature_collection_id)
+    return {str(reference_id): reference_text for reference_id, reference_text, _reference_type in attached_references_db}
 
 
 def _process_manuscript_citations(
     manuscript: list[dict[str, Any]],
-    attached_references: dict[str, str],
+    attached_references_db: dict[str, str],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     from src.common import processCitation, sanitizeContent
 
-    current_ref_list = []
+    current_attached_references_content = []
     processed_manuscript = []
     for section in manuscript:
         section_body = str(section.get("body") or "")
-        if attached_references and "CITE(" in section_body:
-            section_body, current_ref_list = processCitation(section_body, attached_references, current_ref_list, enable_html_link_format=True)
+        if attached_references_db and "CITE(" in section_body:
+            section_body, current_attached_references_content = processCitation(section_body, attached_references_db, current_attached_references_content, enable_html_link_format=True)
         section_body = sanitizeContent(section_body)
         processed_manuscript.append({**section, "body": section_body})
 
-    return processed_manuscript, current_ref_list
+    return processed_manuscript, current_attached_references_content
 
 
 def _truthy_content_flag(value: Any) -> bool:
@@ -2166,7 +2166,7 @@ def _outline_node_for_heading_and_paragraph(
 
 def _display_manuscript_from_outline_tree(
     outline_data: dict[str, Any],
-    attached_references: dict[str, str],
+    attached_references_db: dict[str, str],
     content_overrides: dict[tuple[str, ...], Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     display_outline = deepcopy(outline_data)
@@ -2181,7 +2181,7 @@ def _display_manuscript_from_outline_tree(
         _set_content_value(items, OUTLINE_CONTENT_AI, content)
 
     manuscript = _manuscript_from_outline_tree(display_outline)
-    return _process_manuscript_citations(manuscript, attached_references)
+    return _process_manuscript_citations(manuscript, attached_references_db)
 
 
 def _has_content_value(items: list[Any], content_type: str) -> bool:
@@ -2561,7 +2561,7 @@ async def _run_generation_job(
 ) -> None:
     job = GENERATION_JOBS[job_id]
     outline_data: dict[str, Any] | None = None
-    attached_references = request.attached_references.copy()
+    attached_references_db = request.attached_references_db.copy()
     display_content_overrides: dict[tuple[str, ...], Any] = {}
 
     def update_job(**updates: Any) -> None:
@@ -2570,14 +2570,14 @@ async def _run_generation_job(
 
     def manuscript_snapshot(
         outline_data_current: dict[str, Any],
-        ref_list_override: Any = None,
+        attached_references_content_override: Any = None,
     ) -> tuple[list[dict[str, Any]], list[str]]:
-        manuscript, processed_ref_list = _display_manuscript_from_outline_tree(
+        manuscript, processed_attached_references_content = _display_manuscript_from_outline_tree(
             outline_data_current,
-            attached_references,
+            attached_references_db,
             display_content_overrides,
         )
-        return manuscript, _normalize_ref_list(ref_list_override) or processed_ref_list
+        return manuscript, _normalize_attached_references_content(attached_references_content_override) or processed_attached_references_content
 
     try:
         from src import db
@@ -2586,7 +2586,7 @@ async def _run_generation_job(
         def pause_if_requested(outline_data_current: dict[str, Any], completed_sections: int) -> bool:
             if not job.get("pause_requested"):
                 return False
-            manuscript, ref_list = manuscript_snapshot(outline_data_current, job.get("ref_list", []))
+            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data_current, job.get("attached_reference_list_from_content", []))
             _set_generated_file_status(generated_file_id, db.generated_files_status.CANCELLED.value)
             update_job(
                 status="paused",
@@ -2596,7 +2596,7 @@ async def _run_generation_job(
                 worker_active=False,
                 generated_file={**generated_file, "status": db.generated_files_status.CANCELLED.value},
                 manuscript=manuscript,
-                ref_list=ref_list,
+                attached_reference_list_from_content=attached_reference_list_from_content,
             )
             return True
 
@@ -2617,11 +2617,11 @@ async def _run_generation_job(
         _write_outline_file(generated_file_id, outline_data)
 
         sections = _extract_generation_sections(outline_data, remaining_only=request.mode == "remaining")
-        manuscript, ref_list = manuscript_snapshot(outline_data)
+        manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data)
         update_job(
             total_sections=len(sections),
             manuscript=manuscript,
-            ref_list=ref_list,
+            attached_reference_list_from_content=attached_reference_list_from_content,
         )
         if not sections:
             _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
@@ -2632,7 +2632,7 @@ async def _run_generation_job(
                 worker_active=False,
                 generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
                 manuscript=manuscript,
-                ref_list=ref_list,
+                attached_reference_list_from_content=attached_reference_list_from_content,
             )
             return
 
@@ -2663,20 +2663,20 @@ async def _run_generation_job(
         )
 
         content_pre_summary = _initial_content_pre_summary(outline_data, sections, request.mode)
-        attached_references = _attached_reference_map_for_generated_file(generated_file_id)
-        section_ref_list = []
+        attached_references_db = _attached_reference_map_for_generated_file(generated_file_id)
+        section_attached_references_content = []
         for index, section in enumerate(sections, start=1):
             if pause_if_requested(outline_data, index - 1):
                 return
 
             section_label = section["heading"]
-            manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
+            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
             update_job(
                 message=f"Writing section {index} of {len(sections)}: {section_label}",
                 current_section=section_label,
                 completed_sections=index - 1,
                 manuscript=manuscript,
-                ref_list=ref_list,
+                attached_reference_list_from_content=attached_reference_list_from_content,
             )
             agent = abstract_writer if section["is_abstract"] else writer
             section_content_pre_summary = content_pre_summary
@@ -2684,15 +2684,15 @@ async def _run_generation_job(
                 raw_content,
                 content_pre_summary,
                 concept_map,
-                section_ref_list,
+                section_attached_references_content,
                 display_content,
             ) = await generateContent(
                 agent,
                 content_pre_summary,
                 section["current_section"],
                 section["instructions"],
-                section_ref_list,
-                attached_references,
+                section_attached_references_content,
+                attached_references_db,
             )
             raw_content = str(raw_content or "")
             content_pre_summary = str(content_pre_summary or "")
@@ -2707,17 +2707,17 @@ async def _run_generation_job(
             if concept_map:
                 _set_content_value(section["items"], OUTLINE_CONCEPT_MAP, concept_map)
             _write_outline_file(generated_file_id, outline_data)
-            manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
+            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
             update_job(
                 completed_sections=index,
                 manuscript=manuscript,
-                ref_list=ref_list,
+                attached_reference_list_from_content=attached_reference_list_from_content,
             )
             if pause_if_requested(outline_data, index):
                 return
 
         _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
-        manuscript, ref_list = manuscript_snapshot(outline_data, section_ref_list)
+        manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
         update_job(
             status="completed",
             message="Content generation completed.",
@@ -2725,13 +2725,13 @@ async def _run_generation_job(
             worker_active=False,
             generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
             manuscript=manuscript,
-            ref_list=ref_list,
+            attached_reference_list_from_content=attached_reference_list_from_content,
         )
     except asyncio.CancelledError:
         if outline_data:
-            manuscript, ref_list = manuscript_snapshot(outline_data, job.get("ref_list", []))
+            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, job.get("attached_reference_list_from_content", []))
         else:
-            manuscript, ref_list = job.get("manuscript", []), job.get("ref_list", [])
+            manuscript, attached_reference_list_from_content = job.get("manuscript", []), job.get("attached_reference_list_from_content", [])
         _set_generated_file_status(generated_file_id, "cancelled")
         update_job(
             status="paused",
@@ -2740,7 +2740,7 @@ async def _run_generation_job(
             worker_active=False,
             generated_file={**generated_file, "status": "cancelled"},
             manuscript=manuscript,
-            ref_list=ref_list,
+            attached_reference_list_from_content=attached_reference_list_from_content,
         )
     except Exception as exp:
         logger.exception("Unable to generate manuscript for generated file %s", generated_file_id)
@@ -2897,7 +2897,7 @@ async def _handle_workspace_data():
     return {
         "outline_template": '',
         "manuscript": [],
-        "ref_list": [],
+        "attached_reference_list_from_content": [],
         "generated_documents": [],
         "uploaded_documents": [],
     }
@@ -3378,12 +3378,12 @@ async def _handle_generated_file_manuscript(generated_file_id, email, session):
         record = _generated_file_by_id(generated_file_id, email=email, session=session)
         manuscript, source_exists = _manuscript_from_outline_file(generated_file_id)
         attached_reference_map = _attached_reference_map_for_generated_file(generated_file_id)
-        manuscript, ref_list = _process_manuscript_citations(manuscript, attached_reference_map)
+        manuscript, attached_reference_list_from_content = _process_manuscript_citations(manuscript, attached_reference_map)
         raw_outline, _ = _raw_outline_from_outline_file(generated_file_id)
         return {
             "generated_file": _generated_file_record(record),
             "manuscript": manuscript,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "literature_search": _active_literature_collection(generated_file_id),
             "uploaded_files_collection": _active_uploaded_files_collection(generated_file_id),
             "attached_files": _attached_uploaded_documents(generated_file_id),
@@ -3477,7 +3477,7 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
         )
 
         attached_reference_map = _attached_reference_map_for_generated_file(generated_file_id)
-        manuscript, ref_list = _display_manuscript_from_outline_tree(outline_data, attached_reference_map)
+        manuscript, attached_reference_list_from_content = _display_manuscript_from_outline_tree(outline_data, attached_reference_map)
         raw_outline, _ = _raw_outline_from_outline_file(generated_file_id)
         action_message = {
             "Expand": "Paragraph expanded.",
@@ -3487,7 +3487,7 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
         return {
             "generated_file": _generated_file_record({**generated_file, "update_date": datetime.now()}),
             "manuscript": manuscript,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "outline": raw_outline,
             "message": action_message,
         }
@@ -3584,7 +3584,7 @@ async def _handle_enable_generated_file_literature_search(generated_file_id, req
         collection_name = literature_collection["collection_name"]
 
         now = datetime.now()
-        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        manuscript, concept_maps, attached_reference_list_from_content, source_exists = _reset_generated_document_content(generated_file_id)
         db.updateDB(
             table_name="generated_files",
             update_fields=["ai_architecture", "status", "update_date"],
@@ -3605,7 +3605,7 @@ async def _handle_enable_generated_file_literature_search(generated_file_id, req
             "collection_name": collection_name,
             "manuscript": manuscript,
             "concept_maps": concept_maps,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "content_reset": source_exists,
             "message": (
                 "Literature Search enabled. The manuscript content was reset because the generation context changed."
@@ -3670,7 +3670,7 @@ async def _handle_disable_generated_file_literature_search(generated_file_id, em
             if has_uploaded_collection
             else db.generated_files_ai_architecture.BASE.value
         )
-        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        manuscript, concept_maps, attached_reference_list_from_content, source_exists = _reset_generated_document_content(generated_file_id)
         db.updateDB(
             table_name="generated_files",
             update_fields=["ai_architecture", "status", "update_date"],
@@ -3693,7 +3693,7 @@ async def _handle_disable_generated_file_literature_search(generated_file_id, em
             "attached_files": _attached_uploaded_documents(generated_file_id),
             "manuscript": manuscript,
             "concept_maps": concept_maps,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "content_reset": source_exists,
             "message": (
                 "Literature Search disabled. The manuscript content was reset because the generation context changed."
@@ -3790,7 +3790,7 @@ async def _handle_attach_uploaded_files_to_generated_file(generated_file_id, req
             "update_date": now,
         }
         attached_records = _attached_uploaded_files(vector_db_collections_id)
-        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        manuscript, concept_maps, attached_reference_list_from_content, source_exists = _reset_generated_document_content(generated_file_id)
         return {
             "status": "attached",
             "generated_file": _jsonable(updated_file),
@@ -3804,7 +3804,7 @@ async def _handle_attach_uploaded_files_to_generated_file(generated_file_id, req
             "attached_files": [_uploaded_document(record) for record in attached_records],
             "manuscript": manuscript,
             "concept_maps": concept_maps,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "content_reset": source_exists,
             "message": (
                 "Uploaded documents attached. The manuscript content was reset because the attached references changed."
@@ -3846,7 +3846,7 @@ async def _handle_remove_uploaded_file_attachment(generated_file_id, uploaded_fi
             if remaining_records or has_literature_collection
             else db.generated_files_ai_architecture.BASE.value
         )
-        manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+        manuscript, concept_maps, attached_reference_list_from_content, source_exists = _reset_generated_document_content(generated_file_id)
         db.updateDB(
             table_name="generated_files",
             update_fields=["ai_architecture", "status", "update_date"],
@@ -3868,7 +3868,7 @@ async def _handle_remove_uploaded_file_attachment(generated_file_id, uploaded_fi
             "attached_files": [_uploaded_document(record) for record in remaining_records],
             "manuscript": manuscript,
             "concept_maps": concept_maps,
-            "ref_list": ref_list,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
             "content_reset": source_exists,
             "message": (
                 "Uploaded document removed. The manuscript content was reset because the attached references changed."
@@ -3929,7 +3929,7 @@ async def _handle_generate_generated_file(generated_file_id, request):
                 **generated_file,
                 "status": db.generated_files_status.SUCCESS.value,
             }
-            manuscript, ref_list = _display_manuscript_from_outline_tree(
+            manuscript, attached_reference_list_from_content = _display_manuscript_from_outline_tree(
                 processed_outline,
                 _attached_reference_map_for_generated_file(generated_file_id),
             )
@@ -3945,7 +3945,7 @@ async def _handle_generate_generated_file(generated_file_id, request):
                 "total_sections": 0,
                 "mode": request.mode,
                 "manuscript": manuscript,
-                "ref_list": ref_list,
+                "attached_reference_list_from_content": attached_reference_list_from_content,
                 "generated_file": _generated_file_record(completed_file),
                 "outline_path": str(outline_file_path),
                 "created_at": completed_at,
@@ -3966,7 +3966,7 @@ async def _handle_generate_generated_file(generated_file_id, request):
             "total_sections": 0,
             "mode": request.mode,
             "manuscript": manuscript,
-            "ref_list": [],
+            "attached_reference_list_from_content": [],
             "generated_file": _generated_file_record(generated_file),
             "outline_path": str(outline_file_path),
             "pause_requested": False,
@@ -4220,7 +4220,7 @@ async def _handle_delete_uploaded_file(uploaded_file_id, email, session):
                 if remaining_records or has_literature_collection
                 else db.generated_files_ai_architecture.BASE.value
             )
-            manuscript, concept_maps, ref_list, source_exists = _reset_generated_document_content(generated_file_id)
+            manuscript, concept_maps, attached_reference_list_from_content, source_exists = _reset_generated_document_content(generated_file_id)
             db.updateDB(
                 table_name="generated_files",
                 update_fields=["ai_architecture", "status", "update_date"],
@@ -4242,7 +4242,7 @@ async def _handle_delete_uploaded_file(uploaded_file_id, email, session):
                     "attached_files": [_uploaded_document(record) for record in remaining_records],
                     "manuscript": manuscript,
                     "concept_maps": concept_maps,
-                    "ref_list": ref_list,
+                    "attached_reference_list_from_content": attached_reference_list_from_content,
                     "content_reset": source_exists,
                 }
             )

@@ -51,7 +51,34 @@ def formatCitations(text):
 
 # ---------------------------------------------------------------------------
 @print_func_name
-def processCitation(content, attached_references, ref_list=[], return_latex_style=False, enable_html_link_format=False):
+def rawCiteContent(content: str, 
+                   attached_reference_list_from_content: list, 
+                   attached_references_db: dict[str, str]) -> str:
+    '''
+    Replaces the formatted citation (e.g. [1] or [1, 2]) in the content back to the raw citations 
+    (e.g. [CITE(<ref_id1>)] or [CITE(ref_id1), CITE(ref_id2)])
+    '''
+    
+    matches = re.findall(r'<a\s+href="#:~:text=References"[^>]*>(.*?)<\/a>', content)
+
+    ref_to_id = {v:k for k, v in attached_references_db.items()}
+    ref_ids = {i+1:ref_to_id[ref] for i, ref in enumerate(attached_reference_list_from_content)}
+
+    for m in matches:
+        if '-' in m:
+            start, end = m.split('-')
+            raw_cite_text = ', '.join([f'CITE({ref_ids[n]})' for n in range(int(start), int(end)+1)])
+        else:
+            nums = m.split(', ')
+            raw_cite_text = ', '.join([f'CITE({ref_ids[int(n)]})' for n in nums])
+        
+        content = re.sub(rf'<a\s+href="#:~:text=References"[^>]*>{m}<\/a>', raw_cite_text, content)
+
+    return content
+
+# ---------------------------------------------------------------------------
+@print_func_name
+def processCitation(content, attached_references_db, attached_reference_list_from_content=[], return_latex_style=False, enable_html_link_format=False):
     
     def formatCitationText(citation_text):
         if enable_html_link_format:
@@ -73,17 +100,17 @@ def processCitation(content, attached_references, ref_list=[], return_latex_styl
         ref_links = []
         for ref in refs.split(','):
             ref = ref.strip()
-            if ref not in attached_references: 
+            if ref not in attached_references_db: 
                 logging.warning(f'{ref} not found in reference list, skipping...')
                 continue
             if ref in d_ref:
                 ref_links.append(d_ref[ref])
                 continue
             try:
-                d_ref[ref] = ref_list.index(attached_references[ref]) + 1
+                d_ref[ref] = attached_reference_list_from_content.index(attached_references_db[ref]) + 1
             except ValueError:
-                ref_list.append(attached_references[ref])
-                d_ref[ref] = len(ref_list)
+                attached_reference_list_from_content.append(attached_references_db[ref])
+                d_ref[ref] = len(attached_reference_list_from_content)
 
             ref_links.append(d_ref[ref])
     
@@ -101,18 +128,18 @@ def processCitation(content, attached_references, ref_list=[], return_latex_styl
             if return_latex_style: content_tex = re.sub(rf' *\[CITE\({re.escape(refs)}\)\]', f' \\cite{{{refs}}}', content_tex)
         
     if return_latex_style:
-        return content, content_tex, ref_list
+        return content, content_tex, attached_reference_list_from_content
     
     if 'CITE' in content: raise Warning('Some citations were not replaced, needs human review.')
     
-    return content, ref_list
+    return content, attached_reference_list_from_content
 
 # ---------------------------------------------------------------------------
 @print_func_name
 def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_collections_id_literature):
 
     @print_func_name
-    def extractContentFromOutline(d, content_md=[], content_docx=Document(), content_tex=[], ref_list=[], level=1):
+    def extractContentFromOutline(d, content_md=[], content_docx=Document(), content_tex=[], attached_reference_list_from_content=[], level=1):
 
         def latexLevels(level, header):
 
@@ -133,7 +160,7 @@ def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_co
         if not isinstance(d, dict):
             for k, v in d:
                 if k not in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_USER.value]: continue
-                content_text, content_tex_text, ref_list = processCitation(v, attached_references, ref_list, return_latex_style=True)
+                content_text, content_tex_text, attached_reference_list_from_content = processCitation(v, attached_references_db, attached_reference_list_from_content, return_latex_style=True)
                 content_md.append(content_text)
                 content_docx.add_paragraph(content_text)
                 content_tex.append(content_tex_text)
@@ -141,19 +168,19 @@ def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_co
             for k in d:
                 if k != SpecialSectionTypes.CONTENT.value:
                     content_docx.add_heading(k, level=level)
-                    content_md, content_docx, content_tex, ref_list = extractContentFromOutline(d[k], 
+                    content_md, content_docx, content_tex, attached_reference_list_from_content = extractContentFromOutline(d[k], 
                                                                                                 content_md + [f'{'#' * level} {k}'], 
                                                                                                 content_docx, 
                                                                                                 content_tex + [latexLevels(level, k)], 
-                                                                                                ref_list, used_files_info, level+1)
+                                                                                                attached_reference_list_from_content, used_files_info, level+1)
                 else:
-                    content_md, content_docx, content_tex, ref_list = extractContentFromOutline(d[k], 
+                    content_md, content_docx, content_tex, attached_reference_list_from_content = extractContentFromOutline(d[k], 
                                                                                                 content_md, 
                                                                                                 content_docx, 
                                                                                                 content_tex, 
-                                                                                                ref_list, used_files_info, level+1)
+                                                                                                attached_reference_list_from_content, used_files_info, level+1)
 
-        return content_md, content_docx, content_tex, ref_list
+        return content_md, content_docx, content_tex, attached_reference_list_from_content
     
     @print_func_name
     def convertToLatex(content):
@@ -194,16 +221,16 @@ def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_co
     with open(outline_file_path) as fp:
         d_outline = json.load(fp)
 
-    attached_references, file_info = getAttachedRefs(vector_db_collections_id_uploaded_files, vector_db_collections_id_literature)
+    attached_references_db, file_info = getAttachedRefs(vector_db_collections_id_uploaded_files, vector_db_collections_id_literature)
 
-    attached_references = {str(k): v for k, v, _ in attached_references}
-    content_md, content_docx, content_tex, ref_list, used_files_info= extractContentFromOutline(d_outline)
-    used_files_info = {ref: file_info[ref] for ref in ref_list}
+    attached_references_db = {str(k): v for k, v, _ in attached_references_db}
+    content_md, content_docx, content_tex, attached_reference_list_from_content, used_files_info= extractContentFromOutline(d_outline)
+    used_files_info = {ref: file_info[ref] for ref in attached_reference_list_from_content}
     
-    if attached_references:
+    if attached_references_db:
         content_md.append('## References')
         content_docx.add_heading('References', level=2)
-        for i, ref in enumerate(ref_list):
+        for i, ref in enumerate(attached_reference_list_from_content):
             content_md.append(f'\n[{i+1}] {ref}')
             content_docx.add_paragraph(f'[{i+1}] {ref}')
         bibs = getBibFormat(used_files_info)

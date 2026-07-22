@@ -1909,7 +1909,7 @@ time {
 .draft-flow-footer,
 .draft-flow-actions {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
 }
