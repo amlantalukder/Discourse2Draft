@@ -1,17 +1,42 @@
-import { ChevronDown, Paperclip, Play, Trash2, X } from "./FontAwesomeIcons";
+import { ChevronDown, Paperclip, Play, Save, SlidersHorizontal, X } from "./FontAwesomeIcons";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "./IconButton";
 
-const actions = ["Expand", "Rephrase", "Remove"];
+const actions = ["Expand", "Rephrase", "Edit", "Remove"];
 
-export function ActionStrip({ action, setAction, onWrite, isWriting, onOpenConceptMap, hasSelectedFile, isLiteratureSearchEnabled, isConfiguringLiteratureSearch, onLiteratureSearchChange, attachedFiles = [], onRemoveAttachedFile, hasSelectedParagraphText = false }) {
+export function ActionStrip({
+  action,
+  setAction,
+  onWrite,
+  isWriting,
+  onOpenConceptMap,
+  hasSelectedFile,
+  isLiteratureSearchEnabled,
+  isConfiguringLiteratureSearch,
+  onLiteratureSearchChange,
+  attachedFiles = [],
+  onRemoveAttachedFile,
+  hasSelectedParagraphText = false,
+  isEditingParagraph = false,
+  isSavingParagraphEdit = false,
+  onSaveParagraphEdit,
+  onDiscardParagraphEdit,
+  actionInstruction = "",
+  onActionInstructionChange,
+}) {
   const [isAttachedFilesOpen, setIsAttachedFilesOpen] = useState(false);
+  const [isActionInstructionsOpen, setIsActionInstructionsOpen] = useState(false);
   const attachedFilesRef = useRef(null);
+  const actionInstructionsRef = useRef(null);
+  const showActionInstruction = action === "Expand" || action === "Rephrase";
 
   useEffect(() => {
     function closeOnOutsideClick(event) {
       if (attachedFilesRef.current && !attachedFilesRef.current.contains(event.target)) {
         setIsAttachedFilesOpen(false);
+      }
+      if (actionInstructionsRef.current && !actionInstructionsRef.current.contains(event.target)) {
+        setIsActionInstructionsOpen(false);
       }
     }
 
@@ -25,32 +50,68 @@ export function ActionStrip({ action, setAction, onWrite, isWriting, onOpenConce
     }
   }, [hasSelectedFile]);
 
+  useEffect(() => {
+    if (!showActionInstruction || !hasSelectedParagraphText) {
+      setIsActionInstructionsOpen(false);
+    }
+  }, [hasSelectedParagraphText, showActionInstruction]);
+
   const isAttachedFilesMenuOpen = hasSelectedFile && isAttachedFilesOpen;
 
   return (
     <section className={`action-strip ${hasSelectedParagraphText ? "" : "action-strip-no-selection"}`}>
       <span>Content starts below ...</span>
-      {hasSelectedParagraphText ? (
+      {isEditingParagraph ? (
+        <div className="inline-actions inline-edit-actions">
+          <button type="button" className="inline-edit-button inline-edit-save" onClick={onSaveParagraphEdit} disabled={isSavingParagraphEdit}>
+            <Save size={14} />
+            <span>{isSavingParagraphEdit ? "Saving changes" : "Save changes"}</span>
+          </button>
+          <button type="button" className="inline-edit-button" onClick={onDiscardParagraphEdit} disabled={isSavingParagraphEdit}>
+            <X size={14} />
+            <span>Discard changes</span>
+          </button>
+        </div>
+      ) : hasSelectedParagraphText ? (
         <div className="inline-actions">
-          {actions.map((label) => (
-            <label key={label}>
-              <input checked={action === label} onChange={() => setAction(label)} name="edit-action" type="radio" />
-              <span>{label}</span>
-            </label>
-          ))}
-          <IconButton label="Clear action">
-            <Trash2 size={16} />
-          </IconButton>
-          <IconButton
-            label="Run action"
-            onClick={(event) => {
-              event.preventDefault();
-              onWrite?.();
-            }}
-            disabled={isWriting}
-          >
-            <Play size={16} fill="currentColor" />
-          </IconButton>
+          <div className="inline-action-choice-row">
+            {actions.map((label) => (
+              <label key={label}>
+                <input checked={action === label} onChange={() => setAction(label)} name="edit-action" type="radio" />
+                <span>{label}</span>
+              </label>
+            ))}
+            {showActionInstruction ? (
+              <span className="inline-action-instruction-control" ref={actionInstructionsRef}>
+                <IconButton
+                  label="Instructions"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setIsActionInstructionsOpen((isOpen) => !isOpen);
+                  }}
+                  disabled={isWriting}
+                >
+                  <SlidersHorizontal size={16} />
+                </IconButton>
+                {isActionInstructionsOpen ? (
+                  <label className="inline-action-instruction-popover">
+                    <span>Instructions</span>
+                    <textarea value={actionInstruction} onChange={(event) => onActionInstructionChange?.(event.target.value)} disabled={isWriting} />
+                  </label>
+                ) : null}
+              </span>
+            ) : null}
+            <IconButton
+              label="Run action"
+              onClick={(event) => {
+                event.preventDefault();
+                onWrite?.();
+              }}
+              disabled={isWriting}
+            >
+              <Play size={16} fill="currentColor" />
+            </IconButton>
+          </div>
         </div>
       ) : null}
       <label className="toggle-row">

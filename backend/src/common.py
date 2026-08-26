@@ -67,10 +67,10 @@ def rawCiteContent(content: str,
     for m in matches:
         if '-' in m:
             start, end = m.split('-')
-            raw_cite_text = ', '.join([f'CITE({ref_ids[n]})' for n in range(int(start), int(end)+1)])
+            raw_cite_text = ', '.join([f'CITE({ref_ids[n]})' for n in range(int(start), int(end)+1) if n in ref_ids])
         else:
             nums = m.split(', ')
-            raw_cite_text = ', '.join([f'CITE({ref_ids[int(n)]})' for n in nums])
+            raw_cite_text = ', '.join([f'CITE({ref_ids[int(n)]})' for n in nums if n in ref_ids])
         
         content = re.sub(rf'<a\s+href="#:~:text=References"[^>]*>{m}<\/a>', raw_cite_text, content)
 

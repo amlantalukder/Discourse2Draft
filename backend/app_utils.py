@@ -36,6 +36,7 @@ from src.auth import (
     validate_maintainer_access,
     verify_reset_code as auth_verify_reset_code,
 )
+from src.ai.common import PARAGRAPH_EXPAND_INSTRUCTIONS, PARAGRAPH_REPHRASE_INSTRUCTIONS
 from src.utils import Config
 
 
@@ -117,6 +118,7 @@ class GeneratedFileParagraphUpdateRequest(AIRequestBase):
     paragraph_index: int = Field(ge=0)
     raw_paragraph: str
     action: Literal["Expand", "Rephrase", "Remove"]
+    action_instruction: str = ""
     email: str | None = None
     session: str | None = None
 
@@ -169,6 +171,25 @@ def _required_default_model() -> str:
 
 def _model_name(model_name: str | None) -> str:
     return model_name or _required_default_model()
+
+
+def _app_config() -> dict[str, Any]:
+    config_path = Config.DIR_HOME / "config" / "config.json"
+    try:
+        with config_path.open("r", encoding="utf-8") as fp:
+            config = json.load(fp)
+    except FileNotFoundError:
+        logger.warning("Application config file not found at %s", config_path)
+        config = {}
+    except json.JSONDecodeError:
+        logger.warning("Application config file is not valid JSON at %s", config_path)
+        config = {}
+
+    version = str(config.get("version") or "").strip()
+    return {
+        "name": Config.APP_NAME,
+        "version": version,
+    }
 
 
 def _exception_chain(exp: Exception) -> list[BaseException]:
@@ -2409,16 +2430,17 @@ def _split_manuscript_paragraphs(text: Any) -> list[str]:
 
 def _paragraph_update_instruction(action: str) -> str:
     if action == "Expand":
-        return (
-            "Write additional scholarly text that expands on the selected paragraph. "
-            "Do not repeat the selected paragraph. Return only the new text to append after it."
-        )
+        return PARAGRAPH_EXPAND_INSTRUCTIONS
     if action == "Rephrase":
-        return (
-            "Rephrase the selected paragraph for clarity, flow, and scholarly tone while preserving the meaning. "
-            "Return only the replacement paragraph text."
-        )
+        return PARAGRAPH_REPHRASE_INSTRUCTIONS
     return "Return only the replacement paragraph text."
+
+
+async def _handle_paragraph_action_instructions() -> dict[str, Any]:
+    actions = ("Expand", "Rephrase")
+    return {
+        "instructions": {action: _paragraph_update_instruction(action) for action in actions},
+    }
 
 
 def _paragraph_update_prompt(path: list[str], section_body: str, paragraph_index: int, action: str) -> str:
@@ -2782,6 +2804,10 @@ async def _handle_health():
         "chroma_port": Config.env_config.get("CHROMA_PORT"),
         "checked_at": datetime.now().isoformat(),
     }
+
+
+async def _handle_app_config():
+    return {"app": _app_config()}
 
 
 async def _handle_outline_templates():
@@ -3454,7 +3480,8 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
                     ContentRequest(
                         current_section=prompt,
                         content_pre_summary="",
-                        content_specific_instructions=_paragraph_update_instruction(request.action),
+                        content_specific_instructions=str(request.action_instruction or "").strip()
+                        or _paragraph_update_instruction(request.action),
                         model_name=request.model_name,
                         temperature=request.temperature,
                         instructions=request.instructions,

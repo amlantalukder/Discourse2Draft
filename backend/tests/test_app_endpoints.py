@@ -71,6 +71,13 @@ ENDPOINT_CASES = [
         "expected_args": [],
     },
     {
+        "name": "app_config",
+        "method": "GET",
+        "path": "/api/app-config",
+        "handler": "_handle_app_config",
+        "expected_args": [],
+    },
+    {
         "name": "outline_templates",
         "method": "GET",
         "path": "/api/outline-templates",
@@ -330,6 +337,13 @@ ENDPOINT_CASES = [
         "expected_args": [7, "ada@example.com", "session-1"],
     },
     {
+        "name": "paragraph_action_instructions",
+        "method": "GET",
+        "path": "/api/paragraph-actions/instructions",
+        "handler": "_handle_paragraph_action_instructions",
+        "expected_args": [],
+    },
+    {
         "name": "update_generated_file_paragraph",
         "method": "PATCH",
         "path": "/api/generated-files/7/paragraph",
@@ -339,6 +353,7 @@ ENDPOINT_CASES = [
             "paragraph_index": 1,
             "raw_paragraph": "Existing paragraph.",
             "action": "Expand",
+            "action_instruction": "Add clinical detail.",
             "model_name": "test-model",
             "temperature": 0.1,
             "instructions": "Add detail.",
@@ -355,6 +370,7 @@ ENDPOINT_CASES = [
                     "paragraph_index": 1,
                     "raw_paragraph": "Existing paragraph.",
                     "action": "Expand",
+                    "action_instruction": "Add clinical detail.",
                     "model_name": "test-model",
                     "temperature": 0.1,
                     "instructions": "Add detail.",

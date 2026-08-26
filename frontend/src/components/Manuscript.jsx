@@ -2,6 +2,8 @@ import { ChevronDown, ChevronRight } from "./FontAwesomeIcons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const STREAM_DELAY_MS = 50;
+const SLOW_EDIT_CLICK_MIN_MS = 450;
+const SLOW_EDIT_CLICK_MAX_MS = 1800;
 
 function nextWordChunk(text) {
   const match = text.match(/^\s*\S+\s*/);
@@ -162,6 +164,10 @@ function clearDocumentSelection() {
   window.getSelection?.()?.removeAllRanges();
 }
 
+function formattedCitationAnchorsToLabels(text) {
+  return String(text ?? "").replace(/<a\b[^>]*href=["']#:~:text=References["'][^>]*>(.*?)<\/a>/gi, "$1");
+}
+
 function referenceIndexFromCitationLabel(label) {
   const match = String(label ?? "").match(/\d+/);
   if (!match) return -1;
@@ -231,6 +237,29 @@ function renderReference(reference) {
   return parts.length ? parts : text;
 }
 
+function ParagraphEditor({ value, onChange }) {
+  const editorRef = useRef(null);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return undefined;
+
+    editor.focus();
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+    return undefined;
+  }, []);
+
+  return (
+    <textarea
+      className="manuscript-paragraph-editor"
+      ref={editorRef}
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+    />
+  );
+}
+
 function ManuscriptReferencesPanel({ references = [], highlightedReferenceIndex = -1, isExpanded = false, onExpandedChange }) {
   const panelRef = useRef(null);
   const referenceRefs = useRef(new Map());
@@ -292,9 +321,13 @@ export function Manuscript({
   isGenerating = false,
   currentWritingSection = "",
   selectedParagraphId = "",
+  editingParagraphId = "",
+  editingParagraphText = "",
   syncVersion = 0,
   updatingParagraphId = "",
   onParagraphSelectionChange,
+  onParagraphEditStart,
+  onParagraphEditChange,
 }) {
   const sections = useMemo(() => {
     if (!generatedContent) return normalizeSections(manuscript);
@@ -314,6 +347,7 @@ export function Manuscript({
   const lastSyncVersionRef = useRef(syncVersion);
   const shellRef = useRef(null);
   const sectionRefs = useRef(new Map());
+  const lastParagraphClickRef = useRef({ id: "", timestamp: 0 });
   const [streamedSections, setStreamedSections] = useState(sections);
   const [isReferencesExpanded, setIsReferencesExpanded] = useState(false);
   const [highlightedReferenceIndex, setHighlightedReferenceIndex] = useState(-1);
@@ -408,8 +442,7 @@ export function Manuscript({
     const id = paragraphId(section, sectionIndex, paragraphIndex);
     const rawParagraphs = splitBodyIntoParagraphs(section.rawBody);
     const rawParagraph = rawParagraphs[paragraphIndex] ?? paragraph;
-    selectParagraphContents(event.currentTarget);
-    onParagraphSelectionChange?.({
+    const paragraphPayload = {
       id,
       text: paragraph,
       rawText: rawParagraph,
@@ -420,11 +453,26 @@ export function Manuscript({
       paragraphIndex,
       sectionBody: section.body ?? "",
       rawSectionBody: section.rawBody ?? section.body ?? "",
-    });
+      editableText: formattedCitationAnchorsToLabels(paragraph),
+    };
+    const now = Date.now();
+    const previousClick = lastParagraphClickRef.current;
+    const elapsed = previousClick.id === id ? now - previousClick.timestamp : Number.POSITIVE_INFINITY;
+
+    lastParagraphClickRef.current = { id, timestamp: now };
+
+    if (elapsed >= SLOW_EDIT_CLICK_MIN_MS && elapsed <= SLOW_EDIT_CLICK_MAX_MS) {
+      clearDocumentSelection();
+      onParagraphEditStart?.(paragraphPayload);
+      return;
+    }
+
+    selectParagraphContents(event.currentTarget);
+    onParagraphSelectionChange?.(paragraphPayload);
   }
 
   function handleShellClick(event) {
-    if (event.target.closest?.(".manuscript-paragraph")) return;
+    if (event.target.closest?.(".manuscript-paragraph, .manuscript-paragraph-editor-wrap")) return;
     clearDocumentSelection();
     onParagraphSelectionChange?.(null);
   }
@@ -484,6 +532,15 @@ export function Manuscript({
                 {paragraphs.map((paragraph, paragraphIndex) => {
                   const id = paragraphId(section, index, paragraphIndex);
                   const isUpdatingParagraph = updatingParagraphId === id;
+                  const isEditingParagraph = editingParagraphId === id;
+
+                  if (isEditingParagraph) {
+                    return (
+                      <div className="manuscript-paragraph-editor-wrap" key={id} onClick={(event) => event.stopPropagation()}>
+                        <ParagraphEditor value={editingParagraphText} onChange={onParagraphEditChange} />
+                      </div>
+                    );
+                  }
 
                   return (
                     <p

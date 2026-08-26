@@ -112,3 +112,13 @@ CITE_CONTEXT_INSTRUCTIONS = '''\
     - You must put the citation before the ending "." of the corresponding line.
 </Adding text from context>\
 '''
+
+PARAGRAPH_EXPAND_INSTRUCTIONS = (
+    "Write additional scholarly text that expands on the selected paragraph. "
+    "Do not repeat the selected paragraph. Return only the new text to append after it."
+)
+
+PARAGRAPH_REPHRASE_INSTRUCTIONS = (
+    "Rephrase the selected paragraph for clarity, flow, and scholarly tone while preserving the meaning. "
+    "Return only the replacement paragraph text."
+)

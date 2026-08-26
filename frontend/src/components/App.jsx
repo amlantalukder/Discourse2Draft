@@ -105,6 +105,69 @@ function normalizeReferenceList(refList = []) {
     });
 }
 
+function splitContentParagraphs(text) {
+  const normalized = String(text ?? "")
+    .replace(/\r\n/g, "\n")
+    .trim();
+  if (!normalized) return [];
+  const blocks = normalized
+    .split(/\n\s*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length > 1) return blocks;
+  return normalized
+    .split(/\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+}
+
+function formattedCitationAnchorsToLabels(text) {
+  return String(text ?? "").replace(/<a\b[^>]*href=["']#:~:text=References["'][^>]*>(.*?)<\/a>/gi, "$1");
+}
+
+function citationLabelsToAnchors(text, referenceCount = 0) {
+  if (/<a\b[^>]*href=["']#:~:text=References["'][^>]*>/i.test(String(text ?? ""))) {
+    return String(text ?? "");
+  }
+
+  return String(text ?? "").replace(/\[(\d+(?:\s*(?:,|-)\s*\d+)*)\]/g, (_match, citationLabel) => {
+    const citedNumbers = [];
+    for (const segment of String(citationLabel).split(",")) {
+      const rangeMatch = segment.trim().match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rangeMatch) {
+        citedNumbers.push(Number.parseInt(rangeMatch[1], 10), Number.parseInt(rangeMatch[2], 10));
+      } else {
+        citedNumbers.push(Number.parseInt(segment.trim(), 10));
+      }
+    }
+
+    if (!referenceCount || citedNumbers.some((number) => !Number.isFinite(number) || number < 1 || number > referenceCount)) {
+      return _match;
+    }
+
+    const normalizedCitationLabel = String(citationLabel)
+      .replace(/\s*-\s*/g, "-")
+      .replace(/\s*,\s*/g, ", ")
+      .trim();
+    return `[<a href="#:~:text=References">${normalizedCitationLabel}</a>]`;
+  });
+}
+
+function replaceParagraphInSectionContent(sectionContent, paragraphIndex, currentParagraph, nextParagraph) {
+  const paragraphs = splitContentParagraphs(sectionContent);
+  const expectedParagraph = String(currentParagraph ?? "").trim();
+  let targetIndex = paragraphIndex;
+
+  if (expectedParagraph && (targetIndex >= paragraphs.length || paragraphs[targetIndex]?.trim() !== expectedParagraph)) {
+    targetIndex = paragraphs.findIndex((paragraph) => paragraph.trim() === expectedParagraph);
+  }
+
+  if (targetIndex < 0 || targetIndex >= paragraphs.length) return "";
+
+  paragraphs[targetIndex] = String(nextParagraph ?? "").trim();
+  return paragraphs.filter((paragraph) => paragraph.trim()).join("\n\n");
+}
+
 function hasManuscriptContent(manuscript = [], generatedContent = "") {
   if (String(generatedContent ?? "").trim()) return true;
   return (Array.isArray(manuscript) ? manuscript : []).some((section) => String(section?.body ?? "").trim());
@@ -135,6 +198,10 @@ function inlineActionProgressMessage(action) {
   if (action === "Rephrase") return "Rephrasing selected paragraph...";
   if (action === "Remove") return "Removing selected paragraph...";
   return "Updating selected paragraph...";
+}
+
+function paragraphActionNeedsInstruction(action) {
+  return action === "Expand" || action === "Rephrase";
 }
 
 function authOwnerQuery(authSession) {
@@ -234,12 +301,17 @@ export function App() {
   const [selectedOutlineTemplate, setSelectedOutlineTemplate] = useState("");
   const [selectedUploadedOutlineTemplate, setSelectedUploadedOutlineTemplate] = useState("");
   const [action, setAction] = useState("Expand");
+  const [paragraphActionInstructions, setParagraphActionInstructions] = useState({});
+  const [paragraphActionInstruction, setParagraphActionInstruction] = useState("");
   const [status, setStatus] = useState("");
   const [globalStatus, setGlobalStatus] = useState("");
   const [generatedContent, setGeneratedContent] = useState("");
   const [currentWritingSection, setCurrentWritingSection] = useState("");
   const [currentGenerationJobId, setCurrentGenerationJobId] = useState("");
   const [selectedParagraph, setSelectedParagraph] = useState(null);
+  const [editingParagraph, setEditingParagraph] = useState(null);
+  const [editingParagraphText, setEditingParagraphText] = useState("");
+  const [isSavingParagraphEdit, setIsSavingParagraphEdit] = useState(false);
   const [updatingParagraphId, setUpdatingParagraphId] = useState("");
   const [manuscriptSyncVersion, setManuscriptSyncVersion] = useState(0);
   const [workspaceResetVersion, setWorkspaceResetVersion] = useState(0);
@@ -316,9 +388,22 @@ export function App() {
       }
     }
 
+    async function loadParagraphActionInstructions() {
+      try {
+        const payload = await getJSON("/api/paragraph-actions/instructions");
+        if (!isMounted) return;
+        setParagraphActionInstructions(payload.instructions ?? {});
+      } catch (error) {
+        if (isMounted) {
+          setParagraphActionInstructions({});
+        }
+      }
+    }
+
     loadSystemHealth(true);
     loadWorkspaceData();
     loadOutlineTemplates();
+    loadParagraphActionInstructions();
     const healthInterval = window.setInterval(() => loadSystemHealth(false), 30000);
 
     return () => {
@@ -422,6 +507,19 @@ export function App() {
       isMounted = false;
     };
   }, [showLogin, authSession]);
+
+  useEffect(() => {
+    clearParagraphInteraction();
+  }, [generatedFile?.id]);
+
+  useEffect(() => {
+    if (!paragraphActionNeedsInstruction(action)) {
+      setParagraphActionInstruction("");
+      return;
+    }
+
+    setParagraphActionInstruction(paragraphActionInstructions[action] ?? "");
+  }, [action, paragraphActionInstructions]);
 
   useEffect(() => {
     const hasActiveJob = Boolean(currentGenerationJobId || activeGenerationJobRef.current);
@@ -707,6 +805,95 @@ export function App() {
     setOutline(nextOutline);
   }
 
+  function clearParagraphInteraction() {
+    setSelectedParagraph(null);
+    setEditingParagraph(null);
+    setEditingParagraphText("");
+  }
+
+  function handleParagraphSelectionChange(paragraph) {
+    setSelectedParagraph(paragraph);
+    if (!paragraph || (editingParagraph && paragraph.id !== editingParagraph.id)) {
+      setEditingParagraph(null);
+      setEditingParagraphText("");
+    }
+  }
+
+  function startParagraphEdit(paragraph) {
+    if (!paragraph?.id) return;
+    setSelectedParagraph(paragraph);
+    setEditingParagraph(paragraph);
+    setEditingParagraphText(paragraph.editableText ?? formattedCitationAnchorsToLabels(paragraph.text));
+  }
+
+  function discardParagraphEdit() {
+    clearParagraphInteraction();
+    setStatus("Paragraph changes discarded.");
+  }
+
+  async function saveParagraphEdit() {
+    if (!generatedFile?.id) {
+      setStatus("Select a generated document before saving paragraph changes.");
+      return;
+    }
+
+    if (!editingParagraph?.id) {
+      setStatus("Select a paragraph before saving changes.");
+      return;
+    }
+
+    const editedParagraphText = editingParagraphText.trim();
+    if (!editedParagraphText) {
+      setStatus("Paragraph text cannot be empty.");
+      return;
+    }
+
+    const editedParagraphForSave = citationLabelsToAnchors(editedParagraphText, workspaceData.attached_reference_list_from_content?.length ?? 0);
+    const updatedSectionContent = replaceParagraphInSectionContent(editingParagraph.sectionBody ?? editingParagraph.text, editingParagraph.paragraphIndex, editingParagraph.text, editedParagraphForSave);
+
+    if (!updatedSectionContent.trim()) {
+      setStatus("Unable to match this paragraph with the current section. Reload the document and try again.");
+      return;
+    }
+
+    setIsSavingParagraphEdit(true);
+    setStatus("Saving paragraph changes...");
+    try {
+      const payload = await patchJSON(`/api/generated-files/${generatedFile.id}/section-content`, {
+        section_path: editingParagraph.path ?? [],
+        section_heading: editingParagraph.heading ?? "",
+        section_content: updatedSectionContent,
+        attached_reference_list_from_content: workspaceData.attached_reference_list_from_content ?? [],
+        email: authSession?.user?.email ?? null,
+        session: authSession?.user?.email ? null : (authSession?.session ?? null),
+      });
+      setWorkspaceData((current) => ({
+        ...current,
+        manuscript: payload.manuscript ?? current.manuscript,
+        attached_reference_list_from_content: normalizeReferenceList(payload.attached_reference_list_from_content ?? current.attached_reference_list_from_content),
+      }));
+      if (payload.outline !== undefined) {
+        setOutline(payload.outline ?? "");
+      }
+      if (payload.generated_file) {
+        const nextGeneratedFile = generatedFileToDocument(payload.generated_file);
+        setGeneratedFile(nextGeneratedFile);
+        setWorkspaceData((current) => ({
+          ...current,
+          generated_documents: (current.generated_documents ?? []).map((document) => (String(document.id) === String(nextGeneratedFile.id) ? { ...document, ...nextGeneratedFile } : document)),
+        }));
+      }
+      setGeneratedContent("");
+      clearParagraphInteraction();
+      setManuscriptSyncVersion((current) => current + 1);
+      setStatus(payload.message ?? "Section changes saved.");
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setIsSavingParagraphEdit(false);
+    }
+  }
+
   async function writeContent() {
     if (!generatedFile?.id) {
       setStatus("Save this file before starting content generation.");
@@ -715,6 +902,11 @@ export function App() {
 
     if (!selectedParagraph?.text) {
       setStatus("Select a manuscript paragraph before running an inline action.");
+      return;
+    }
+
+    if (action === "Edit") {
+      startParagraphEdit(selectedParagraph);
       return;
     }
 
@@ -728,6 +920,7 @@ export function App() {
         section_heading: selectedParagraph.heading ?? "",
         paragraph_index: selectedParagraph.paragraphIndex,
         raw_paragraph: selectedParagraph.rawText ?? selectedParagraph.text,
+        action_instruction: paragraphActionNeedsInstruction(action) ? paragraphActionInstruction : "",
         email: authSession?.user?.email ?? null,
         session: authSession?.session ?? null,
         model_name: aiSettings?.llm,
@@ -751,7 +944,7 @@ export function App() {
         }));
       }
       setGeneratedContent("");
-      setSelectedParagraph(null);
+      clearParagraphInteraction();
       setStatus(payload.message ?? "Paragraph updated.");
     } catch (error) {
       setStatus(error.message);
@@ -836,7 +1029,7 @@ export function App() {
     setGeneratedContent("");
     setCurrentWritingSection("");
     setCurrentGenerationJobId("");
-    setSelectedParagraph(null);
+    clearParagraphInteraction();
     setStatus("Saving structured outline...");
     try {
       const payload = await postJSON(`/api/generated-files/${generatedFile.id}/generate`, {
@@ -947,7 +1140,7 @@ export function App() {
     setGeneratedContent("");
     setCurrentWritingSection("");
     setCurrentGenerationJobId("");
-    setSelectedParagraph(null);
+    clearParagraphInteraction();
     setUpdatingParagraphId("");
     setIsWriting(false);
     setIsSavingOutline(false);
@@ -980,7 +1173,7 @@ export function App() {
     setGeneratedContent("");
     setCurrentWritingSection("");
     setCurrentGenerationJobId("");
-    setSelectedParagraph(null);
+    clearParagraphInteraction();
     setIsWriting(false);
     setIsSavingFile(false);
     setIsSavingOutline(false);
@@ -1055,7 +1248,7 @@ export function App() {
     setGeneratedContent("");
     setCurrentWritingSection("");
     setCurrentGenerationJobId("");
-    setSelectedParagraph(null);
+    clearParagraphInteraction();
     setIsConceptMapOpen(false);
     setIsGeneratedDocumentsViewOpen(false);
     setIsSavingFile(false);
@@ -1111,7 +1304,7 @@ export function App() {
     setGeneratedContent("");
     setCurrentWritingSection("");
     setCurrentGenerationJobId("");
-    setSelectedParagraph(null);
+    clearParagraphInteraction();
 
     if (!document.id) {
       setWorkspaceData((current) => ({ ...current, manuscript: [], attached_reference_list_from_content: [], concept_maps: [], attached_files: [] }));
@@ -1253,7 +1446,7 @@ export function App() {
       setGeneratedContent("");
       setCurrentWritingSection("");
       setCurrentGenerationJobId("");
-      setSelectedParagraph(null);
+      clearParagraphInteraction();
       setWorkspaceData((current) => {
         const generatedDocuments = current.generated_documents ?? [];
         return {
@@ -1311,7 +1504,7 @@ export function App() {
       setGeneratedContent("");
       setCurrentWritingSection("");
       setCurrentGenerationJobId("");
-      setSelectedParagraph(null);
+      clearParagraphInteraction();
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? current.manuscript,
@@ -1851,7 +2044,7 @@ export function App() {
       setGeneratedContent("");
       setCurrentWritingSection("");
       setCurrentGenerationJobId("");
-      setSelectedParagraph(null);
+      clearParagraphInteraction();
       setWorkspaceData((current) => ({
         ...current,
         manuscript: payload.manuscript ?? current.manuscript,
@@ -1921,7 +2114,7 @@ export function App() {
         setGeneratedContent("");
         setCurrentWritingSection("");
         setCurrentGenerationJobId("");
-        setSelectedParagraph(null);
+        clearParagraphInteraction();
       }
 
       setWorkspaceData((current) => ({
@@ -2020,7 +2213,7 @@ export function App() {
         setGeneratedContent("");
         setCurrentWritingSection("");
         setCurrentGenerationJobId("");
-        setSelectedParagraph(null);
+        clearParagraphInteraction();
         setIsConceptMapOpen(false);
       }
 
@@ -2086,7 +2279,7 @@ export function App() {
         onToggleCollapse={() => setIsSidebarCollapsed((current) => !current)}
         onStatusMessage={setGlobalStatus}
       />
-      <main className={`workspace ${selectedParagraph?.text ? "" : "workspace-compact-action-strip"} ${workspaceFlowStep === "ready" ? "" : "workspace-draft-flow"}`.trim()}>
+      <main className={`workspace ${selectedParagraph?.text || editingParagraph ? "" : "workspace-compact-action-strip"} ${workspaceFlowStep === "ready" ? "" : "workspace-draft-flow"}`.trim()}>
         <WorkspaceHeader fileName={fileName} setFileName={setFileName} onSave={saveGeneratedFile} onNewDocument={newDocument} isSaving={isSavingFile} settings={aiSettings} onOpenSettings={() => setIsSettingsPanelOpen(true)} />
         <section className={`workspace-file-status-section ${String(status ?? "").trim() ? "has-status" : ""}`} aria-label="Document status">
           <StatusBar message={status} variant="file" onDismiss={() => setStatus("")} />
@@ -2119,7 +2312,13 @@ export function App() {
               onLiteratureSearchChange={configureLiteratureSearch}
               attachedFiles={workspaceData.attached_files}
               onRemoveAttachedFile={removeAttachedFile}
-              hasSelectedParagraphText={Boolean(selectedParagraph?.text)}
+              hasSelectedParagraphText={Boolean(selectedParagraph?.text) || Boolean(editingParagraph)}
+              isEditingParagraph={Boolean(editingParagraph)}
+              isSavingParagraphEdit={isSavingParagraphEdit}
+              onSaveParagraphEdit={saveParagraphEdit}
+              onDiscardParagraphEdit={discardParagraphEdit}
+              actionInstruction={paragraphActionInstruction}
+              onActionInstructionChange={setParagraphActionInstruction}
             />
             <Manuscript
               manuscript={workspaceData.manuscript}
@@ -2128,9 +2327,13 @@ export function App() {
               isGenerating={isSavingOutline}
               currentWritingSection={currentWritingSection}
               selectedParagraphId={selectedParagraph?.id ?? ""}
+              editingParagraphId={editingParagraph?.id ?? ""}
+              editingParagraphText={editingParagraphText}
               syncVersion={manuscriptSyncVersion}
               updatingParagraphId={updatingParagraphId}
-              onParagraphSelectionChange={setSelectedParagraph}
+              onParagraphSelectionChange={handleParagraphSelectionChange}
+              onParagraphEditStart={startParagraphEdit}
+              onParagraphEditChange={setEditingParagraphText}
             />
           </>
         ) : (

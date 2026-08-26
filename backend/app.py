@@ -71,6 +71,11 @@ async def health() -> dict[str, Any]:
     return await app_utils._handle_health()
 
 
+@app.get("/api/app-config")
+async def app_config() -> dict[str, Any]:
+    return await app_utils._handle_app_config()
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # Outline templates
 # ---------------------------------------------------------------------------------------------------------------
@@ -282,6 +287,11 @@ async def generated_file_manuscript(
     session: str | None = Query(None),
 ) -> dict[str, Any]:
     return await app_utils._handle_generated_file_manuscript(generated_file_id, email, session)
+
+
+@app.get("/api/paragraph-actions/instructions")
+async def paragraph_action_instructions() -> dict[str, Any]:
+    return await app_utils._handle_paragraph_action_instructions()
 
 
 @app.patch("/api/generated-files/{generated_file_id}/paragraph")

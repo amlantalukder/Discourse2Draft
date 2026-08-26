@@ -1,13 +1,37 @@
 import { FileLines, Github, HelpCircle, KeyRound, LogIn, LogOut, Pencil, User } from "./FontAwesomeIcons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getJSON } from "../api/client";
 import { IconButton } from "./IconButton";
 
 const GITHUB_URL = "https://github.com/amlantalukder/Discourse2Draft";
 
 export function TopBar({ accountLabel = "Anonymous", isGuest = false, isMaintainer = false, canChangePassword = true, isLoginPage = false, onChangePassword, onHelp, onLogout, onShowLogs }) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const AccountActionIcon = isGuest ? LogIn : LogOut;
   const accountActionLabel = isGuest ? "Login" : "Logout";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAppConfig() {
+      try {
+        const payload = await getJSON("/api/app-config");
+        if (isMounted) {
+          setAppVersion(payload.app?.version ?? "");
+        }
+      } catch (error) {
+        if (isMounted) {
+          setAppVersion("");
+        }
+      }
+    }
+
+    loadAppConfig();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   function handleAccountAction() {
     setIsAccountMenuOpen(false);
@@ -25,7 +49,7 @@ export function TopBar({ accountLabel = "Anonymous", isGuest = false, isMaintain
         <Pencil size={22} />
         <span>Discourse2Draft</span>
         <Pencil size={22} />
-        <small>(Beta)</small>
+        {appVersion ? <small>({appVersion})</small> : null}
       </div>
       <nav className="top-icons" aria-label="Application controls">
         {!isLoginPage ? (
