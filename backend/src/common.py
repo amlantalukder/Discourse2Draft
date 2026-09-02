@@ -27,6 +27,8 @@ class ContentTypes(Enum):
     CONTENT_AI = 'content_ai'
     CONTENT_PRE_SUMMARY = 'content_pre_summary'
     CONCEPT_MAP = 'concept_map'
+    KEYPHRASES = 'keyphrases'
+    RETRIEVED_DOC_IDS = 'retrieved_doc_ids'
 
 # ---------------------------------------------------------------------------
 @print_func_name
@@ -84,6 +86,9 @@ def processCitation(content, attached_references_db, attached_reference_list_fro
         if enable_html_link_format:
             return f'<a href="#:~:text=References">{citation_text}</a>'
         return citation_text
+    
+    def reEscape(text):
+        return re.escape(text).replace('/', r'\/')
 
     content = formatCitations(content)
 
@@ -121,11 +126,11 @@ def processCitation(content, attached_references_db, attached_reference_list_fro
             new_citation = formatCitationText(', '.join(map(str, ref_links)))
         if new_citation == '':
             logging.warning(f'Invalid citation(s) or citation(s) not found in database: [CITE({refs})], removing ...')
-            content = re.sub(rf' *\[CITE\({re.escape(refs)}\)\]', '', content)
-            content_tex = re.sub(rf' *\[CITE\({re.escape(refs)}\)\]', '', content_tex)
+            content = re.sub(rf' *\[CITE\({reEscape(refs)}\)\]', '', content)
+            content_tex = re.sub(rf' *\[CITE\({reEscape(refs)}\)\]', '', content_tex)
         else:
-            content = re.sub(rf' *\[CITE\({re.escape(refs)}\)\]', f' [{new_citation}]', content)
-            if return_latex_style: content_tex = re.sub(rf' *\[CITE\({re.escape(refs)}\)\]', f' \\cite{{{refs}}}', content_tex)
+            content = re.sub(rf' *\[CITE\({reEscape(refs)}\)\]', f' [{new_citation}]', content)
+            if return_latex_style: content_tex = re.sub(rf' *\[CITE\({reEscape(refs)}\)\]', rf' \\cite{{{reEscape(refs)}}}', content_tex)
         
     if return_latex_style:
         return content, content_tex, attached_reference_list_from_content
@@ -172,13 +177,13 @@ def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_co
                                                                                                 content_md + [f'{'#' * level} {k}'], 
                                                                                                 content_docx, 
                                                                                                 content_tex + [latexLevels(level, k)], 
-                                                                                                attached_reference_list_from_content, used_files_info, level+1)
+                                                                                                attached_reference_list_from_content, level+1)
                 else:
                     content_md, content_docx, content_tex, attached_reference_list_from_content = extractContentFromOutline(d[k], 
                                                                                                 content_md, 
                                                                                                 content_docx, 
                                                                                                 content_tex, 
-                                                                                                attached_reference_list_from_content, used_files_info, level+1)
+                                                                                                attached_reference_list_from_content, level+1)
 
         return content_md, content_docx, content_tex, attached_reference_list_from_content
     
@@ -224,8 +229,9 @@ def getDocContent(file_id, vector_db_collections_id_uploaded_files, vector_db_co
     attached_references_db, file_info = getAttachedRefs(vector_db_collections_id_uploaded_files, vector_db_collections_id_literature)
 
     attached_references_db = {str(k): v for k, v, _ in attached_references_db}
-    content_md, content_docx, content_tex, attached_reference_list_from_content, used_files_info= extractContentFromOutline(d_outline)
-    used_files_info = {ref: file_info[ref] for ref in attached_reference_list_from_content}
+    content_md, content_docx, content_tex, attached_reference_list_from_content = extractContentFromOutline(d_outline)
+
+    used_files_info = {ref: file_info[ref] for ref in attached_references_db}
     
     if attached_references_db:
         content_md.append('## References')

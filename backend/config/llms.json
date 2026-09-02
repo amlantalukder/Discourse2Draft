@@ -1,15 +1,15 @@
 {
   "OpenAI": {
+    "azure-gpt-5.6-terra": "GPT-5.6 Terra",
     "azure-gpt-5": "GPT-5",
     "azure-o3": "o3",
     "azure-o1-mini": "o1-mini"
   },
   "Anthropic": {
-    "claude-3-7-sonnet": "Claude 3.7 sonnet",
-    "claude-3-5-sonnet": "Claude 3.5 sonnet"
+    "claude-sonnet-4.6": "Claude Sonnet 4.6"
   },
   "Google": {
-    "gemini-3-pro": "Gemini 3 Pro",
+    "gemini-3.1-pro": "Gemini 3.1 Pro",
     "gemini-3-flash": "Gemini 3 Flash"
   },
   "Meta": {

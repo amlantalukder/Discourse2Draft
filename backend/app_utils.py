@@ -11,7 +11,7 @@ import re
 import shutil
 import threading
 import zipfile
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 from typing import Literal
 from pydantic import BaseModel, Field
@@ -37,6 +37,7 @@ from src.auth import (
     verify_reset_code as auth_verify_reset_code,
 )
 from src.ai.common import PARAGRAPH_EXPAND_INSTRUCTIONS, PARAGRAPH_REPHRASE_INSTRUCTIONS
+from src.common import ContentTypes, SpecialSectionTypes
 from src.utils import Config
 
 
@@ -540,12 +541,16 @@ def _generated_file_by_id(
     generated_file_id: int,
     email: str | None = None,
     session: str | None = None,
+    require_owner: bool = True,
 ) -> dict[str, Any]:
     from src import db
 
-    _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
-    field_names = ["id", owner_field]
-    field_values = [[generated_file_id], [owner_value]]
+    field_names = ["id"]
+    field_values = [[generated_file_id]]
+    if require_owner:
+        _, _, owner_field, owner_value = _owner_identity(email=email, session=session)
+        field_names.append(owner_field)
+        field_values.append([owner_value])
 
     df = db.selectFromDB(
         table_name="generated_files",
@@ -1823,13 +1828,6 @@ def _raw_outline_from_outline_data(outline_data: dict[str, Any]) -> str:
 
 GENERATION_JOBS: dict[str, dict[str, Any]] = {}
 DOC_CONTENT_LOCK = threading.Lock()
-OUTLINE_CONTENT_KEY = "content"
-OUTLINE_IS_ABSTRACT = "is_abstract"
-OUTLINE_INSTRUCTIONS = "instructions"
-OUTLINE_CONTENT_USER = "content_user"
-OUTLINE_CONTENT_AI = "content_ai"
-OUTLINE_CONTENT_PRE_SUMMARY = "content_pre_summary"
-OUTLINE_CONCEPT_MAP = "concept_map"
 
 
 def _outline_file_path(generated_file_id: int) -> Path:
@@ -2011,7 +2009,7 @@ def _normalize_content_item(item: Any) -> tuple[str, Any] | None:
 
 
 def _content_items(node: dict[str, Any]) -> list[Any]:
-    content = node.get(OUTLINE_CONTENT_KEY)
+    content = node.get(SpecialSectionTypes.CONTENT.value)
     return content if isinstance(content, list) else []
 
 
@@ -2052,7 +2050,7 @@ def _concept_maps_from_outline_tree(node: Any, path: list[str] | None = None) ->
     path = path or []
     concept_maps: list[dict[str, Any]] = []
     items = _content_items(node)
-    concept_map = _normalize_concept_map(_content_value(items, OUTLINE_CONCEPT_MAP, {}))
+    concept_map = _normalize_concept_map(_content_value(items, ContentTypes.CONCEPT_MAP.value, {}))
     if concept_map:
         concept_maps.append(
             {
@@ -2063,7 +2061,7 @@ def _concept_maps_from_outline_tree(node: Any, path: list[str] | None = None) ->
         )
 
     for key, value in node.items():
-        if key == OUTLINE_CONTENT_KEY:
+        if key == SpecialSectionTypes.CONTENT.value:
             continue
         concept_maps.extend(_concept_maps_from_outline_tree(value, [*path, str(key)]))
 
@@ -2176,14 +2174,14 @@ def _outline_node_for_heading_and_paragraph(
             return
 
         for key, value in node.items():
-            if key == OUTLINE_CONTENT_KEY:
+            if key == SpecialSectionTypes.CONTENT.value:
                 continue
             if not isinstance(value, dict):
                 continue
 
             if str(key).strip() == heading:
                 items = _content_items(value)
-                raw_content = str(_content_value(items, OUTLINE_CONTENT_AI, "") or "")
+                raw_content = str(_content_value(items, ContentTypes.CONTENT_AI.value, "") or "")
                 if not raw_paragraph or raw_paragraph in raw_content or not raw_content:
                     matches.append(value)
             walk(value)
@@ -2206,9 +2204,9 @@ def _display_manuscript_from_outline_tree(
             continue
         items = _content_items(node)
         if not items:
-            node[OUTLINE_CONTENT_KEY] = []
-            items = node[OUTLINE_CONTENT_KEY]
-        _set_content_value(items, OUTLINE_CONTENT_AI, content)
+            node[SpecialSectionTypes.CONTENT.value] = []
+            items = node[SpecialSectionTypes.CONTENT.value]
+        _set_content_value(items, ContentTypes.CONTENT_AI.value, content)
 
     manuscript = _manuscript_from_outline_tree(display_outline)
     return _process_manuscript_citations(manuscript, attached_references_db)
@@ -2222,7 +2220,7 @@ def _has_content_value(items: list[Any], content_type: str) -> bool:
 
 
 def _section_has_generated_content(items: list[Any]) -> bool:
-    return _has_content_value(items, OUTLINE_CONTENT_AI)
+    return _has_content_value(items, ContentTypes.CONTENT_AI.value)
 
 
 def _merge_existing_generated_content(target_node: Any, source_node: Any) -> None:
@@ -2232,12 +2230,19 @@ def _merge_existing_generated_content(target_node: Any, source_node: Any) -> Non
     target_items = _content_items(target_node)
     source_items = _content_items(source_node)
     if target_items and source_items:
-        for content_type in (OUTLINE_IS_ABSTRACT, OUTLINE_CONTENT_AI, OUTLINE_CONTENT_PRE_SUMMARY, OUTLINE_CONCEPT_MAP):
+        for content_type in (
+            ContentTypes.IS_ABSTRACT.value,
+            ContentTypes.CONTENT_AI.value,
+            ContentTypes.CONTENT_PRE_SUMMARY.value,
+            ContentTypes.CONCEPT_MAP.value,
+            ContentTypes.KEYPHRASES.value,
+            ContentTypes.RETRIEVED_DOC_IDS.value,
+        ):
             if _has_content_value(source_items, content_type):
                 _set_content_value(target_items, content_type, _content_value(source_items, content_type))
 
     for key, target_value in target_node.items():
-        if key == OUTLINE_CONTENT_KEY:
+        if key == SpecialSectionTypes.CONTENT.value:
             continue
         _merge_existing_generated_content(target_value, source_node.get(key))
 
@@ -2250,10 +2255,22 @@ def _clear_generated_content_items(items: list[Any]) -> bool:
             continue
 
         content_type, value = normalized
-        if content_type not in {OUTLINE_CONTENT_AI, OUTLINE_CONTENT_PRE_SUMMARY, OUTLINE_CONCEPT_MAP}:
+        if content_type not in {
+            ContentTypes.CONTENT_AI.value,
+            ContentTypes.CONTENT_PRE_SUMMARY.value,
+            ContentTypes.CONCEPT_MAP.value,
+            ContentTypes.KEYPHRASES.value,
+            ContentTypes.RETRIEVED_DOC_IDS.value,
+        }:
             continue
 
-        empty_value: Any = {} if content_type == OUTLINE_CONCEPT_MAP else ""
+        empty_value: Any = (
+            {}
+            if content_type == ContentTypes.CONCEPT_MAP.value
+            else []
+            if content_type in {ContentTypes.KEYPHRASES.value, ContentTypes.RETRIEVED_DOC_IDS.value}
+            else ""
+        )
         if value == empty_value:
             continue
 
@@ -2277,7 +2294,7 @@ def _reset_outline_generated_content(node: Any) -> bool:
             changed = _clear_generated_content_items(items) or changed
 
         for key, value in node.items():
-            if key == OUTLINE_CONTENT_KEY:
+            if key == SpecialSectionTypes.CONTENT.value:
                 continue
             changed = _reset_outline_generated_content(value) or changed
     elif isinstance(node, list):
@@ -2300,26 +2317,15 @@ def _reset_generated_document_content(generated_file_id: int) -> tuple[list[dict
 
 
 def _section_needs_ai(items: list[Any]) -> bool:
-    return any((_normalize_content_item(item) or ("", ""))[0] == OUTLINE_CONTENT_AI for item in items)
+    return any((_normalize_content_item(item) or ("", ""))[0] == ContentTypes.CONTENT_AI.value for item in items)
 
 
 def _section_is_abstract(items: list[Any]) -> bool:
-    return _truthy_content_flag(_content_value(items, OUTLINE_IS_ABSTRACT, False))
-
-
-def _heading_looks_like_abstract(heading: str) -> bool:
-    normalized = re.sub(r"[^a-z]+", " ", heading.lower()).strip()
-    return normalized in {"abstract", "summary", "executive summary"} or normalized.startswith("abstract ")
-
-
-def _detector_response_is_abstract(response: Any) -> bool:
-    if isinstance(response, dict):
-        return _truthy_content_flag(response.get(OUTLINE_IS_ABSTRACT, False))
-    return _truthy_content_flag(getattr(response, OUTLINE_IS_ABSTRACT, False))
+    return _truthy_content_flag(_content_value(items, ContentTypes.IS_ABSTRACT.value, False))
 
 
 def _section_instructions(items: list[Any]) -> str:
-    return str(_content_value(items, OUTLINE_INSTRUCTIONS, "") or "").strip()
+    return str(_content_value(items, ContentTypes.INSTRUCTIONS.value, "") or "").strip()
 
 
 def _section_prompt(path: list[str], items: list[Any]) -> str:
@@ -2332,9 +2338,9 @@ def _section_prompt(path: list[str], items: list[Any]) -> str:
         if not normalized:
             continue
         content_type, text = normalized
-        if content_type == OUTLINE_CONTENT_USER and text:
+        if content_type == ContentTypes.CONTENT_USER.value and text:
             lines.append(str(text).strip())
-        elif content_type == OUTLINE_CONTENT_AI:
+        elif content_type == ContentTypes.CONTENT_AI.value:
             lines.append("[--content--]")
 
     return "\n\n".join(line for line in lines if line)
@@ -2364,7 +2370,7 @@ def _generation_sections_in_outline_order(outline_data: dict[str, Any]) -> list[
             sections.append(_generation_section_record(path, node, items))
 
         for key, value in node.items():
-            if key == OUTLINE_CONTENT_KEY:
+            if key == SpecialSectionTypes.CONTENT.value:
                 continue
             walk(value, [*path, str(key)])
 
@@ -2388,11 +2394,11 @@ def _last_completed_regular_section_summary(outline_data: dict[str, Any]) -> str
     if not last_section:
         return ""
 
-    summary = _content_summary_text(_content_value(last_section["items"], OUTLINE_CONTENT_PRE_SUMMARY, ""))
+    summary = _content_summary_text(_content_value(last_section["items"], ContentTypes.CONTENT_PRE_SUMMARY.value, ""))
     if summary:
         return summary
 
-    return _content_summary_text(_content_value(last_section["items"], OUTLINE_CONTENT_AI, ""))
+    return _content_summary_text(_content_value(last_section["items"], ContentTypes.CONTENT_AI.value, ""))
 
 
 def _summary_before_section(outline_data: dict[str, Any], target_path: list[str]) -> str:
@@ -2403,8 +2409,8 @@ def _summary_before_section(outline_data: dict[str, Any], target_path: list[str]
             return previous_summary
         if section["is_abstract"] or not _section_has_generated_content(section["items"]):
             continue
-        summary = _content_summary_text(_content_value(section["items"], OUTLINE_CONTENT_PRE_SUMMARY, ""))
-        previous_summary = summary or _content_summary_text(_content_value(section["items"], OUTLINE_CONTENT_AI, ""))
+        summary = _content_summary_text(_content_value(section["items"], ContentTypes.CONTENT_PRE_SUMMARY.value, ""))
+        previous_summary = summary or _content_summary_text(_content_value(section["items"], ContentTypes.CONTENT_AI.value, ""))
     return previous_summary
 
 
@@ -2515,49 +2521,6 @@ def _extract_generation_sections(outline_data: dict[str, Any], remaining_only: b
     return regular_sections + abstract_sections
 
 
-def _mark_first_abstract_section(outline_data: dict[str, Any], agent_abstract_detector: Any) -> tuple[dict[str, Any], str]:
-    if not outline_data:
-        return outline_data, ""
-
-    title_node = next(iter(outline_data.values()), None)
-    if not isinstance(title_node, dict):
-        return outline_data, ""
-
-    first_section_heading = ""
-    first_section_node: dict[str, Any] | None = None
-    for heading, node in title_node.items():
-        if heading == OUTLINE_CONTENT_KEY:
-            continue
-        if isinstance(node, dict):
-            first_section_heading = str(heading)
-            first_section_node = node
-            break
-
-    if not first_section_heading or first_section_node is None:
-        return outline_data, ""
-
-    items = _content_items(first_section_node)
-    if items and _section_is_abstract(items):
-        return outline_data, first_section_heading
-
-    is_abstract = _heading_looks_like_abstract(first_section_heading)
-    if not is_abstract and _section_needs_ai(items):
-        response = agent_abstract_detector.invoke({"current_section": first_section_heading})
-        is_abstract = _detector_response_is_abstract(response)
-
-    if not is_abstract:
-        return outline_data, ""
-
-    if not isinstance(first_section_node.get(OUTLINE_CONTENT_KEY), list):
-        first_section_node[OUTLINE_CONTENT_KEY] = []
-    items = first_section_node[OUTLINE_CONTENT_KEY]
-    if not _section_needs_ai(items):
-        _set_content_value(items, OUTLINE_CONTENT_AI, "")
-    if not _section_is_abstract(items):
-        items.insert(0, [OUTLINE_IS_ABSTRACT, True])
-    return outline_data, first_section_heading
-
-
 def _safe_architecture_classes() -> tuple[Any, Any, Any]:
     _required_default_model()
     original_apply = None
@@ -2584,20 +2547,34 @@ def _safe_architecture_classes() -> tuple[Any, Any, Any]:
             nest_asyncio_module.apply = original_apply
 
 
-async def _run_generation_job(
-    job_id: str,
+async def _write_manuscript_content_from_outline(
     generated_file_id: int,
-    request: GeneratedFileGenerateRequest,
     generated_file: dict[str, Any],
-) -> None:
-    job = GENERATION_JOBS[job_id]
-    outline_data: dict[str, Any] | None = None
-    attached_references_db = request.attached_references_db.copy()
-    display_content_overrides: dict[tuple[str, ...], Any] = {}
+    *,
+    model_name: str | None = None,
+    temperature: float = 0,
+    instructions: str = "",
+    mode: Literal["remaining", "restart"] = "remaining",
+    architecture_type: str | None = None,
+    collection_name: str = "",
+    collection_name_lit_search: str = "",
+    attached_references_db: dict[str, str] | None = None,
+    on_progress: Callable[..., None] | None = None,
+    should_pause: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    from src import db
+    from src.generate import findAbstractSection, generateContent
 
-    def update_job(**updates: Any) -> None:
-        job.update(updates)
-        job["updated_at"] = datetime.now().isoformat()
+    attached_references_db_current = (attached_references_db or {}).copy()
+    display_content_overrides: dict[tuple[str, ...], Any] = {}
+    section_attached_references_content: list[str] = []
+
+    def emit(**updates: Any) -> None:
+        if on_progress:
+            on_progress(**updates)
+
+    def pause_requested() -> bool:
+        return bool(should_pause and should_pause())
 
     def manuscript_snapshot(
         outline_data_current: dict[str, Any],
@@ -2605,164 +2582,214 @@ async def _run_generation_job(
     ) -> tuple[list[dict[str, Any]], list[str]]:
         manuscript, processed_attached_references_content = _display_manuscript_from_outline_tree(
             outline_data_current,
-            attached_references_db,
+            attached_references_db_current,
             display_content_overrides,
         )
-        return manuscript, _normalize_attached_references_content(attached_references_content_override) or processed_attached_references_content
-
-    try:
-        from src import db
-        from src.generate import generateContent
-
-        def pause_if_requested(outline_data_current: dict[str, Any], completed_sections: int) -> bool:
-            if not job.get("pause_requested"):
-                return False
-            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data_current, job.get("attached_reference_list_from_content", []))
-            _set_generated_file_status(generated_file_id, db.generated_files_status.CANCELLED.value)
-            update_job(
-                status="paused",
-                message="Generation paused. Click Generate to continue with the remaining outline.",
-                current_section="",
-                completed_sections=completed_sections,
-                worker_active=False,
-                generated_file={**generated_file, "status": db.generated_files_status.CANCELLED.value},
-                manuscript=manuscript,
-                attached_reference_list_from_content=attached_reference_list_from_content,
-            )
-            return True
-
-        update_job(status="running", message="Reading the saved outline...")
-        _set_generated_file_status(generated_file_id, db.generated_files_status.RUNNING.value)
-        outline_data = _read_outline_file(generated_file_id)
-        if pause_if_requested(outline_data, 0):
-            return
-
-        update_job(message="Checking for an abstract section...")
-        AbstractSectionDetectorArchitecture, AbstractWriterArchitecture, ContentWriterArchitecture = _safe_architecture_classes()
-        detector = AbstractSectionDetectorArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
+        return (
+            manuscript,
+            _normalize_attached_references_content(attached_references_content_override)
+            or processed_attached_references_content,
         )
-        outline_data, _ = await asyncio.to_thread(_mark_first_abstract_section, outline_data, detector)
-        _write_outline_file(generated_file_id, outline_data)
 
-        sections = _extract_generation_sections(outline_data, remaining_only=request.mode == "remaining")
-        manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data)
-        update_job(
-            total_sections=len(sections),
-            manuscript=manuscript,
-            attached_reference_list_from_content=attached_reference_list_from_content,
+    def paused_result(outline_data_current: dict[str, Any], completed_sections: int) -> dict[str, Any]:
+        manuscript, attached_reference_list_from_content = manuscript_snapshot(
+            outline_data_current,
+            section_attached_references_content,
         )
-        if not sections:
-            _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
-            update_job(
-                status="completed",
-                message="The structured outline was saved. No AI content sections were marked for generation.",
-                current_section="",
-                worker_active=False,
-                generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
-                manuscript=manuscript,
-                attached_reference_list_from_content=attached_reference_list_from_content,
-            )
-            return
-
-        architecture_type = generated_file.get("ai_architecture") or request.architecture_type or "base"
-        architecture_type, collection_name, collection_name_lit_search = _resolve_generation_architecture(
-            generated_file_id=generated_file_id,
-            architecture_type=architecture_type,
-            collection_name=request.collection_name,
-            collection_name_lit_search=request.collection_name_lit_search,
-        )
-        generated_file = {
-            **generated_file,
-            "ai_architecture": architecture_type,
+        _set_generated_file_status(generated_file_id, db.generated_files_status.CANCELLED.value)
+        return {
+            "status": "paused",
+            "message": "Generation paused. Click Generate to continue with the remaining outline.",
+            "current_section": "",
+            "completed_sections": completed_sections,
+            "generated_file": _generated_file_record(
+                {**generated_file, "status": db.generated_files_status.CANCELLED.value}
+            ),
+            "manuscript": manuscript,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
         }
 
-        writer = ContentWriterArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-            type=architecture_type,
-            collection_name=collection_name,
-            collection_name_lit_search=collection_name_lit_search,
-        )
-        abstract_writer = AbstractWriterArchitecture(
-            model_name=_model_name(request.model_name),
-            temperature=request.temperature,
-            instructions=request.instructions,
-        )
+    emit(
+        status="running",
+        message="Reading the saved outline...",
+        generated_file=_generated_file_record({**generated_file, "status": db.generated_files_status.RUNNING.value}),
+    )
+    _set_generated_file_status(generated_file_id, db.generated_files_status.RUNNING.value)
+    outline_data = _read_outline_file(generated_file_id)
+    if pause_requested():
+        return paused_result(outline_data, 0)
 
-        content_pre_summary = _initial_content_pre_summary(outline_data, sections, request.mode)
-        attached_references_db = _attached_reference_map_for_generated_file(generated_file_id)
-        section_attached_references_content = []
-        for index, section in enumerate(sections, start=1):
-            if pause_if_requested(outline_data, index - 1):
-                return
+    emit(message="Checking for an abstract section...")
+    AbstractSectionDetectorArchitecture, AbstractWriterArchitecture, ContentWriterArchitecture = _safe_architecture_classes()
+    detector = AbstractSectionDetectorArchitecture(
+        model_name=_model_name(model_name),
+        temperature=temperature,
+        instructions=instructions,
+    )
+    outline_data, _ = await asyncio.to_thread(findAbstractSection, detector, outline_data)
+    _write_outline_file(generated_file_id, outline_data)
 
-            section_label = section["heading"]
-            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
-            update_job(
-                message=f"Writing section {index} of {len(sections)}: {section_label}",
-                current_section=section_label,
-                completed_sections=index - 1,
-                manuscript=manuscript,
-                attached_reference_list_from_content=attached_reference_list_from_content,
-            )
-            agent = abstract_writer if section["is_abstract"] else writer
-            section_content_pre_summary = content_pre_summary
-            (
-                raw_content,
-                content_pre_summary,
-                concept_map,
-                section_attached_references_content,
-                display_content,
-            ) = await generateContent(
-                agent,
-                content_pre_summary,
-                section["current_section"],
-                section["instructions"],
-                section_attached_references_content,
-                attached_references_db,
-            )
-            raw_content = str(raw_content or "")
-            content_pre_summary = str(content_pre_summary or "")
-            display_content = display_content or raw_content
-            display_content_overrides[tuple(section["path"])] = display_content
-            _set_content_value(section["items"], OUTLINE_CONTENT_AI, raw_content)
-            _set_content_value(
-                section["items"],
-                OUTLINE_CONTENT_PRE_SUMMARY,
-                section_content_pre_summary if section["is_abstract"] else content_pre_summary,
-            )
-            if concept_map:
-                _set_content_value(section["items"], OUTLINE_CONCEPT_MAP, concept_map)
-            _write_outline_file(generated_file_id, outline_data)
-            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
-            update_job(
-                completed_sections=index,
-                manuscript=manuscript,
-                attached_reference_list_from_content=attached_reference_list_from_content,
-            )
-            if pause_if_requested(outline_data, index):
-                return
-
+    sections = _extract_generation_sections(outline_data, remaining_only=mode == "remaining")
+    manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data)
+    emit(
+        total_sections=len(sections),
+        manuscript=manuscript,
+        attached_reference_list_from_content=attached_reference_list_from_content,
+    )
+    if not sections:
         _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
-        manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, section_attached_references_content)
-        update_job(
-            status="completed",
-            message="Content generation completed.",
-            current_section="",
-            worker_active=False,
-            generated_file={**generated_file, "status": db.generated_files_status.SUCCESS.value},
+        return {
+            "status": "completed",
+            "message": "The structured outline was saved. No AI content sections were marked for generation.",
+            "current_section": "",
+            "completed_sections": 0,
+            "total_sections": 0,
+            "generated_file": _generated_file_record(
+                {**generated_file, "status": db.generated_files_status.SUCCESS.value}
+            ),
+            "manuscript": manuscript,
+            "attached_reference_list_from_content": attached_reference_list_from_content,
+        }
+
+    architecture_type = generated_file.get("ai_architecture") or architecture_type or db.generated_files_ai_architecture.BASE.value
+    architecture_type, collection_name, collection_name_lit_search = _resolve_generation_architecture(
+        generated_file_id=generated_file_id,
+        architecture_type=architecture_type,
+        collection_name=collection_name,
+        collection_name_lit_search=collection_name_lit_search,
+    )
+    generated_file = {
+        **generated_file,
+        "ai_architecture": architecture_type,
+    }
+
+    writer = ContentWriterArchitecture(
+        model_name=_model_name(model_name),
+        temperature=temperature,
+        instructions=instructions,
+        type=architecture_type,
+        collection_name=collection_name,
+        collection_name_lit_search=collection_name_lit_search,
+    )
+    abstract_writer = AbstractWriterArchitecture(
+        model_name=_model_name(model_name),
+        temperature=temperature,
+        instructions=instructions,
+    )
+
+    content_pre_summary = _initial_content_pre_summary(outline_data, sections, mode)
+    attached_references_db_current = _attached_reference_map_for_generated_file(generated_file_id)
+    for index, section in enumerate(sections, start=1):
+        if pause_requested():
+            return paused_result(outline_data, index - 1)
+
+        section_label = section["heading"]
+        manuscript, attached_reference_list_from_content = manuscript_snapshot(
+            outline_data,
+            section_attached_references_content,
+        )
+        emit(
+            message=f"Writing section {index} of {len(sections)}: {section_label}",
+            current_section=section_label,
+            completed_sections=index - 1,
             manuscript=manuscript,
             attached_reference_list_from_content=attached_reference_list_from_content,
         )
+
+        agent = abstract_writer if section["is_abstract"] else writer
+        section_content_pre_summary = content_pre_summary
+        (
+            raw_content,
+            content_pre_summary,
+            concept_map,
+            section_attached_references_content,
+            display_content,
+            keyphrases,
+            retrieved_doc_ids,
+        ) = await generateContent(
+            agent,
+            content_pre_summary,
+            section["current_section"],
+            section["instructions"],
+            section_attached_references_content,
+            attached_references_db_current,
+        )
+        raw_content = str(raw_content or "")
+        content_pre_summary = str(content_pre_summary or "")
+        display_content = display_content or raw_content
+        display_content_overrides[tuple(section["path"])] = display_content
+        _set_content_value(section["items"], ContentTypes.CONTENT_AI.value, raw_content)
+        _set_content_value(section["items"], ContentTypes.KEYPHRASES.value, _jsonable(keyphrases or []))
+        _set_content_value(section["items"], ContentTypes.RETRIEVED_DOC_IDS.value, _jsonable(retrieved_doc_ids or []))
+        _set_content_value(
+            section["items"],
+            ContentTypes.CONTENT_PRE_SUMMARY.value,
+            section_content_pre_summary if section["is_abstract"] else content_pre_summary,
+        )
+        if concept_map:
+            _set_content_value(section["items"], ContentTypes.CONCEPT_MAP.value, _jsonable(concept_map))
+        _write_outline_file(generated_file_id, outline_data)
+
+        manuscript, attached_reference_list_from_content = manuscript_snapshot(
+            outline_data,
+            section_attached_references_content,
+        )
+        emit(
+            completed_sections=index,
+            manuscript=manuscript,
+            attached_reference_list_from_content=attached_reference_list_from_content,
+        )
+        if pause_requested():
+            return paused_result(outline_data, index)
+
+    _set_generated_file_status(generated_file_id, db.generated_files_status.SUCCESS.value)
+    manuscript, attached_reference_list_from_content = manuscript_snapshot(
+        outline_data,
+        section_attached_references_content,
+    )
+    return {
+        "status": "completed",
+        "message": "Content generation completed.",
+        "current_section": "",
+        "completed_sections": len(sections),
+        "total_sections": len(sections),
+        "generated_file": _generated_file_record({**generated_file, "status": db.generated_files_status.SUCCESS.value}),
+        "manuscript": manuscript,
+        "attached_reference_list_from_content": attached_reference_list_from_content,
+    }
+
+
+async def _run_generation_job(
+    job_id: str,
+    generated_file_id: int,
+    request: GeneratedFileGenerateRequest,
+    generated_file: dict[str, Any],
+) -> None:
+    job = GENERATION_JOBS[job_id]
+
+    def update_job(**updates: Any) -> None:
+        job.update(updates)
+        job["updated_at"] = datetime.now().isoformat()
+
+    try:
+        result = await _write_manuscript_content_from_outline(
+            generated_file_id,
+            generated_file,
+            model_name=request.model_name,
+            temperature=request.temperature,
+            instructions=request.instructions,
+            mode=request.mode,
+            architecture_type=request.architecture_type,
+            collection_name=request.collection_name,
+            collection_name_lit_search=request.collection_name_lit_search,
+            attached_references_db=request.attached_references_db,
+            on_progress=update_job,
+            should_pause=lambda: bool(job.get("pause_requested")),
+        )
+        update_job(**result, worker_active=False)
     except asyncio.CancelledError:
-        if outline_data:
-            manuscript, attached_reference_list_from_content = manuscript_snapshot(outline_data, job.get("attached_reference_list_from_content", []))
-        else:
-            manuscript, attached_reference_list_from_content = job.get("manuscript", []), job.get("attached_reference_list_from_content", [])
+        manuscript = job.get("manuscript", [])
+        attached_reference_list_from_content = job.get("attached_reference_list_from_content", [])
         _set_generated_file_status(generated_file_id, "cancelled")
         update_job(
             status="paused",
@@ -3453,7 +3480,7 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
         if not items or not _section_needs_ai(items):
             raise HTTPException(status_code=400, detail="Only generated manuscript paragraphs can be updated.")
 
-        current_raw_content = str(_content_value(items, OUTLINE_CONTENT_AI, "") or "")
+        current_raw_content = str(_content_value(items, ContentTypes.CONTENT_AI.value, "") or "")
         if not current_raw_content.strip():
             raise HTTPException(status_code=400, detail="This section does not have generated content to update yet.")
 
@@ -3502,7 +3529,7 @@ async def _handle_update_generated_file_paragraph(generated_file_id, request):
             replacement,
             request.action,
         )
-        _set_content_value(items, OUTLINE_CONTENT_AI, updated_raw_content)
+        _set_content_value(items, ContentTypes.CONTENT_AI.value, updated_raw_content)
         _write_outline_file(generated_file_id, outline_data)
         db.updateDB(
             table_name="generated_files",
@@ -3552,8 +3579,8 @@ async def _handle_update_generated_file_section_content(generated_file_id, reque
 
         items = _content_items(node)
         if not items:
-            node[OUTLINE_CONTENT_KEY] = []
-            items = node[OUTLINE_CONTENT_KEY]
+            node[SpecialSectionTypes.CONTENT.value] = []
+            items = node[SpecialSectionTypes.CONTENT.value]
 
         attached_references_db = _attached_reference_map_for_generated_file(generated_file_id)
         attached_reference_list_from_content = _normalize_attached_references_content(
@@ -3578,9 +3605,9 @@ async def _handle_update_generated_file_section_content(generated_file_id, reque
                 detail="The edited section contains a citation that could not be matched to the current references. Check the citation numbers and try again.",
             ) from exp
 
-        content_type = OUTLINE_CONTENT_AI
-        if not _has_content_value(items, OUTLINE_CONTENT_AI) and _has_content_value(items, OUTLINE_CONTENT_USER):
-            content_type = OUTLINE_CONTENT_USER
+        content_type = ContentTypes.CONTENT_AI.value
+        if not _has_content_value(items, ContentTypes.CONTENT_AI.value) and _has_content_value(items, ContentTypes.CONTENT_USER.value):
+            content_type = ContentTypes.CONTENT_USER.value
         _set_content_value(items, content_type, raw_section_content)
         _write_outline_file(generated_file_id, outline_data)
 

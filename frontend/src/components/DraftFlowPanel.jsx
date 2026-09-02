@@ -76,14 +76,15 @@ export function DraftFlowPanel({
     return (
       <section className="draft-flow-panel draft-flow-panel-topic">
         <div className="draft-flow-main">
+          <div className="draft-flow-panel-heading-row">
+            <span className="draft-flow-panel-heading">What do you want me to write about?</span>
+            <button className="primary-action-button" type="button" onClick={onNextFromQuery} disabled={!hasQueryText || isLocked}>
+              Next
+            </button>
+          </div>
           <textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder="What do you want me to write about?" spellCheck="false" disabled={isLocked} />
           <div className="draft-flow-footer">
             <FileUploadControl label="Upload reference documents (Optional)" accept=".txt,.md,.markdown,.csv,.tsv,.pdf,.docx" files={referenceDocument} onFilesChange={setReferenceDocument} disabled={isLocked} showRemoveControls />
-            <div>
-              <button className="primary-action-button" type="button" onClick={onNextFromQuery} disabled={!hasQueryText || isLocked}>
-                Next
-              </button>
-            </div>
           </div>
         </div>
       </section>
@@ -93,7 +94,26 @@ export function DraftFlowPanel({
   return (
     <section className="draft-flow-panel draft-flow-panel-outline">
       <div className={`draft-flow-outline-layout ${isGeneratedOutlineEditorOpen ? "draft-flow-outline-layout-editor-open" : ""}`}>
+        <div className="draft-flow-page-actions">
+          <div>
+            <button className="primary-action-button" type="button" onClick={onBack} disabled={isLocked || isCreatingOutline || isImportingOutline}>
+              <ChevronLeft size={15} />
+              <span>Back</span>
+            </button>
+          </div>
+          <div>
+            <button className="primary-action-button" type="button" onClick={onComplete} disabled={!hasOutlineText || isLocked || isCreatingOutline || isImportingOutline}>
+              Next
+            </button>
+          </div>
+        </div>
         <div className="draft-flow-main">
+          {hasQueryText ? (
+            <div className="draft-flow-topic-summary">
+              <span>Topic</span>
+              <p>{query.trim()}</p>
+            </div>
+          ) : null}
           {hasOutlineText ? (
             <div className="draft-flow-outline-toolbar">
               <div>
@@ -112,10 +132,6 @@ export function DraftFlowPanel({
             <textarea value={outline} onChange={(event) => setOutline(event.target.value)} rows={20} placeholder="Do you have a preferred outline in mind?" spellCheck="false" disabled={isLocked || isCreatingOutline || isImportingOutline} aria-label="Preferred structured outline" />
           </div>
           <div className="draft-flow-actions">
-            <button type="button" onClick={onBack} disabled={isLocked || isCreatingOutline || isImportingOutline}>
-              <ChevronLeft size={15} />
-              <span>Back</span>
-            </button>
             <button type="button" onClick={() => outlineUploadInputRef.current?.click()} disabled={isLocked || isCreatingOutline || isImportingOutline}>
               {isImportingOutline ? <RefreshCw size={15} /> : <Upload size={15} />}
               <span>{isImportingOutline ? "Uploading outline" : "Upload an outline"}</span>
@@ -128,9 +144,6 @@ export function DraftFlowPanel({
             <button type="button" onClick={requestGeneratedOutline} disabled={!hasQueryText || isLocked || isCreatingOutline || isImportingOutline}>
               {isCreatingOutline ? <RefreshCw size={15} /> : <Play size={15} fill="currentColor" />}
               <span>{isCreatingOutline ? "Generating outline" : "Generate an outline for me"}</span>
-            </button>
-            <button className="primary-action-button" type="button" onClick={onComplete} disabled={!hasOutlineText || isLocked || isCreatingOutline || isImportingOutline}>
-              Next
             </button>
           </div>
           {showTemplateControls ? (

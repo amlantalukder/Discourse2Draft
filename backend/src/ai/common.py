@@ -21,6 +21,7 @@ class StateContentManager(TypedDict):
     current_section: str
     content_specific_instructions: str
     keyphrases: List[str]
+    retrieved_doc_ids: Annotated[list, add]
     rag_context: Annotated[str, lambda x, y: x + '\n\n' + y]
     graphrag_context: Dict[str, NetworkxEntityGraph]
     literature_list: List[Dict[str, str]]

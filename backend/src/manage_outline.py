@@ -22,7 +22,11 @@ def resetOutline(d):
             d[k] = resetOutline(v.copy())
         else:
             for i, [content_type, _] in enumerate(d[SpecialSectionTypes.CONTENT.value]):
-                if content_type in [ContentTypes.CONTENT_AI.value, ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.CONCEPT_MAP.value]:
+                if content_type in [ContentTypes.CONTENT_AI.value, 
+                                    ContentTypes.CONTENT_PRE_SUMMARY.value, 
+                                    ContentTypes.CONCEPT_MAP.value,
+                                    ContentTypes.KEYPHRASES.value,
+                                    ContentTypes.RETRIEVED_DOC_IDS.value]:
                     d[SpecialSectionTypes.CONTENT.value][i][1] = ''
 
     return d
@@ -105,7 +109,11 @@ def getRawOutline(d, raw_outline=[], counter=1):
 
     if not isinstance(d, dict):
         for k, v in d:
-            if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, ContentTypes.IS_ABSTRACT.value, ContentTypes.CONCEPT_MAP.value]: continue
+            if k in [ContentTypes.CONTENT_PRE_SUMMARY.value, 
+                     ContentTypes.IS_ABSTRACT.value, 
+                     ContentTypes.CONCEPT_MAP.value,
+                     ContentTypes.KEYPHRASES.value,
+                     ContentTypes.RETRIEVED_DOC_IDS.value]: continue
             if k == ContentTypes.CONTENT_AI.value:
                 raw_outline.append(OutlineTAGs.CONTENT.value)
             elif k == ContentTypes.INSTRUCTIONS.value:

@@ -57,14 +57,20 @@ class GatherContext:
             return docs_str
         
         self.docs_res = {}
+        unique_retrieved_doc_ids = set()
         for kw in keyphrases[:Config.MAX_KEYPHRASES]:
             try:
                 docs = self.db.invoke(kw)
-                if len(docs): self.docs_res[kw] = docs
+                if len(docs):
+                    self.docs_res[kw] = []
+                    for d in docs:
+                        if d.id in unique_retrieved_doc_ids: continue
+                        self.docs_res[kw].append(d)
+                        unique_retrieved_doc_ids.add(d.id)
             except Warning as w:
                 logging.info(f'Resource retriever for keyphrase: {kw}: {str(w)}')
 
-        return formatContext(self.docs_res)
+        return formatContext(self.docs_res), list(unique_retrieved_doc_ids)
     
     def __init__(self, collection_name):
 
@@ -76,6 +82,6 @@ class GatherContext:
         Gather context using keyphrases extracted from user query
         '''
 
-        response = self.gatherContext(state.get('keyphrases'))
+        response, retrieved_doc_ids = self.gatherContext(state.get('keyphrases'))
         
-        return {'rag_context': response, 'steps': ['gather_context']}
+        return {'rag_context': response, 'retrieved_doc_ids': retrieved_doc_ids, 'steps': ['gather_context']}

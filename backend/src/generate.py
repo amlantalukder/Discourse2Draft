@@ -1,4 +1,5 @@
 import logging
+import re
 
 from .utils import print_func_name
 from .manage_outline import SpecialSectionTypes, ContentTypes
@@ -17,9 +18,16 @@ def findAbstractSection(agent_abstract_detector: AbstractSectionDetectorArchitec
     '''
 
     @print_func_name
+    def isAbstractLikeHeader(section_header: str) -> bool:
+        normalized = re.sub(r"[^a-z]+", " ", section_header.lower()).strip()
+        return normalized in {"abstract", "summary", "executive summary"} or normalized.startswith("abstract ")
+
+    @print_func_name
     def isThisAbstract(section_header):
+        if isAbstractLikeHeader(section_header):
+            return True
         response = agent_abstract_detector.invoke({'current_section': section_header})
-        return d_outline, response[ContentTypes.IS_ABSTRACT.value]
+        return response[ContentTypes.IS_ABSTRACT.value]
     
     if not d_outline: return d_outline, ''
 
@@ -55,6 +63,8 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
         instructions: Any specific instructions to be followed for content generation.
         attached_reference_list_from_content: A list of references that have been attached to the outline so far. This list may be updated if the generated content contains citations that are not in the attached_references_db.
         attached_references_db: A dictionary mapping reference IDs to their formatted reference strings collected from the database that have been attached to the generated file, but may not have been included in attached_reference_list_from_content yet.
+        keyphrases: Keyphrases searched before RAG document retrieval.
+        retrieved_doc_ids: Retrieved document ids.
     '''
 
     @print_func_name
@@ -78,7 +88,7 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
                                     'current_section': current_section,
                                     'content_specific_instructions': instructions})
     
-    content, content_summary, concept_map = response['content'], response.get('content_summary'), response.get('concept_map', {})
+    content, content_summary, concept_map, keyphrases, retrieved_doc_ids = response['content'], response.get('content_summary'), response.get('concept_map', {}), response.get('keyphrases', []), list(set(response.get('retrieved_doc_ids', [])))
         
     attached_references_db_ai = response.get('references', {})
     attached_references_db = getSanitizedReferences(attached_references_db_ai, attached_references_db)
@@ -88,7 +98,7 @@ async def generateContent(agent: ContentWriterArchitecture | AbstractWriterArchi
     else:
         content_for_frontend = content
 
-    return content, content_summary, concept_map, attached_reference_list_from_content, sanitizeContent(content_for_frontend)
+    return content, content_summary, concept_map, attached_reference_list_from_content, sanitizeContent(content_for_frontend), keyphrases, retrieved_doc_ids
 
 # ---------------------------------------------------------------------------
 @print_func_name

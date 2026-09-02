@@ -29,12 +29,16 @@ class Config:
     DIR_DATA = DIR_HOME / 'data'
     APP_NAME = 'Discourse2Draft'
     APP_NAME_AS_PREFIX = 'discourse2draft'
-    DB_NAME = f'{APP_NAME_AS_PREFIX}-db'
 
     # ----------------------------------------------------------
     # Environment variables
     # ----------------------------------------------------------
     env_config = dotenv.dotenv_values(Path(".env"))
+
+    # ----------------------------------------------------------
+    # Load Database name
+    # ----------------------------------------------------------
+    DB_NAME = env_config.get("DB_NAME", f'{APP_NAME_AS_PREFIX}-db')
 
     # ----------------------------------------------------------
     # LLM and content generation settings
