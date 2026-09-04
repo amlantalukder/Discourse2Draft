@@ -34,16 +34,6 @@ class RateSectionContentSchema(BaseModel):
     #relevance of citation (hallucination), accuracy of the content+citation (hallucination), specificity of the content
 
 # ---------------------------------------------------------------------------
-class RateKeyphrasesSchema(BaseModel):
-    '''
-    Returns scores based on different criteria to rate the content of a structured document
-    '''
-
-    relevance: ScoreWithReasonSchema = Field(description='A score with supporting statement that evaluates if the provided content is relevant to explain the provided reference')
-    completely: ScoreWithReasonSchema = Field(description='A score with supporting statement that evaluates if the provided content is enough to explain the provided reference')
-    specificity: ScoreWithReasonSchema = Field(description='A score with supporting statement that evaluates if the provided content can precisely explain the provided reference')
-
-# ---------------------------------------------------------------------------
 class StateRateContent(TypedDict):
 
     reference_text: str
@@ -103,17 +93,17 @@ class RateContent:
         return {'rating_info': content, 'steps': ['Rate Content']}
 
 # -----------------------------------------------------------------------
-def check_if_summary_needed(
-        state: StateRateContent,
+class RateContentArchitecture:
+
+    def check_if_summary_needed(
+            self,
+            state: StateRateContent
     ) -> Literal['Summarize', 'Rate Content']:
         if len(state.get('reference_text').split()) > 500:
             return 'Summarize'
         return 'Rate Content'
-
-# -----------------------------------------------------------------------
-class RateContentArchitecture:
      
-     def __init__(self, model_name, temperature):
+    def __init__(self, model_name, temperature):
         llm = getAIModel(model_name=model_name, temperature=temperature)
 
         # Define a new graph
@@ -123,20 +113,20 @@ class RateContentArchitecture:
         workflow.add_node("Summarize", Summarize(llm=llm, input_field='reference_text'))
         workflow.add_node("Rate Content", RateContent(llm=llm, rating_schema=RateSectionContentSchema))
 
-        workflow.add_conditional_edges(START, check_if_summary_needed)
+        workflow.add_conditional_edges(START, self.check_if_summary_needed)
         workflow.add_edge("Summarize", "Rate Content")
 
         self.agent = workflow.compile()
 
 # -----------------------------------------------------------------------
-def evalContent(eval_model_name: str, section_contents: dict) -> None:
+def evalContent(eval_model_name: str, section_contents: dict) -> dict:
 
     """
-    Evaluate section wise content with AI based on relevance, continuity, uniqueness, relevance of citation (hallucination), accuracy of the content+citation (hallucination), specificity of the content
+    Evaluate section wise content with AI based on relevance, continuity, uniqueness, specificity of the content
     Arguments:
         eval_model_name: Base model name used by the AI evaluator
         section_contents: Section wise content. A mapping between section header and section content
-    Returns: None
+    Returns: A dictionary of rating responses for each section
     """
 
     def formatRating(rating):
@@ -169,6 +159,8 @@ def evalContent(eval_model_name: str, section_contents: dict) -> None:
         rating_response = agent.invoke({'reference_text': reference_text, 'content': content})['rating_info']
         rating_responses_section_wise[section_header] = formatRating(rating_response)
         content_pre_sets[i] += f'{section_header}\n\n{content}'
+
+    return rating_responses_section_wise
 
 # -----------------------------------------------------------------------
 def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, eval_model_name: str) -> None:
@@ -205,14 +197,3 @@ def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, 
 
     rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
     rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
-
-# -----------------------------------------------------------------------
-def evalRAGFramework(gen_model_name, gen_content_file_name):
-
-    # Extract outline
-    # For each section generate keyphrases, retrieved_doc_ids and content
-    # Evaluate keyphrases
-    # Evaluate retrieved_doc_ids
-    # Evaluate content
-
-    ...

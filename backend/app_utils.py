@@ -2377,6 +2377,55 @@ def _generation_sections_in_outline_order(outline_data: dict[str, Any]) -> list[
     walk(outline_data, [])
     return sections
 
+def get_generated_file_section_chunks(generated_files_id: int) -> list[dict[str, Any]]:
+    """
+    Read contents/outline_<generated_files_id>.json and return per-section
+    generated content metadata.
+
+    Each item includes:
+    - section header
+    - section path
+    - generated section content
+    - content_pre_summary
+    - keyphrases
+    - retrieved_doc_ids
+    """
+    outline_data = _read_outline_file(generated_files_id)
+    sections = _generation_sections_in_outline_order(outline_data)
+
+    def as_list(value: Any) -> list[Any]:
+        if value in (None, "", {}):
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    section_chunks: list[dict[str, Any]] = []
+
+    for section in sections:
+        items = section["items"]
+
+        section_chunks.append(
+            {
+                "heading": section["heading"],
+                "path": section["path"],
+                "content": str(
+                    _content_value(items, ContentTypes.CONTENT_AI.value, "") or ""
+                ).strip(),
+                "content_pre_summary": str(
+                    _content_value(items, ContentTypes.CONTENT_PRE_SUMMARY.value, "") or ""
+                ).strip(),
+                "keyphrases": as_list(
+                    _content_value(items, ContentTypes.KEYPHRASES.value, [])
+                ),
+                "retrieved_doc_ids": as_list(
+                    _content_value(items, ContentTypes.RETRIEVED_DOC_IDS.value, [])
+                ),
+            }
+        )
+
+    return section_chunks
+
 
 def _content_summary_text(value: Any) -> str:
     if isinstance(value, str):
