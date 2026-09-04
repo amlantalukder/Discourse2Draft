@@ -7,7 +7,8 @@ from src.common import getDocContent
 from src.eval.utils import Config
 from src.eval.gen_content import generateContentByLitSearchAsync
 from src.eval.extract_sections import extractSectionsForComparison
-from src.eval.eval_content import evalRAGFramework, evalAndCompareTools
+from src.eval.eval_content import evalAndCompareTools
+from src.eval.eval_retrieval import evalRAGFramework
 
 def runGeneration() -> None:
 
