@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from langgraph.graph import START, StateGraph
 from typing import Literal
 from typing_extensions import TypedDict
+import pandas as pd
+from pathlib import Path
 
 from .utils import Config
 from ..ai.prompts import setPrompt
@@ -181,15 +183,6 @@ class RateRetrievedContextArchitecture:
         self.agent = workflow.compile()
 
 # -----------------------------------------------------------------------
-def formatRating(rating):
-    rating_dict = {}
-    for criterion in rating:
-        rating_dict[f'{criterion} (score)'] = rating[criterion].score
-        rating_dict[f'{criterion} (reason)'] = rating[criterion].reason
-
-    return rating_dict
-
-# -----------------------------------------------------------------------
 def evalKeyPhrases(eval_model_name: str, keyphrases: str, section_header: str, content_pre_summary: str) -> dict:
     """
     Evaluate section wise keyphrases with AI based on relevance, completeness, specificity of the content
@@ -200,6 +193,14 @@ def evalKeyPhrases(eval_model_name: str, keyphrases: str, section_header: str, c
         content_pre_summary: Summary of previous content
     Returns: A dictionary of rating responses for each section
     """
+
+    def formatRating(rating):
+        rating_dict = {}
+        for criterion in rating:
+            rating_dict[f'{criterion} (score)'] = rating[criterion].score
+            rating_dict[f'{criterion} (reason)'] = rating[criterion].reason
+
+        return rating_dict
 
     agent = RateKeyPhrasesArchitecture(model_name=eval_model_name, temperature=0).agent
 
@@ -224,6 +225,26 @@ def evalKeyPhrases(eval_model_name: str, keyphrases: str, section_header: str, c
 # -----------------------------------------------------------------------
 def evalRetrievedDocIds(eval_model_name: str, retrieved_doc_ids: list, section_header: str, content_pre_summary: str, vector_collection_name: str) -> list:
 
+    """
+    Evaluate section wise retrieved context chunks with AI based on relevance, completeness, specificity of the content
+    Arguments:
+        eval_model_name: Base model name used by the AI evaluator
+        retrieved_doc_ids: List of retrieved document IDs
+        section_header: Section header from a structured document
+        content_pre_summary: Summary of previous content
+    Returns: A list of rating responses for each retrieved document
+    """
+
+    def formatMeanRating(rating_list):
+        mean_rating_dict = {}
+        for criterion in rating_list[0]:
+            mean_score = sum([rating[criterion].score for rating in rating_list]) / len(rating_list)
+            mean_reason = ' | '.join([rating[criterion].reason for rating in rating_list])
+            mean_rating_dict[f'{criterion} (mean score)'] = mean_score
+            mean_rating_dict[f'{criterion} (reasons)'] = mean_reason
+
+        return mean_rating_dict
+
     def get_chroma_chunk_by_id(collection_name: str, doc_ids: list) -> str | None:
 
         from src.vectordb import ChromaDB
@@ -245,19 +266,9 @@ def evalRetrievedDocIds(eval_model_name: str, retrieved_doc_ids: list, section_h
 
         return result["documents"][0]
 
-    """
-    Evaluate section wise retrieved context chunks with AI based on relevance, completeness, specificity of the content
-    Arguments:
-        eval_model_name: Base model name used by the AI evaluator
-        retrieved_doc_ids: List of retrieved document IDs
-        section_header: Section header from a structured document
-        content_pre_summary: Summary of previous content
-    Returns: A list of rating responses for each retrieved document
-    """
-
     rating_response_list = []
 
-    agent = RateKeyPhrasesArchitecture(model_name=eval_model_name, temperature=0).agent
+    agent = RateRetrievedContextArchitecture(model_name=eval_model_name, temperature=0).agent
     
     print(f'Evaluating retrieved documents for section "{section_header}"...')
 
@@ -274,12 +285,12 @@ def evalRetrievedDocIds(eval_model_name: str, retrieved_doc_ids: list, section_h
     for chunk in chroma_chunks:
 
         rating_response = agent.invoke({'reference_text': reference_text, 'content': chunk})['rating_info']
-        rating_response_list.append(formatRating(rating_response))
+        rating_response_list.append(rating_response)
 
-    return rating_response_list
+    return formatMeanRating(rating_response_list)
 
 # -----------------------------------------------------------------------
-def evalRAGFramework(eval_model_name: str, gen_file_id: str):
+def evalRAGFrameworkForOneDocument(eval_model_name: str, gen_file_id: int):
 
     # Extract outline
     sections = get_generated_file_section_chunks(generated_file_id=gen_file_id)
@@ -287,11 +298,45 @@ def evalRAGFramework(eval_model_name: str, gen_file_id: str):
     assert vector_collection_record, f'No active literature collection found for generated file {gen_file_id}'
     vector_collection_name = _vector_collection_name(int(vector_collection_record["id"]))
 
+    rating_keyphrases, rating_retrieved_context = {}, {}
+
     for section in sections:
         print(f"Evaluating section {section["heading"]} with {eval_model_name} AI model ...")
     
         # Evaluate keyphrases
-        evalKeyPhrases(eval_model_name, section["keyphrases"], section["heading"], section["content_pre_summary"])
+        rating_keyphrases[section["heading"]] = evalKeyPhrases(eval_model_name, section["keyphrases"], section["heading"], section["content_pre_summary"])
 
         # Evaluate retrieved_doc_ids
-        evalRetrievedDocIds(eval_model_name, section["retrieved_doc_ids"], section["heading"], section["content_pre_summary"], vector_collection_name)
+        rating_retrieved_context[section["heading"]] = evalRetrievedDocIds(eval_model_name, section["retrieved_doc_ids"], section["heading"], section["content_pre_summary"], vector_collection_name)
+
+    return rating_keyphrases, rating_retrieved_context
+
+# -----------------------------------------------------------------------
+def evalRAGFramework(gen_content_file_name: str, gen_list: list, eval_model_name: str) -> None:
+
+    rating_keyphrases_tool_wise = pd.DataFrame()
+    rating_retrieved_context_tool_wise = pd.DataFrame()
+
+    for gen_info in gen_list:
+        tool_name, gen_file_id = gen_info["tool_name"], gen_info["gen_file_id"]
+
+        rating_keyphrases, rating_retrieved_context = evalRAGFrameworkForOneDocument(eval_model_name, gen_file_id)
+        rating_keyphrases_tool_wise = pd.concat([rating_keyphrases_tool_wise, pd.DataFrame(rating_keyphrases).add_prefix(f'{tool_name} ', axis=0)])
+        rating_retrieved_context_tool_wise = pd.concat([rating_retrieved_context_tool_wise, pd.DataFrame(rating_retrieved_context).add_prefix(f'{tool_name} ', axis=0)])
+
+    rating_score = rating_keyphrases_tool_wise.loc[rating_keyphrases_tool_wise.index.str.endswith('(score)')]
+    rating_reason = rating_keyphrases_tool_wise.loc[rating_keyphrases_tool_wise.index.str.endswith('(reason)')]
+
+    rating_score = rating_score.rename(index=lambda x:x.replace(' (score)', ''))
+    rating_reason = rating_reason.rename(index=lambda x:x.replace(' (reason)', ''))
+
+    (Config.dir_eval_with_tools / 'results' / 'keyphrases_generation' / 'scores' / eval_model_name).mkdir(parents=False, exist_ok=True)
+    (Config.dir_eval_with_tools / 'results' / 'keyphrases_generation' / 'reasons' / eval_model_name).mkdir(parents=False, exist_ok=True)
+    (Config.dir_eval_with_tools / 'results' / 'context_retrieval' / 'scores' / eval_model_name).mkdir(parents=False, exist_ok=True)
+    (Config.dir_eval_with_tools / 'results' / 'context_retrieval' / 'reasons' / eval_model_name).mkdir(parents=False, exist_ok=True)
+
+    rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'keyphrases_generation' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'keyphrases_generation' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'context_retrieval' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'context_retrieval' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    

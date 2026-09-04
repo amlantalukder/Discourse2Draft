@@ -53,11 +53,15 @@ def runEvaluation() -> None:
 
         section_sets = pd.read_csv(Config.dir_eval_with_tools / 'sections_to_compare' / f'{Path(file_name).stem}.csv', index_col=0)
 
+        external_tools = [tool for tool in Config.tools if tool != 'discourse2draft']
+
         # Eval and compare content
-        for config in Config.gen_eval_model_config:
-            for eval_model_name in config['evaluator']:
-                print(f'Evaluating and comparing content for {file_name} with {eval_model_name} AI model...')
-                evalAndCompareTools(section_sets=section_sets, gen_content_file_name=file_name, eval_model_name=eval_model_name)
+        evaluator_generator_map = {eval_model_name: config['generator'] for config in Config.gen_eval_model_config for eval_model_name in config['evaluator']}
+        for eval_model_name, gen_models in evaluator_generator_map.items():
+            relevant_columns = external_tools + [f'discourse2draft|{gen_model_name}|{index_run}' for gen_model_name in gen_models for index_run in range(1, Config.num_runs+1)]
+
+            print(f'Evaluating and comparing content for {file_name} with {eval_model_name} AI model...')
+            evalAndCompareTools(section_sets=section_sets[relevant_columns], gen_content_file_name=file_name, eval_model_name=eval_model_name)
 
         # Eval rag
         # for config in Config.gen_eval_model_config:

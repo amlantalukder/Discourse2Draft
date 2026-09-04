@@ -142,7 +142,7 @@ def evalContent(eval_model_name: str, section_contents: dict) -> dict:
     content_pre_sets = ['' for _ in section_contents]
     rating_responses_section_wise = {}
 
-    for i, (section_header, content) in tqdm.tqdm(enumerate(section_contents.items())):
+    for i, (section_header, content) in enumerate(tqdm.tqdm(section_contents.items())):
         
         print(section_header)
 
@@ -194,8 +194,8 @@ def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, 
     rating_score = rating_score.rename(index=lambda x:x.replace(' (score)', ''))
     rating_reason = rating_reason.rename(index=lambda x:x.replace(' (reason)', ''))
 
-    (Config.dir_eval_with_tools / 'results' / 'scores' / eval_model_name).mkdir(parents=False, exist_ok=True)
-    (Config.dir_eval_with_tools / 'results' / 'reasons' / eval_model_name).mkdir(parents=False, exist_ok=True)
+    (Config.dir_eval_with_tools / 'results' / 'content_generation' / 'scores' / eval_model_name).mkdir(parents=False, exist_ok=True)
+    (Config.dir_eval_with_tools / 'results' / 'content_generation' / 'reasons' / eval_model_name).mkdir(parents=False, exist_ok=True)
 
-    rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
-    rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'content_generation' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+    rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'content_generation' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
