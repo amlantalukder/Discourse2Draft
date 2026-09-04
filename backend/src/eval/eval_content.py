@@ -175,6 +175,8 @@ def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, 
 
     from pathlib import Path
 
+    section_sets = section_sets.fillna('')
+
     rating_responses_tool_wise = pd.DataFrame()
     
     for tool in list(section_sets.columns):
