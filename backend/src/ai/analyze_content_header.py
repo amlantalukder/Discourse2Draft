@@ -1,6 +1,8 @@
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain.output_parsers.fix import OutputFixingParser
 from pydantic import BaseModel, Field
+import logging
+
 from ..utils import Config
 from .common import StateContentManager, extractLLMResponse
 from .prompts import setPrompt
@@ -70,6 +72,8 @@ class AnalyzeContentHeader:
         '''
         Extracts keyphrases from user content_header
         '''
+
+        logging.info(f'Analyzing content header: {state["current_section"]}')
         
         if state['content_specific_instructions']:
             instructions = f'''

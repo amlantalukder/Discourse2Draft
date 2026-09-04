@@ -10,7 +10,7 @@ class Config:
 
     num_runs = 3
     
-    file_names = ['CRISPR-based editing for inherited blood disorders.md', 'Phthalates Toxicity.md', 'PFAS.md']
+    file_names = ['CRISPR-based editing for inherited blood disorders.md', 'Phthalates Toxicity.md', 'Health Impacts of Per- and Polyfluoroalkyl Substances (PFASs): A Comprehensive Review.md']
 
     gen_eval_model_config = [
         {

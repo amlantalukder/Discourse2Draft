@@ -184,8 +184,8 @@ def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, 
     from pathlib import Path
 
     rating_responses_tool_wise = pd.DataFrame()
-
-    for tool in Config.tools:
+    
+    for tool in list(section_sets.columns):
 
         print(f'Processing "{gen_content_file_name} with {eval_model_name} AI agent for {tool}"...')
 

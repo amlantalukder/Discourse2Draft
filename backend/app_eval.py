@@ -22,7 +22,7 @@ def runGeneration() -> None:
         for config in Config.gen_eval_model_config:
             for gen_model_name in config['generator']:
                 for index_run in range(1, Config.num_runs+1):
-                    print(f'Generating content with {gen_model_name}, run index: {index_run}...')
+                    print(f'Generating content with {gen_model_name} AI model, run index: {index_run}...')
 
                     file_id = file_id_map.get(f'{Path(file_name).stem}|{gen_model_name}|{index_run}', None)
 
@@ -53,15 +53,11 @@ def runEvaluation() -> None:
 
         section_sets = pd.read_csv(Config.dir_eval_with_tools / 'sections_to_compare' / f'{Path(file_name).stem}.csv', index_col=0)
 
-        external_tools = [tool for tool in Config.tools if tool != 'discourse2draft'] 
-
         # Eval and compare content
         for config in Config.gen_eval_model_config:
-            for gen_model_name in config['generator']:
-                for index_run in range(1, Config.num_runs+1):
-                    for eval_model_name in config['evaluator']:
-                        print(f'Evaluating content for {gen_model_name}, run index: {index_run} with {eval_model_name}...')
-                        evalAndCompareTools(section_sets=section_sets[external_tools + [f'discourse2draft|{gen_model_name}|run_{index_run}']], gen_content_file_name=file_name, eval_model_name=eval_model_name)
+            for eval_model_name in config['evaluator']:
+                print(f'Evaluating and comparing content for {file_name} with {eval_model_name} AI model...')
+                evalAndCompareTools(section_sets=section_sets, gen_content_file_name=file_name, eval_model_name=eval_model_name)
 
         # Eval rag
         # for config in Config.gen_eval_model_config:
@@ -72,5 +68,5 @@ def runEvaluation() -> None:
 
 
 if __name__ == "__main__":
-    runGeneration()
+    #runGeneration()
     runEvaluation()
