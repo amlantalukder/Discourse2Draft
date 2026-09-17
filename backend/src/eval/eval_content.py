@@ -163,7 +163,7 @@ def evalContent(eval_model_name: str, section_contents: dict) -> dict:
     return rating_responses_section_wise
 
 # -----------------------------------------------------------------------
-def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, eval_model_name: str) -> None:
+def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, eval_model_name: str, resume: bool = True) -> None:
 
     """
     Evaluate and compare generated file contents by multiple tools with AI
@@ -177,25 +177,45 @@ def evalAndCompareTools(section_sets: pd.DataFrame, gen_content_file_name: str, 
 
     section_sets = section_sets.fillna('')
 
-    rating_responses_tool_wise = pd.DataFrame()
+    rating_score_file = Config.dir_eval_with_tools / 'results' / 'content_generation' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv'
+    rating_reason_file = Config.dir_eval_with_tools / 'results' / 'content_generation' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv'
+        
+    (rating_score_file.parent).mkdir(parents=True, exist_ok=True)
+    (rating_reason_file.parent).mkdir(parents=True, exist_ok=True)
+
+    if resume and rating_score_file.exists():
+        rating_score = pd.read_csv(rating_score_file, index_col=0)
+    else:
+        rating_score = pd.DataFrame()
+        
+    if resume and rating_reason_file.exists():
+        rating_reason = pd.read_csv(rating_reason_file, index_col=0)
+    else:
+        rating_reason = pd.DataFrame()
+
+    rating_criteria = list(RateSectionContentSchema.model_fields.keys())
     
-    for tool in list(section_sets.columns):
+    for tool_name in list(section_sets.columns):
 
-        print(f'Processing "{gen_content_file_name} with {eval_model_name} AI agent for {tool}"...')
+        for criterion in rating_criteria:
+            index_name = f'{tool_name} {criterion}'
+            if index_name not in rating_score.index or index_name not in rating_reason.index:
+                break
+        else:
+            print(f"Skipping content evaluation for tool {tool_name} as it has already been evaluated.")
+            continue
 
-        section_contents = section_sets[tool].to_dict()
-        rating_responses_section_wise = evalContent(eval_model_name, section_contents)
-        rating_responses_tool_wise = pd.concat([rating_responses_tool_wise,
-                                                pd.DataFrame(rating_responses_section_wise).add_prefix(f'{tool} ', axis=0)])
+        print('='*70, f'Evaluating content with tool {tool_name}...', '='*70, sep='\n')
+        
+        section_contents = section_sets[tool_name].to_dict()
+        rating_responses_tool_wise = evalContent(eval_model_name, section_contents)
+        rating_responses_tool_wise = pd.DataFrame(rating_responses_tool_wise).add_prefix(f'{tool_name} ', axis=0)
 
-    rating_score = rating_responses_tool_wise.loc[rating_responses_tool_wise.index.str.endswith('(score)')]
-    rating_reason = rating_responses_tool_wise.loc[rating_responses_tool_wise.index.str.endswith('(reason)')]
+        rating_score_tool_wise = rating_responses_tool_wise.loc[rating_responses_tool_wise.index.str.endswith('(score)')]
+        rating_reason_tool_wise = rating_responses_tool_wise.loc[rating_responses_tool_wise.index.str.endswith('(reason)')]
+                
+        rating_score = rating_score_tool_wise.rename(index=lambda x:x.replace(' (score)', '')).combine_first(rating_score)
+        rating_reason = rating_reason_tool_wise.rename(index=lambda x:x.replace(' (reason)', '')).combine_first(rating_reason)
 
-    rating_score = rating_score.rename(index=lambda x:x.replace(' (score)', ''))
-    rating_reason = rating_reason.rename(index=lambda x:x.replace(' (reason)', ''))
-
-    (Config.dir_eval_with_tools / 'results' / 'content_generation' / 'scores' / eval_model_name).mkdir(parents=False, exist_ok=True)
-    (Config.dir_eval_with_tools / 'results' / 'content_generation' / 'reasons' / eval_model_name).mkdir(parents=False, exist_ok=True)
-
-    rating_score.to_csv(Config.dir_eval_with_tools / 'results' / 'content_generation' / 'scores' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
-    rating_reason.to_csv(Config.dir_eval_with_tools / 'results' / 'content_generation' / 'reasons' / eval_model_name / f'{Path(gen_content_file_name).stem}.csv', index=True)
+        rating_score.to_csv(rating_score_file, index=True)
+        rating_reason.to_csv(rating_reason_file, index=True)

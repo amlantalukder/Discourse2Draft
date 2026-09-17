@@ -123,8 +123,8 @@ class Config:
                 os.environ[k] = v
 
 # ---------------------------------------------------------------------------
-def traceError(exp):
-    return f'Line number: {exp.__traceback__.tb_lineno}, Description: {exp}\n\n{traceback.format_exc()}'
+def traceError(exp, verbose=False):
+    return f'Line number: {exp.__traceback__.tb_lineno}, Description: {exp}' + (f'\n\n{traceback.format_exc()}' if verbose else '')
 
 # ---------------------------------------------------------------------------
 def formatErrorString(error_action):
