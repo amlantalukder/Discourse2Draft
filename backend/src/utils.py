@@ -13,6 +13,14 @@ import functools
 import inspect
 
 # ---------------------------------------------------------------------------
+def _env_value(env_config, *names, default=None):
+    for name in names:
+        value = env_config.get(name)
+        if value not in (None, ""):
+            return value
+    return default
+
+# ---------------------------------------------------------------------------
 class Versions(str, Enum):
     DEVELOPMENT = "development"
     PRODUCTION = "production"
@@ -36,9 +44,16 @@ class Config:
     env_config = dotenv.dotenv_values(Path(".env"))
 
     # ----------------------------------------------------------
-    # Load Database name
+    # PostgreSQL configuration.
+    # POSTGRES_* is the primary naming convention. DB_* is kept as a
+    # backwards-compatible fallback for older local .env files.
     # ----------------------------------------------------------
-    DB_NAME = env_config.get("DB_NAME", f'{APP_NAME_AS_PREFIX}-db')
+    POSTGRES_HOST = _env_value(env_config, "POSTGRES_HOST", "DB_HOST", default="localhost")
+    POSTGRES_PORT = _env_value(env_config, "POSTGRES_PORT", "DB_PORT", default="5432")
+    POSTGRES_USER = _env_value(env_config, "POSTGRES_USER", "DB_USER", default="postgres")
+    POSTGRES_PASSWORD = _env_value(env_config, "POSTGRES_PASSWORD", "DB_PASSWORD", default="")
+    POSTGRES_DB = _env_value(env_config, "POSTGRES_DB", "DB_NAME", default=f'{APP_NAME_AS_PREFIX}-db')
+    DB_NAME = POSTGRES_DB
 
     # ----------------------------------------------------------
     # LLM and content generation settings
@@ -113,7 +128,7 @@ class Config:
     # ----------------------------------------------------------
     # Ensure data directory exists
     # ----------------------------------------------------------
-    DIR_CONTENTS = DIR_DATA / env_config['DB_HOST'] / DB_NAME
+    DIR_CONTENTS = DIR_DATA / str(POSTGRES_HOST) / str(POSTGRES_DB)
     DIR_CONTENTS.mkdir(parents=True, exist_ok=True)
 
     @staticmethod

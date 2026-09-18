@@ -133,7 +133,7 @@ class GeneratedFileSectionContentUpdateRequest(BaseModel):
     session: str | None = None
 
 
-DownloadFormat = Literal["md", "docx", "latex"]
+DownloadFormat = Literal["md", "docx", "latex", "pdf"]
 LogSortField = Literal["date", "status", "message"]
 SortDirection = Literal["asc", "desc"]
 
@@ -3746,6 +3746,10 @@ async def _handle_download_generated_file(generated_file_id, download_format, em
                 archive.writestr("bibliography.bib", bibs or "")
             output.seek(0)
             return Response(content=output.getvalue(), media_type="application/zip", headers=headers)
+
+        if download_format == "pdf":
+            content_pdf = common_module.getPdfContent(content_md)
+            return Response(content=content_pdf, media_type="application/pdf", headers=headers)
 
         text_by_format = {
             "md": (content_md, "text/markdown; charset=utf-8"),

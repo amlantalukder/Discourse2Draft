@@ -60,6 +60,8 @@ python-multipart==0.0.30
     # via discourse2draft (pyproject.toml)
 pyvis==0.3.2
     # via discourse2draft (pyproject.toml)
+reportlab==5.0.1
+    # via discourse2draft (pyproject.toml)
 requests==2.34.2
     # via discourse2draft (pyproject.toml)
 rich==14.0.0

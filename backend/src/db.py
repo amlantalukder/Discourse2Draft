@@ -212,8 +212,15 @@ class VectorDBCollectionFiles(Base):
 # -----------------------------------------------------------------------
 try:
 
-    connection_string = f'postgresql://{Config.env_config["DB_USER"]}:{Config.env_config["DB_PASSWORD"]}@{Config.env_config["DB_HOST"]}:{Config.env_config["DB_PORT"]}/{Config.DB_NAME}'
-    engine = sa.create_engine(connection_string)
+    connection_url = sa.URL.create(
+        "postgresql",
+        username=Config.POSTGRES_USER,
+        password=Config.POSTGRES_PASSWORD,
+        host=Config.POSTGRES_HOST,
+        port=int(Config.POSTGRES_PORT),
+        database=Config.POSTGRES_DB,
+    )
+    engine = sa.create_engine(connection_url)
 
     if not database_exists(engine.url):
         create_database(engine.url)
