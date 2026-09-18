@@ -2154,7 +2154,7 @@ export function App() {
       return;
     }
 
-    const downloadFormat = ["md", "docx", "latex"].includes(format) ? format : "md";
+    const downloadFormat = ["md", "docx", "latex", "pdf"].includes(format) ? format : "md";
     const extension = downloadFormat === "latex" ? "zip" : downloadFormat;
     setGlobalStatus("Preparing generated document download...");
     try {

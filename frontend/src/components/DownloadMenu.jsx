@@ -5,6 +5,7 @@ import { IconButton } from "./IconButton";
 const downloadOptions = [
   { format: "md", label: "Markdown", extension: ".md", group: "Main text" },
   { format: "docx", label: "Word document", extension: ".docx", group: "Main text" },
+  { format: "pdf", label: "PDF", extension: ".pdf", group: "Main text" },
   { format: "latex", label: "LaTeX package", extension: ".zip", group: "Main text + bibliography" },
 ];
 
@@ -19,7 +20,7 @@ export function DownloadMenu({ label = "Download", disabled = false, onDownload,
 
     const rect = button.getBoundingClientRect();
     const menuWidth = 208;
-    const menuHeight = 170;
+    const menuHeight = 214;
     const pagePadding = 12;
     const preferredLeft = menuAlign === "left" ? rect.left : rect.right - menuWidth;
     const left = Math.min(Math.max(preferredLeft, pagePadding), window.innerWidth - menuWidth - pagePadding);

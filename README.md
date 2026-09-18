@@ -45,30 +45,48 @@ Backend contains agents developed by Langgraph architecture. The graph starts wi
 
 **Detailed architecture is represented in this [link](frontend/docs/README.md).**
 
-## Running the app
+## Installation
 
-### Add settings
+### Prerequisites
 
-Create ".env" file with the required settings, following "example.env" file.
+The recommended installation uses Docker because the app needs a frontend, a FastAPI backend, PostgreSQL, and ChromaDB.
 
-`cp example.env .env`
+- Git
+- Docker and Docker Compose
+- Node.js 22 or later, only for local frontend development
+- Python 3.12.4 and `uv`, only for local backend development
 
-Add the following settings in ".env" file.
+### 1. Download release source codes or clone the repository
 
-#### AI settings
-
-```yaml
-# AI (Required for content generation)
-AI_BASE_URL=<URL to AI service>
-AI_API_KEY=<API key for AI service>
-
-# Default AI Model (Can be replaced by the preferred LLM options)
-DEFAULT_AI_MODEL='azure-o3'
-DEFAULT_AI_TEMPERATURE=0
-DEFAULT_AI_INSTRUCTIONS=''
+```bash
+git clone <repository-url>
 ```
 
-The DEFAULT_AI_MODEL is a mandatory settings. But a list of LLMs to be shown in the app settings UI can be provided via `backend/config/llms.json`. Here is an example of the json file.
+### 2. Create the Environment File
+
+Get into the directory:
+
+```bash
+cd Discourse2Draft
+```
+
+Copy the example environment file:
+
+```bash
+cp backend/example.env backend/.env
+```
+
+Edit `backend/.env` and set the AI service values:
+
+```env
+AI_BASE_URL=<URL to AI service>
+AI_API_KEY=<API key for AI service>
+DEFAULT_AI_MODEL=<model name>
+DEFAULT_AI_TEMPERATURE=0
+DEFAULT_AI_INSTRUCTIONS=
+```
+
+`DEFAULT_AI_MODEL` is required. The optional model list shown in the app settings UI can be configured in `backend/config/llms.json`. Example:
 
 ```json
 {
@@ -95,105 +113,148 @@ The DEFAULT_AI_MODEL is a mandatory settings. But a list of LLMs to be shown in 
 }
 ```
 
-#### RAG and content generation settings
+### 3. Configure Databases
 
-```yaml
-# Maximum number of tokens allowed for previous contents summary of a section
-NUM_TOKENS_SUMMARY = 500
+For Docker installation, keep these values in `backend/.env`:
 
-# Number of tokens allowed in the context of a single LLM call
-MAX_CONTEXT_TOKENS = 2000
+```env
+CHROMA_HOST=chroma
+CHROMA_PORT=8000
 
-# Maximum number of keyphrases to extract for RAG and Literature Search
-# from analyzing the previous contents summary and the current content header.
-MAX_KEYPHRASES = 10
-MAX_KEYPHRASES_LIT_SEARCH = 5
-
-# Maximum number of articles allowed for literature search
-NUM_MAX_LITERATURE = 2
-
-# Maximum number of content allowed from each article returned by the literature search
-MAX_CONTENT_SIZE_PER_LITERATURE = 20000
-
-# Similarity metric and threshold for retrieving relevant documents from the vector database (ChromaDB) for RAG and Literature Search
-SIMILARITY_METRIC = 'similarity_score_threshold'
-SIMILARITY_THRESHOLD = 0.3
-
-# Maximum number of relevant documents to retrieve from the vector database (ChromaDB) for RAG and Literature Search
-NUM_DOCS_MAX = 5
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=root
+POSTGRES_DB=discourse2draft-db
 ```
 
-#### Database settings
+If you run the backend locally while using Docker only for PostgreSQL and ChromaDB, use localhost-style values instead:
 
-```yaml
-# ChromaDB (Required for RAG pipeline)
-CHROMA_HOST=<Host for ChromaDB>
-CHROMA_PORT=<Port for ChromaDB>
+```env
+CHROMA_HOST=127.0.0.1
+CHROMA_PORT=8000
 
-# PostgreSQL Database (Required for backend storage)
-DB_HOST=<Database host>
-DB_USER=<Database user>
-DB_PASSWORD=<Database password>
-DB_PORT=<Database port>
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=root
+POSTGRES_DB=discourse2draft-db
 ```
 
-To set up with docker container the following variables must be set with the assigned values
+Optional settings can also be added to `backend/.env`:
 
-```yaml
-# ChromaDB (Required for RAG pipeline)
-CHROMA_HOST="chroma"
-CHROMA_PORT="8000"
-
-# PostgreSQL Database (Required for backend storage)
-DB_HOST = 'postgres'
-DB_USER = 'postgres'
-DB_PASSWORD = 'root'
-DB_PORT = 5432
-```
-
-#### Other settings (optional)
-
-```yaml
-# Langfuse (Optional, used for debugging)
+```env
 LANGFUSE_SECRET_KEY=<Secret key for Langfuse>
 LANGFUSE_PUBLIC_KEY=<Public key for Langfuse>
-LANGFUSE_HOST=<URL to Langfuse instance>
-LANGFUSE_TRACING=<Enable tracing in Langfuse, set to True or False>
+LANGFUSE_BASE_URL=<URL to Langfuse instance>
+LANGFUSE_TRACING=False
 
-# NCBI (Optional, required for access of higher number of articles from PubMed)
 NCBI_API_KEY=<NCBI API key>
 
-# Mail service (Mailgun) (Optional, required for password retrieval during authentication)
 MAILGUN_DOMAIN=<Mailgun domain>
 MAILGUN_API_KEY=<Mailgun API key>
 
-# Login with azure (Optional)
-AZURE_AUTH_APPLICATION_CLIENT_ID =
-AZURE_AUTH_CLIENT_SECRET =
-AZURE_AUTH_TENANT_ID =
-AZURE_AUTH_REDIRECT_URI =
-AZURE_AUTH_LOGIN_BUTTON_LABEL = 'Login with Azure credentials'
+AZURE_AUTH_APPLICATION_CLIENT_ID=
+AZURE_AUTH_CLIENT_SECRET=
+AZURE_AUTH_TENANT_ID=
+AZURE_AUTH_REDIRECT_URI=
+AZURE_AUTH_LOGIN_BUTTON_LABEL='Login with Azure credentials'
 ```
 
-### Run app
+### Option 1: Run Everything with Docker
 
-**Using uv**
+From the repository root:
 
-- Create python environment using uv.
-  - `pip install uv`
-  - `uv sync`
-- Run app with uv
-  - `uv run shiny run app.py -p <port>`
+```bash
+docker compose up --build -d
+```
 
-The app can be accessed at `http://127.0.0.1:<port>/`
+Open the app:
 
-**Using Docker**
+```text
+http://127.0.0.1:5173/
+```
 
-Use the following command to run the app with Docker:
+Check backend health:
 
-`docker compose up -d`
+```text
+http://127.0.0.1:8012/api/health
+```
 
-The app can be accessed at `http://127.0.0.1:5173/`
+Useful Docker commands:
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
+To stop the app and remove persisted PostgreSQL, ChromaDB, backend data, and backend logs:
+
+```bash
+docker compose down -v
+```
+
+### Option 2: Run Locally for Development
+
+Start PostgreSQL and ChromaDB with Docker:
+
+```bash
+docker compose up -d postgres chroma
+```
+
+Make sure `backend/.env` uses the local database values from the database section above.
+
+Install and run the backend:
+
+```bash
+cd backend
+pip install uv
+uv sync
+uv run uvicorn app:app --host 127.0.0.1 --port 8012 --reload
+```
+
+In a second terminal, install and run the frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the app:
+
+```text
+http://127.0.0.1:5173/
+```
+
+The Vite development server proxies `/api` requests to `http://127.0.0.1:8012` by default.
+
+### Option 3: Build the Frontend and Serve It from FastAPI
+
+The frontend build output is written to `backend/dist`, and the FastAPI backend serves that directory automatically.
+
+```bash
+cd frontend
+npm ci
+npm run build
+
+cd ../backend
+uv sync
+uv run uvicorn app:app --host 127.0.0.1 --port 8012
+```
+
+Open the app:
+
+```text
+http://127.0.0.1:8012/
+```
+
+### Troubleshooting
+
+- If the backend cannot find configuration values, confirm that `backend/.env` exists and run backend commands from the `backend` directory.
+- If the frontend says the backend is unreachable, confirm that the backend is running at `http://127.0.0.1:8012`.
+- If Docker startup fails because a port is already in use, stop the existing service or change the port mapping in `docker-compose.yml`.
+- If PostgreSQL or ChromaDB state becomes inconsistent during testing, run `docker compose down -v` and start again.
 
 # Contact
 
